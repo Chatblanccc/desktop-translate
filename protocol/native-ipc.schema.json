@@ -1,0 +1,479 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.local/schemas/native-ipc-v1.schema.json",
+  "title": "Desktop Translate Native IPC v1",
+  "description": "Canonical message contract between Electron Main and selection-host. The transport frames each UTF-8 JSON document separately.",
+  "oneOf": [
+    { "$ref": "#/$defs/helloRequest" },
+    { "$ref": "#/$defs/readyResponse" },
+    { "$ref": "#/$defs/healthRequest" },
+    { "$ref": "#/$defs/healthResponse" },
+    { "$ref": "#/$defs/startRequest" },
+    { "$ref": "#/$defs/startResponse" },
+    { "$ref": "#/$defs/stopRequest" },
+    { "$ref": "#/$defs/stopResponse" },
+    { "$ref": "#/$defs/shutdownRequest" },
+    { "$ref": "#/$defs/shutdownResponse" },
+    { "$ref": "#/$defs/selectionResultEvent" },
+    { "$ref": "#/$defs/hostErrorEvent" }
+  ],
+  "$defs": {
+    "requestEnvelope": {
+      "type": "object",
+      "required": ["v", "kind", "id", "method", "timestamp", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "kind": { "const": "request" },
+        "id": { "$ref": "#/$defs/messageId" },
+        "method": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "timestamp": { "$ref": "#/$defs/timestamp" },
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "responseEnvelope": {
+      "type": "object",
+      "required": ["v", "kind", "id", "method", "timestamp", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "kind": { "const": "response" },
+        "id": { "$ref": "#/$defs/messageId" },
+        "method": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "timestamp": { "$ref": "#/$defs/timestamp" },
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "eventEnvelope": {
+      "type": "object",
+      "required": ["v", "kind", "seq", "method", "timestamp", "payload"],
+      "properties": {
+        "v": { "const": 1 },
+        "kind": { "const": "event" },
+        "seq": { "type": "integer", "minimum": 0 },
+        "method": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "timestamp": { "$ref": "#/$defs/timestamp" },
+        "payload": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
+    "messageId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "emptyPayload": {
+      "type": "object",
+      "additionalProperties": false
+    },
+    "capability": {
+      "type": "string",
+      "enum": ["mouse-hook", "uia-selection", "uia-point-approximation", "desktop-capture", "ocr"]
+    },
+    "helloRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "hello" },
+            "payload": {
+              "type": "object",
+              "required": ["desktopVersion", "supportedVersions", "sessionNonce"],
+              "properties": {
+                "desktopVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+                "supportedVersions": {
+                  "type": "array",
+                  "items": { "const": 1 },
+                  "minItems": 1,
+                  "uniqueItems": true
+                },
+                "sessionNonce": {
+                  "type": "string",
+                  "minLength": 32,
+                  "maxLength": 256,
+                  "pattern": "^[0-9a-fA-F]+$"
+                },
+                "requestedCapabilities": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/capability" },
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "readyResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/responseEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "ready" },
+            "payload": {
+              "type": "object",
+              "required": ["selectedVersion", "hostVersion", "hostPid", "sessionNonce", "capabilities"],
+              "properties": {
+                "selectedVersion": { "const": 1 },
+                "hostVersion": { "type": "string", "minLength": 1, "maxLength": 64 },
+                "hostPid": { "$ref": "#/$defs/decimalString" },
+                "sessionNonce": {
+                  "type": "string",
+                  "minLength": 32,
+                  "maxLength": 256,
+                  "pattern": "^[0-9a-fA-F]+$"
+                },
+                "capabilities": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/capability" },
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "healthRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "health" },
+            "payload": { "$ref": "#/$defs/emptyPayload" }
+          }
+        }
+      ]
+    },
+    "healthResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/responseEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "health" },
+            "payload": {
+              "type": "object",
+              "required": ["status", "listening", "uptimeMs"],
+              "properties": {
+                "status": { "type": "string", "enum": ["starting", "ready", "degraded", "stopping"] },
+                "listening": { "type": "boolean" },
+                "uptimeMs": { "type": "integer", "minimum": 0 },
+                "lastEventSeq": { "type": "integer", "minimum": 0 },
+                "degradedCapabilities": {
+                  "type": "array",
+                  "items": { "$ref": "#/$defs/capability" },
+                  "uniqueItems": true
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "startConfig": {
+      "type": "object",
+      "properties": {
+        "enableUia": { "type": "boolean", "default": true },
+        "enableOcrFallback": { "type": "boolean", "default": true },
+        "ocrActivation": { "type": "string", "enum": ["fallback", "alt-drag"], "default": "fallback" },
+        "settleDelayMs": { "type": "integer", "minimum": 0, "maximum": 500, "default": 80 },
+        "minDragDistancePx": { "type": "number", "minimum": 2, "maximum": 64, "default": 4 },
+        "uiaTimeoutMs": { "type": "integer", "minimum": 50, "maximum": 2000, "default": 350 },
+        "ocrTimeoutMs": { "type": "integer", "minimum": 250, "maximum": 10000, "default": 2500 },
+        "excludedProcessNames": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 260,
+            "pattern": "^(?!\\.{1,2}$)(?!.*[. ]$)[^<>:\"/\\\\|?*\\u0000-\\u001F]{1,260}$",
+            "description": "Windows process basename. TS and Native semantic guards additionally enforce case-insensitive uniqueness."
+          },
+          "maxItems": 256,
+          "uniqueItems": true,
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "startRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "start" },
+            "payload": { "$ref": "#/$defs/startConfig" }
+          }
+        }
+      ]
+    },
+    "startResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/responseEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "start" },
+            "payload": {
+              "type": "object",
+              "required": ["ok", "listening"],
+              "properties": {
+                "ok": { "const": true },
+                "listening": { "const": true },
+                "effectiveConfig": { "$ref": "#/$defs/startConfig" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "stopRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "stop" },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "reason": { "type": "string", "maxLength": 256 }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "stopResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/responseEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "stop" },
+            "payload": {
+              "type": "object",
+              "required": ["ok", "listening"],
+              "properties": {
+                "ok": { "const": true },
+                "listening": { "const": false }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "shutdownRequest": {
+      "allOf": [
+        { "$ref": "#/$defs/requestEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "shutdown" },
+            "payload": {
+              "type": "object",
+              "properties": {
+                "reason": { "type": "string", "maxLength": 256 },
+                "gracePeriodMs": { "type": "integer", "minimum": 0, "maximum": 5000, "default": 1000 }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "shutdownResponse": {
+      "allOf": [
+        { "$ref": "#/$defs/responseEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "shutdown" },
+            "payload": {
+              "type": "object",
+              "required": ["ok"],
+              "properties": { "ok": { "const": true } },
+              "additionalProperties": false
+            }
+          }
+        }
+      ]
+    },
+    "point": {
+      "type": "object",
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      },
+      "additionalProperties": false
+    },
+    "rect": {
+      "type": "object",
+      "required": ["x", "y", "width", "height"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "textRange": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "type": "integer", "minimum": 0 },
+        "end": { "type": "integer", "minimum": 1 },
+        "text": { "type": "string", "maxLength": 32768 },
+        "physicalRects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rect" },
+          "maxItems": 256
+        }
+      },
+      "additionalProperties": false
+    },
+    "monitor": {
+      "type": "object",
+      "required": ["id", "handle", "bounds", "workArea", "dpiX", "dpiY", "scaleFactor"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "handle": { "$ref": "#/$defs/handleString" },
+        "bounds": { "$ref": "#/$defs/rect" },
+        "workArea": { "$ref": "#/$defs/rect" },
+        "dpiX": { "type": "integer", "minimum": 48, "maximum": 768 },
+        "dpiY": { "type": "integer", "minimum": 48, "maximum": 768 },
+        "scaleFactor": { "type": "number", "minimum": 0.5, "maximum": 8 }
+      },
+      "additionalProperties": false
+    },
+    "decimalString": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "maxLength": 20
+    },
+    "handleString": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*|0[xX][0-9a-fA-F]+)$",
+      "maxLength": 32
+    },
+    "target": {
+      "type": "object",
+      "required": ["pid", "hwnd"],
+      "properties": {
+        "pid": { "$ref": "#/$defs/decimalString" },
+        "hwnd": { "$ref": "#/$defs/handleString" },
+        "processName": { "type": "string", "minLength": 1, "maxLength": 260 }
+      },
+      "additionalProperties": false
+    },
+    "selectionResult": {
+      "type": "object",
+      "required": [
+        "selectionId",
+        "source",
+        "text",
+        "ranges",
+        "confidence",
+        "physicalRects",
+        "releasePoint",
+        "monitor",
+        "target",
+        "coordinateSpace",
+        "timestamp"
+      ],
+      "properties": {
+        "selectionId": { "$ref": "#/$defs/uuid" },
+        "source": { "type": "string", "enum": ["uia", "uia-point-approx", "ocr"] },
+        "text": { "type": "string", "minLength": 1, "maxLength": 32768 },
+        "ranges": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/textRange" },
+          "maxItems": 256
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "physicalRects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/rect" },
+          "maxItems": 256
+        },
+        "releasePoint": { "$ref": "#/$defs/point" },
+        "monitor": { "$ref": "#/$defs/monitor" },
+        "target": { "$ref": "#/$defs/target" },
+        "coordinateSpace": { "const": "physical-px" },
+        "timestamp": { "$ref": "#/$defs/timestamp" }
+      },
+      "additionalProperties": false
+    },
+    "selectionResultEvent": {
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "selection/result" },
+            "payload": { "$ref": "#/$defs/selectionResult" }
+          }
+        }
+      ]
+    },
+    "hostError": {
+      "type": "object",
+      "required": ["code", "message", "scope", "recoverable"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$",
+          "minLength": 3,
+          "maxLength": 64
+        },
+        "message": { "type": "string", "minLength": 1, "maxLength": 1024 },
+        "scope": { "type": "string", "enum": ["protocol", "hook", "uia", "capture", "ocr", "host"] },
+        "recoverable": { "type": "boolean" },
+        "relatedRequestId": { "$ref": "#/$defs/messageId" },
+        "selectionId": { "$ref": "#/$defs/uuid" },
+        "details": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean", "null"]
+          },
+          "maxProperties": 32
+        }
+      },
+      "additionalProperties": false
+    },
+    "hostErrorEvent": {
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "host/error" },
+            "payload": { "$ref": "#/$defs/hostError" }
+          }
+        }
+      ]
+    }
+  }
+}

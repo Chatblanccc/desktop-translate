@@ -1,0 +1,28 @@
+node_modules/
+.pnpm-store/
+.vite/
+out/
+dist/
+coverage/
+*.log
+*.user
+*.suo
+.vs/
+.tools/
+
+# Native build outputs and downloaded runtimes/models
+native/**/build/
+native/**/out/
+resources/native/
+resources/ocr-models/*.bin
+resources/ocr-models/*.onnx
+resources/ocr-models/*.pdiparams
+resources/ocr-models/*.pdmodel
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal

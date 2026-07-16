@@ -1,0 +1,16 @@
+{
+  "name": "@desktop-translate/desktop",
+  "version": "0.1.0-phase1",
+  "private": true,
+  "type": "module",
+  "main": ".vite/build/main.js",
+  "dependencies": {
+    "@desktop-translate/contracts": "workspace:*"
+  },
+  "scripts": {
+    "build": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "phase1:smoke": "tsx src/main/phase1-smoke.ts"
+  }
+}

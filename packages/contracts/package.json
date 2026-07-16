@@ -1,0 +1,15 @@
+{
+  "name": "@desktop-translate/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --experimental-sqlite --test ../../tests/contracts/*.test.ts ../../tests/contracts/*.test.mjs"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./native-ipc": "./src/native-ipc.ts",
+    "./translation": "./src/translation.ts"
+  }
+}
