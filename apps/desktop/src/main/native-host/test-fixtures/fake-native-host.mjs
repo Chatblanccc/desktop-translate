@@ -1,4 +1,5 @@
 import net from 'node:net';
+import { appendFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 const valueAfter = (name) => {
@@ -8,6 +9,7 @@ const valueAfter = (name) => {
 const pipeName = valueAfter('--pipe');
 const nonce = valueAfter('--nonce');
 const mode = valueAfter('--fake-mode') ?? 'stable';
+const methodTracePath = process.env.DESKTOP_TRANSLATE_E2E_NATIVE_TRACE;
 
 if (!pipeName || !nonce) process.exit(2);
 
@@ -28,6 +30,7 @@ const server = net.createServer((socket) => {
       if (buffered.length < 4 + length) return;
       const request = JSON.parse(buffered.subarray(4, 4 + length).toString('utf8'));
       buffered = buffered.subarray(4 + length);
+      if (methodTracePath) appendFileSync(methodTracePath, `${request.method}\n`, 'utf8');
       const base = {
         v: 1,
         kind: 'response',
@@ -35,6 +38,7 @@ const server = net.createServer((socket) => {
         timestamp: new Date().toISOString()
       };
       if (request.method === 'hello') {
+        if (mode === 'exit-before-ready') process.exit(24);
         socket.write(
           encode({
             ...base,
@@ -43,23 +47,34 @@ const server = net.createServer((socket) => {
               selectedVersion: 1,
               hostVersion: 'fake-phase1',
               hostPid: String(process.pid),
-              sessionNonce: nonce,
+              sessionNonce:
+                mode === 'invalid-handshake'
+                  ? `${nonce[0] === '0' ? '1' : '0'}${nonce.slice(1)}`
+                  : nonce,
               capabilities: []
             }
           })
         );
         if (mode === 'crash') setTimeout(() => process.exit(23), 20);
       } else if (request.method === 'health') {
+        const degraded = mode === 'degraded';
         socket.write(
           encode({
             ...base,
             method: 'health',
-            payload: { status: 'ready', listening: false, uptimeMs: 1 }
+            payload: {
+              status: degraded ? 'degraded' : 'ready',
+              listening: false,
+              uptimeMs: 1,
+              ...(degraded ? { degradedCapabilities: ['ocr'] } : {})
+            }
           })
         );
       } else if (request.method === 'shutdown') {
         socket.write(encode({ ...base, method: 'shutdown', payload: { ok: true } }));
-        setTimeout(() => process.exit(0), 10);
+        if (mode !== 'ignore-shutdown') setTimeout(() => process.exit(0), 10);
+      } else {
+        setTimeout(() => process.exit(70), 0);
       }
     }
   });

@@ -1,16 +1,36 @@
 {
   "name": "@desktop-translate/desktop",
-  "version": "0.1.0-phase1",
+  "version": "0.2.0-phase2",
   "private": true,
   "type": "module",
   "main": ".vite/build/main.js",
   "dependencies": {
-    "@desktop-translate/contracts": "workspace:*"
+    "@desktop-translate/contracts": "workspace:*",
+    "@desktop-translate/storage": "workspace:*",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
   },
   "scripts": {
-    "build": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts",
+    "build": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts --mode ball && vite build --config vite.preload.config.ts --mode settings && vite build --config vite.renderer.config.ts",
+    "start:phase2": "pnpm build && electron .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "phase1:smoke": "tsx src/main/phase1-smoke.ts"
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "pnpm build && playwright test",
+    "phase1:smoke": "tsx src/main/phase1-smoke.ts",
+    "phase2:smoke": "pnpm build && playwright test --grep @smoke"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@tailwindcss/vite": "^4.3.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "@vitest/coverage-v8": "^4.1.10",
+    "happy-dom": "^20.10.6",
+    "tailwindcss": "^4.3.2"
   }
 }

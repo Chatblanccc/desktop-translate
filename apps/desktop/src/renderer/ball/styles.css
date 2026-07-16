@@ -1,0 +1,118 @@
+html,
+body,
+#root {
+  width: 56px;
+  height: 56px;
+  min-width: 56px;
+  min-height: 56px;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+}
+
+.ball-frame {
+  position: relative;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.ball-button {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  place-items: center;
+  overflow: hidden;
+  cursor: pointer;
+  color: var(--color-accent-text);
+  background: var(--color-accent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 70%, white 30%);
+  border-radius: 50%;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.24), 0 7px 17px rgba(0, 0, 0, 0.16);
+  transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.ball-button:hover {
+  background: var(--color-accent-hover);
+  box-shadow: 0 3px 9px rgba(0, 0, 0, 0.28), 0 8px 19px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.ball-button:active {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.22);
+  transform: translateY(0) scale(0.97);
+}
+
+.ball-button:focus-visible {
+  outline: 2px solid var(--color-accent-text);
+  outline-offset: -5px;
+}
+
+.ball-icon {
+  display: block;
+  width: 27px;
+  height: 27px;
+  pointer-events: none;
+  background: currentColor;
+  mask: url('../assets/translate-mark.svg') center / contain no-repeat;
+  -webkit-mask: url('../assets/translate-mark.svg') center / contain no-repeat;
+}
+
+.ball-status {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 10px;
+  height: 10px;
+  pointer-events: none;
+  background: var(--color-text-secondary);
+  border: 2px solid var(--color-surface-solid);
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  app-region: no-drag;
+  -webkit-app-region: no-drag;
+}
+
+.ball-frame[data-native-status='starting'] .ball-status {
+  background: var(--color-warning);
+  animation: ball-status-pulse 1.2s ease-in-out infinite;
+}
+
+.ball-frame[data-native-status='ready'] .ball-status {
+  background: var(--color-success);
+}
+
+.ball-frame[data-native-status='degraded'] .ball-status {
+  background: var(--color-warning);
+}
+
+.ball-frame[data-native-status='faulted'] .ball-status {
+  background: var(--color-danger);
+}
+
+@keyframes ball-status-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (forced-colors: active) {
+  .ball-button {
+    color: HighlightText;
+    background: Highlight;
+    border: 2px solid ButtonText;
+    forced-color-adjust: none;
+  }
+
+  .ball-status {
+    background: CanvasText;
+    border-color: Canvas;
+    forced-color-adjust: none;
+  }
+}

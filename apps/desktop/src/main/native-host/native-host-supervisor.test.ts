@@ -1,6 +1,6 @@
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildNativePipeName, validateReadyHandshake } from './native-host-supervisor.js';
 import { NativeHostSupervisor } from './native-host-supervisor.js';
 
@@ -40,10 +40,58 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
       stableRunMs: 1_000
     });
     const client = await supervisor.start();
+    await expect(supervisor.start()).rejects.toThrow(/already running/u);
     await expect(client.request('health', {})).resolves.toMatchObject({ method: 'health' });
     await new Promise((resolve) => setTimeout(resolve, 75));
-    await supervisor.stop();
+    const firstStop = supervisor.stop();
+    expect(supervisor.stop()).toBe(firstStop);
+    await firstStop;
   });
+
+  it('uses safe liveness defaults and force-terminates a Host that ignores shutdown', async () => {
+    const supervisor = new NativeHostSupervisor({
+      executablePath: process.execPath,
+      executableArguments: [fakeHost, '--fake-mode', 'ignore-shutdown']
+    });
+    await supervisor.start();
+    await expect(supervisor.stop()).resolves.toBeUndefined();
+  }, 5_000);
+
+  it('retains a failed-handshake child until forced termination has completed', async () => {
+    const supervisor = new NativeHostSupervisor({
+      executablePath: process.execPath,
+      executableArguments: [fakeHost, '--fake-mode', 'invalid-handshake']
+    });
+    const start = supervisor.start();
+    const launchedChild = (
+      supervisor as unknown as {
+        readonly child?: { readonly exitCode: number | null; readonly signalCode: string | null };
+      }
+    ).child;
+
+    if (launchedChild === undefined) throw new Error('Expected a launched child');
+    await expect(start).rejects.toThrow(/invalid or stale ready handshake/u);
+    expect(launchedChild.exitCode !== null || launchedChild.signalCode !== null).toBe(true);
+    expect((supervisor as unknown as { readonly child?: unknown }).child).toBeUndefined();
+    await expect(supervisor.stop()).resolves.toBeUndefined();
+  }, 5_000);
+
+  it('does not restart or retain a child that exits before completing its handshake', async () => {
+    const supervisor = new NativeHostSupervisor({
+      executablePath: process.execPath,
+      executableArguments: [fakeHost, '--fake-mode', 'exit-before-ready'],
+      maxRestarts: 3
+    });
+    const restarting = vi.fn();
+    supervisor.on('restarting', restarting);
+
+    await expect(supervisor.start()).rejects.toBeInstanceOf(Error);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    expect(restarting).not.toHaveBeenCalled();
+    expect((supervisor as unknown as { readonly child?: unknown }).child).toBeUndefined();
+    await expect(supervisor.stop()).resolves.toBeUndefined();
+  }, 5_000);
 
   it('opens the restart circuit after repeated early crashes', async () => {
     const supervisor = new NativeHostSupervisor({
@@ -54,11 +102,29 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
       stableRunMs: 10_000
     });
     const fatal = once(supervisor, 'fatal');
+    const restarting = once(supervisor, 'restarting');
     await supervisor.start();
+    await expect(restarting).resolves.toMatchObject([
+      expect.objectContaining({ delay: 250, attempt: 1 })
+    ]);
     const [error] = await fatal;
     expect(error).toBeInstanceOf(Error);
     expect((error as Error).message).toContain('restart limit');
     await supervisor.stop();
+  }, 5_000);
+
+  it('cancels a pending restart when stopped', async () => {
+    const supervisor = new NativeHostSupervisor({
+      executablePath: process.execPath,
+      executableArguments: [fakeHost, '--fake-mode', 'crash'],
+      maxRestarts: 5,
+      healthCheckIntervalMs: 1_000,
+      stableRunMs: 10_000
+    });
+    const restarting = once(supervisor, 'restarting');
+    await supervisor.start();
+    await restarting;
+    await expect(supervisor.stop()).resolves.toBeUndefined();
   }, 5_000);
 
   it('rejects a missing executable without an unhandled child error', async () => {

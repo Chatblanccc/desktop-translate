@@ -1,0 +1,350 @@
+body {
+  min-width: 360px;
+  overflow-x: hidden;
+}
+
+.settings-app {
+  width: min(100%, 680px);
+  min-height: 100vh;
+  padding: 30px 32px 38px;
+  margin: 0 auto;
+}
+
+.app-header {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 28px;
+}
+
+.app-mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  color: var(--color-accent-text);
+  background: var(--color-accent);
+  border-radius: 10px;
+  box-shadow: var(--shadow-card);
+}
+
+.app-mark-icon {
+  display: block;
+  width: 28px;
+  height: 28px;
+  background: currentColor;
+  mask: url('../assets/translate-mark.svg') center / contain no-repeat;
+  -webkit-mask: url('../assets/translate-mark.svg') center / contain no-repeat;
+}
+
+.app-name,
+.app-stage {
+  display: block;
+}
+
+.app-name {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.app-stage {
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.error-banner {
+  padding: 10px 12px;
+  margin-bottom: 18px;
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 9%, var(--color-surface-solid));
+  border: 1px solid color-mix(in srgb, var(--color-danger) 32%, transparent);
+  border-radius: 8px;
+}
+
+.settings-section + .settings-section {
+  margin-top: 24px;
+}
+
+.settings-section h1,
+.settings-section h2 {
+  margin: 0 0 8px 2px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-card {
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 9px;
+  box-shadow: var(--shadow-card);
+}
+
+.setting-row,
+.status-row,
+.version-row {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  min-height: 68px;
+  padding: 12px 16px;
+}
+
+.setting-row + .setting-row,
+.status-row + .version-row {
+  border-top: 1px solid var(--color-border);
+}
+
+label.setting-row {
+  cursor: pointer;
+}
+
+label.setting-row:hover {
+  background: var(--color-surface-hover);
+}
+
+.setting-copy {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.setting-title {
+  font-weight: 600;
+}
+
+.setting-description {
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.switch-control {
+  position: relative;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 20px;
+}
+
+.switch-input {
+  position: absolute;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.switch-track {
+  display: block;
+  width: 40px;
+  height: 20px;
+  padding: 2px;
+  background: transparent;
+  border: 1px solid var(--color-text-secondary);
+  border-radius: 999px;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+
+.switch-thumb {
+  display: block;
+  width: 14px;
+  height: 14px;
+  background: var(--color-text-secondary);
+  border-radius: 50%;
+  transition: background-color 120ms ease, transform 120ms ease;
+}
+
+.switch-input:checked + .switch-track {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.switch-input:checked + .switch-track .switch-thumb {
+  background: var(--color-accent-text);
+  transform: translateX(20px);
+}
+
+.switch-input:focus-visible + .switch-track {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.switch-input:disabled {
+  cursor: wait;
+}
+
+.switch-input:disabled + .switch-track {
+  opacity: 0.55;
+}
+
+.secondary-button {
+  min-width: 82px;
+  min-height: 32px;
+  padding: 4px 12px;
+  cursor: pointer;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: var(--color-surface-hover);
+}
+
+.secondary-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.secondary-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.theme-fieldset {
+  padding: 14px 16px 16px;
+  margin: 0;
+}
+
+.theme-fieldset legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+}
+
+.theme-fieldset > .setting-description {
+  clear: both;
+  padding-top: 2px;
+  margin: 0;
+}
+
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  padding: 3px;
+  margin-top: 12px;
+  background: var(--color-background);
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+}
+
+.theme-option {
+  position: relative;
+  display: grid;
+  min-height: 34px;
+  cursor: pointer;
+  place-items: center;
+  border-radius: 5px;
+}
+
+.theme-option input {
+  position: absolute;
+  opacity: 0;
+}
+
+.theme-option span {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.theme-option input:checked + span {
+  background: var(--color-surface-solid);
+  border-color: var(--color-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.theme-option input:focus-visible + span {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.theme-option input:disabled + span {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.status-row {
+  align-items: flex-start;
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.native-status-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  background: var(--color-text-secondary);
+  border-radius: 50%;
+}
+
+.native-status-dot[data-status='starting'],
+.native-status-dot[data-status='degraded'] {
+  background: var(--color-warning);
+}
+
+.native-status-dot[data-status='ready'] {
+  background: var(--color-success);
+}
+
+.native-status-dot[data-status='faulted'] {
+  background: var(--color-danger);
+}
+
+.capability-list {
+  margin-top: 7px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.version-row {
+  justify-content: space-between;
+  min-height: 48px;
+  color: var(--color-text-secondary);
+}
+
+.version-row output {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 460px) {
+  .settings-app {
+    padding: 24px 18px 32px;
+  }
+
+  .setting-row-action {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .secondary-button {
+    align-self: flex-end;
+  }
+}
+
+@media (forced-colors: active) {
+  .app-mark,
+  .switch-input:checked + .switch-track {
+    color: HighlightText;
+    background: Highlight;
+    forced-color-adjust: none;
+  }
+
+  .settings-card,
+  .secondary-button,
+  .theme-options,
+  .theme-option input:checked + span {
+    border: 1px solid ButtonText;
+  }
+}
