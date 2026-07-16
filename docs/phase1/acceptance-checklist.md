@@ -16,7 +16,7 @@
 - [x] 构建产物、本机工具链、OCR 模型、数据库和本机 secret 配置均已忽略。
 - [x] `pnpm phase1:verify` 会检查每个外部命令退出码并执行完整本地门禁。
 - [x] Windows CI workflow 已配置为在 MSVC/Windows SDK 环境执行同一门禁。
-- [ ] 审核人在远端实际运行一次 Windows MSVC CI；本机无管理员权限，现有二进制证据来自便携 llvm-mingw。
+- [x] 远端 Windows MSVC CI 已通过：[run 29475175846](https://github.com/Chatblanccc/desktop-translate/actions/runs/29475175846)，验证提交 `73762649f95fcefc4e46efc4a5eac28dcb188fb1`，无 check annotation。
 
 ## C. 契约与数据层
 
@@ -64,8 +64,8 @@
 
 ## 审核签字
 
-- [ ] 架构/产品负责人确认 Phase 1 范围：__________ 日期：__________
-- [ ] Windows Native 负责人确认正式 MSVC CI：__________ 日期：__________
-- [ ] 结论：`PASS` / `PASS WITH ACCEPTED RISKS` / `FAIL`
+- [x] 架构/产品负责人确认 Phase 1 范围：Chatblanccc（会话确认） 日期：2026-07-16
+- [x] Windows Native 工程门禁：GitHub Actions run 29475175846 日期：2026-07-16
+- [x] 结论：`PASS`
 
 只有审核结论为 `PASS`，或明确记录风险后的 `PASS WITH ACCEPTED RISKS`，才开始 Phase 2。

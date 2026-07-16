@@ -20,7 +20,7 @@
 | R-014 | UIA 恶意/异常 Provider 返回超长文本或永久 COM 调用 | 3×5=15 高 | 长度/数组上限；隔离 MTA worker；deadline 后失效；必要时重启 Host；fuzz/故障注入 | Windows Native | 8 中；开放 |
 | R-015 | Windows/Electron/应用更新导致兼容性或安全回归 | 4×4=16 高 | 固定已测版本；持续升级窗口；核心兼容抽样；签名发布；SBOM/依赖审计和可回滚更新 | Release | 8 中；开放 |
 | R-016 | 阶段范围混淆，把 Phase 3/5 的兼容性与性能任务误报为 Phase 1 已完成，或反向阻塞 Phase 2 | 3×4=12 中 | Phase 1 清单只验工程边界；兼容矩阵保留“待验证”；每阶段独立证据和签字 | Architect | 3 低；开放 |
-| R-017 | 本机便携 Clang 构建通过，但 MSVC/Windows SDK 正式工具链尚未在远端 CI 实际执行 | 2×4=8 中 | Windows CI 使用 VS 2022 C++ workload 执行同一 `phase1:verify`；审核前保留未签字项 | Release/Native | 6 低；开放 |
+| R-017 | 本机便携 Clang 构建通过，但 MSVC/Windows SDK 正式工具链尚未在远端 CI 实际执行 | 2×4=8 中 | Windows CI 使用 VS 2022 C++ workload 执行同一 `phase1:verify`；[run 29475175846](https://github.com/Chatblanccc/desktop-translate/actions/runs/29475175846) 已通过 | Release/Native | 2 低；关闭（2026-07-16） |
 
 ## 风险处理规则
 

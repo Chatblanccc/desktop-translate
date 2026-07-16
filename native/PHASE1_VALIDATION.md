@@ -19,8 +19,24 @@ The build produced and linked all three Phase 1 targets:
 - `selection-host-probe.exe`
 - `dt_native_core_tests.exe`
 
-MSVC/Visual Studio compilation remains a release gate; this snapshot must not
-be read as an MSVC ABI or packaging validation.
+This workstation snapshot is complemented by the formal MSVC/Windows SDK CI
+evidence below; the portable build is not used as a substitute for that gate.
+
+## Formal MSVC CI evidence
+
+[GitHub Actions run 29475175846](https://github.com/Chatblanccc/desktop-translate/actions/runs/29475175846)
+validated commit
+[`73762649f95fcefc4e46efc4a5eac28dcb188fb1`](https://github.com/Chatblanccc/desktop-translate/commit/73762649f95fcefc4e46efc4a5eac28dcb188fb1)
+with no check annotations:
+
+- `windows-2022` GitHub-hosted runner
+- Visual Studio 2022 Enterprise, MSVC 19.44.35228.0
+- Windows SDK 10.0.26100.0
+- locked dependency install and whitespace gate passed
+- TypeScript checks/tests and Electron production build passed
+- all Native targets compiled and linked with MSVC
+- CTest passed 1/1
+- real Named Pipe `hello -> ready -> health -> shutdown` smoke passed
 
 ## Automated results
 
@@ -97,7 +113,6 @@ ctest --test-dir out/build/windows-x64-debug -C Release --output-on-failure
 
 ## Open verification gates
 
-- Compile and link with Visual Studio 2022 x64 plus a supported Windows SDK.
 - Exercise real selection in representative UIA providers and elevated targets.
 - Exercise negative-coordinate, mixed-DPI, rotated-output, protected-content,
   and ROI-spanning-multiple-monitor cases.
