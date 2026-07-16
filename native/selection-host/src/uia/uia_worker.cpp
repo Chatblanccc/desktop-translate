@@ -1,6 +1,7 @@
 #include "desktop_translate/native/uia/uia_worker.h"
 
 #include <Windows.h>
+#include <objbase.h>
 #include <UIAutomation.h>
 #include <oleauto.h>
 #include <wrl/client.h>
