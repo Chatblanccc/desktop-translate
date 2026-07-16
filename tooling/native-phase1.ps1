@@ -50,13 +50,16 @@ $cmake = Resolve-CMake
 $msvc = Find-MsvcInstallation
 $portable = Find-PortableLlvmMingw
 $source = Join-Path $root 'native'
+$cppWinRtInclude = (& (Join-Path $PSScriptRoot 'prepare-winrt.ps1') | Select-Object -Last 1)
+$cppWinRtIncludeCmake = $cppWinRtInclude.Replace('\', '/')
 
 if ($msvc) {
     $build = Join-Path $source 'out\build\windows-x64-msvc'
     $configureArguments = @(
         '--fresh', '-S', $source, '-B', $build,
         '-G', 'Visual Studio 17 2022', '-A', 'x64',
-        '-DDT_NATIVE_BUILD_TESTS=ON', '-DDT_NATIVE_ENABLE_PADDLE_OCR=OFF'
+        '-DDT_NATIVE_BUILD_TESTS=ON', '-DDT_NATIVE_ENABLE_PADDLE_OCR=OFF',
+        '-DDT_NATIVE_ENABLE_WINDOWS_OCR=ON', "-DDT_CPPWINRT_INCLUDE_DIR=$cppWinRtIncludeCmake"
     )
     $buildArguments = @('--build', $build, '--config', 'Release', '--parallel')
     Write-Host "[native] Toolchain: MSVC at $msvc"
@@ -71,7 +74,8 @@ if ($msvc) {
         "-DCMAKE_CXX_COMPILER=$toolRootCmake/bin/x86_64-w64-mingw32-clang++.exe",
         "-DCMAKE_RC_COMPILER=$toolRootCmake/bin/x86_64-w64-mingw32-windres.exe",
         "-DCMAKE_MAKE_PROGRAM=$toolRootCmake/bin/mingw32-make.exe",
-        '-DDT_NATIVE_BUILD_TESTS=ON', '-DDT_NATIVE_ENABLE_PADDLE_OCR=OFF'
+        '-DDT_NATIVE_BUILD_TESTS=ON', '-DDT_NATIVE_ENABLE_PADDLE_OCR=OFF',
+        '-DDT_NATIVE_ENABLE_WINDOWS_OCR=ON', "-DDT_CPPWINRT_INCLUDE_DIR=$cppWinRtIncludeCmake"
     )
     $buildArguments = @('--build', $build, '--parallel')
     Write-Host "[native] Toolchain: portable llvm-mingw at $toolRoot"

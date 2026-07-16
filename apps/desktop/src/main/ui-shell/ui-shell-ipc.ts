@@ -2,12 +2,15 @@ import {
   isSetBallVisiblePayload,
   isSetEdgeSnapPayload,
   isSetThemePayload,
+  isSetSelectionEnabledPayload,
+  isSetOcrActivationPayload,
+  type OcrActivation,
   type ThemeMode,
   type UiShellSnapshot
 } from '@desktop-translate/contracts/ui-shell';
 import { UI_SHELL_CHANNELS } from '../../shared/ui-shell-channels.js';
 
-export type WindowRole = 'ball' | 'settings';
+export type WindowRole = 'ball' | 'settings' | 'card';
 
 export interface InvokeEventLike {
   readonly sender: {
@@ -32,6 +35,8 @@ export interface UiShellIpcActions {
   setBallVisible(value: boolean): Promise<void>;
   setEdgeSnap(value: boolean): Promise<void>;
   setTheme(value: ThemeMode): Promise<void>;
+  setSelectionEnabled(value: boolean): Promise<void>;
+  setOcrActivation(value: OcrActivation): Promise<void>;
   resetBallPosition(): Promise<void>;
 }
 
@@ -99,6 +104,20 @@ export function registerUiShellIpc(options: UiShellIpcOptions): () => void {
       throw new TypeError('Invalid theme request');
     }
     await actions.setTheme(args[0].value);
+  });
+  ipcMain.handle(UI_SHELL_CHANNELS.setSelectionEnabled, async (event, ...args) => {
+    assertRole(event, resolveRole, ['settings']);
+    if (args.length !== 1 || !isSetSelectionEnabledPayload(args[0])) {
+      throw new TypeError('Invalid selection enabled request');
+    }
+    await actions.setSelectionEnabled(args[0].value);
+  });
+  ipcMain.handle(UI_SHELL_CHANNELS.setOcrActivation, async (event, ...args) => {
+    assertRole(event, resolveRole, ['settings']);
+    if (args.length !== 1 || !isSetOcrActivationPayload(args[0])) {
+      throw new TypeError('Invalid OCR activation request');
+    }
+    await actions.setOcrActivation(args[0].value);
   });
   ipcMain.handle(UI_SHELL_CHANNELS.resetBallPosition, async (event, ...args) => {
     assertRole(event, resolveRole, ['settings']);

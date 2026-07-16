@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <future>
+#include <optional>
 #include <thread>
 #include <utility>
 #include <string_view>
@@ -101,6 +102,78 @@ std::string ProcessBaseName(std::uint32_t pid) {
                                                  : std::wstring_view(path).substr(slash + 1U));
 }
 
+std::optional<DWORD> ProcessIntegrityRid(std::uint32_t pid) {
+  const HANDLE process = pid == GetCurrentProcessId()
+      ? GetCurrentProcess()
+      : OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  if (process == nullptr) return std::nullopt;
+  HANDLE token = nullptr;
+  if (!OpenProcessToken(process, TOKEN_QUERY, &token)) {
+    if (process != GetCurrentProcess()) CloseHandle(process);
+    return std::nullopt;
+  }
+  DWORD size = 0;
+  GetTokenInformation(token, TokenIntegrityLevel, nullptr, 0, &size);
+  std::vector<std::byte> storage(size);
+  DWORD rid = 0;
+  if (size != 0U && GetTokenInformation(token, TokenIntegrityLevel, storage.data(), size, &size)) {
+    const auto* label = reinterpret_cast<const TOKEN_MANDATORY_LABEL*>(storage.data());
+    const auto count = *GetSidSubAuthorityCount(label->Label.Sid);
+    if (count != 0U) rid = *GetSidSubAuthority(label->Label.Sid, count - 1U);
+  }
+  CloseHandle(token);
+  if (process != GetCurrentProcess()) CloseHandle(process);
+  return rid == 0U ? std::nullopt : std::optional<DWORD>{rid};
+}
+
+bool TargetIsElevated(std::uint32_t pid) {
+  if (pid == 0U || pid == GetCurrentProcessId()) return false;
+  const auto current = ProcessIntegrityRid(GetCurrentProcessId());
+  const auto target = ProcessIntegrityRid(pid);
+  // Fail closed when a foreign target cannot be queried. This includes
+  // elevated/protected processes that deny token inspection to this normal-
+  // integrity helper and prevents UIA failure from falling through to OCR.
+  if (!target) return true;
+  return current && *target > *current;
+}
+
+bool IsSecureDesktop() {
+  const auto desktop = OpenInputDesktop(0U, FALSE, DESKTOP_READOBJECTS);
+  if (desktop == nullptr) return true;
+  DWORD required = 0;
+  GetUserObjectInformationW(desktop, UOI_NAME, nullptr, 0U, &required);
+  std::wstring name(required / sizeof(wchar_t), L'\0');
+  const bool read = required > sizeof(wchar_t) &&
+                    GetUserObjectInformationW(desktop, UOI_NAME, name.data(), required, &required);
+  CloseDesktop(desktop);
+  if (!read) return true;
+  name.resize(wcsnlen(name.c_str(), name.size()));
+  return CompareStringOrdinal(name.data(), static_cast<int>(name.size()),
+                              L"Default", 7, TRUE) != CSTR_EQUAL;
+}
+
+struct MonitorCountContext {
+  RECT roi{};
+  std::uint32_t count{};
+};
+
+BOOL CALLBACK CountIntersectingMonitor(HMONITOR, HDC, LPRECT monitor_rect, LPARAM value) {
+  auto& context = *reinterpret_cast<MonitorCountContext*>(value);
+  RECT intersection{};
+  if (IntersectRect(&intersection, &context.roi, monitor_rect)) ++context.count;
+  return context.count > 1U ? FALSE : TRUE;
+}
+
+bool SpansMultipleMonitors(PhysicalRect roi) {
+  MonitorCountContext context{
+      {roi.x, roi.y, roi.Right(), roi.Bottom()},
+      0U,
+  };
+  EnumDisplayMonitors(nullptr, &context.roi, CountIntersectingMonitor,
+                      reinterpret_cast<LPARAM>(&context));
+  return context.count > 1U;
+}
+
 }  // namespace
 
 SelectionPipeline::SelectionPipeline(MouseHook& mouse_hook, UiaWorker& uia_worker,
@@ -158,8 +231,18 @@ void SelectionPipeline::ThreadMain() noexcept {
   PhysicalPoint down_point{};
   PhysicalPoint last_click_point{};
   std::uint64_t last_click_tick = 0;
+  std::uint64_t observed_dropped_events = mouse_hook_.dropped_event_count();
 
   while (running_.load(std::memory_order_acquire)) {
+    const auto dropped_events = mouse_hook_.dropped_event_count();
+    if (dropped_events > observed_dropped_events) {
+      observed_dropped_events = dropped_events;
+      SelectionPipelineResult overflow;
+      overflow.selection_id = NewSelectionId(dropped_events);
+      overflow.source = "none";
+      overflow.selection = {ErrorCode::kHookQueueOverflow, {}, "mouse hook queue overflowed"};
+      try { result_sink_(std::move(overflow)); } catch (...) {}
+    }
     MouseEvent event;
     if (!mouse_hook_.WaitAndPop(event, 100U)) continue;
     if (event.injected) continue;
@@ -237,12 +320,27 @@ void SelectionPipeline::ResolveSelection(std::uint64_t generation, PhysicalPoint
     GetWindowThreadProcessId(hwnd, &target_pid);
     result.target_pid = static_cast<std::uint32_t>(target_pid);
   }
+  if (IsSecureDesktop()) {
+    result.source = "none";
+    result.selection = {ErrorCode::kSecureDesktop, {}, "selection is unavailable on secure desktop"};
+    try { result_sink_(std::move(result)); } catch (...) {}
+    return;
+  }
+  if (TargetIsElevated(result.target_pid)) {
+    result.source = "none";
+    result.selection = {ErrorCode::kTargetElevated, {}, "target integrity level is higher"};
+    try { result_sink_(std::move(result)); } catch (...) {}
+    return;
+  }
   if (!config_.excluded_process_names.empty()) {
     const auto process_name = ProcessBaseName(result.target_pid);
     if (std::any_of(config_.excluded_process_names.begin(),
                     config_.excluded_process_names.end(), [&](const std::string& excluded) {
                       return WindowsCaseInsensitiveEquals(excluded, process_name);
                     })) {
+      result.source = "none";
+      result.selection = {ErrorCode::kProtectedContent, {}, "target process is excluded"};
+      try { result_sink_(std::move(result)); } catch (...) {}
       return;
     }
   }
@@ -300,6 +398,18 @@ void SelectionPipeline::ResolveSelection(std::uint64_t generation, PhysicalPoint
     result.source = "none";
     result.selection = {ErrorCode::kOcrUnavailable, {}, "OCR runtime is not available"};
     result.capture_error = ErrorCode::kCaptureUnavailable;
+    result.ocr_error = ErrorCode::kOcrUnavailable;
+    if (!cancelled()) {
+      try { result_sink_(std::move(result)); } catch (...) {}
+    }
+    return;
+  }
+
+  if (SpansMultipleMonitors(roi)) {
+    result.source = "none";
+    result.selection = {ErrorCode::kCrossMonitorUnsupported, {},
+                        "cross-monitor OCR is not supported"};
+    result.capture_error = ErrorCode::kCrossMonitorUnsupported;
     result.ocr_error = ErrorCode::kOcrUnavailable;
     if (!cancelled()) {
       try { result_sink_(std::move(result)); } catch (...) {}
@@ -371,18 +481,27 @@ void SelectionPipeline::ResolveSelection(std::uint64_t generation, PhysicalPoint
   if (!HasText(selection.text_utf8)) {
     if (cancelled()) return;
     result.source = "none";
-    result.selection = {ErrorCode::kUiaNoSelection, {}, "OCR returned no usable text"};
+    result.selection = {ErrorCode::kOcrNoText, {}, "OCR returned no usable text"};
     try { result_sink_(std::move(result)); } catch (...) {}
     return;
   }
   selection.text_utf8 = TruncateUtf8ToUtf16Units(selection.text_utf8, 32768U);
   if (cancelled()) return;
 
-  result.source = "ocr";
-  result.selection = {ErrorCode::kOk, std::move(selection), {}};
-  result.confidence = confidence_count == 0U
+  const float confidence = confidence_count == 0U
       ? 0.0F
       : confidence_sum / static_cast<float>(confidence_count);
+  if (confidence < 0.5F) {
+    result.source = "none";
+    result.selection = {ErrorCode::kOcrLowConfidence, {}, "OCR confidence is below policy"};
+    result.confidence = confidence;
+    try { result_sink_(std::move(result)); } catch (...) {}
+    return;
+  }
+
+  result.source = "ocr";
+  result.selection = {ErrorCode::kOk, std::move(selection), {}};
+  result.confidence = confidence;
   try { result_sink_(std::move(result)); } catch (...) {}
 }
 

@@ -79,20 +79,20 @@ body,
   -webkit-app-region: no-drag;
 }
 
-.ball-frame[data-native-status='starting'] .ball-status {
+.ball-frame[data-selection-status='starting'] .ball-status {
   background: var(--color-warning);
   animation: ball-status-pulse 1.2s ease-in-out infinite;
 }
 
-.ball-frame[data-native-status='ready'] .ball-status {
+.ball-frame[data-selection-status='listening'] .ball-status {
   background: var(--color-success);
 }
 
-.ball-frame[data-native-status='degraded'] .ball-status {
+.ball-frame[data-selection-status='degraded'] .ball-status {
   background: var(--color-warning);
 }
 
-.ball-frame[data-native-status='faulted'] .ball-status {
+.ball-frame[data-selection-status='faulted'] .ball-status {
   background: var(--color-danger);
 }
 

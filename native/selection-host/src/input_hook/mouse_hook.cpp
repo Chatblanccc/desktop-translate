@@ -83,6 +83,7 @@ void MouseHook::ThreadMain(std::promise<bool> started) noexcept {
     started.set_value(false);
     return;
   }
+  installed_.store(true, std::memory_order_release);
   started.set_value(true);
 
   while (GetMessageW(&message, nullptr, 0, 0) > 0) {
@@ -91,6 +92,7 @@ void MouseHook::ThreadMain(std::promise<bool> started) noexcept {
   }
 
   UnhookWindowsHookEx(hook);
+  installed_.store(false, std::memory_order_release);
   active_instance_.store(nullptr, std::memory_order_release);
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "@desktop-translate/contracts",
-  "version": "0.2.0-phase2",
+  "version": "0.3.0-phase3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,6 +10,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./native-ipc": "./src/native-ipc.ts",
+    "./selection-card": "./src/selection-card.ts",
     "./translation": "./src/translation.ts",
     "./ui-shell": "./src/ui-shell.ts"
   }

@@ -5,8 +5,10 @@ import type { DatabaseSync, StatementSync } from "node:sqlite";
 
 import {
   isBallAnchor,
+  isOcrActivation,
   isThemeMode,
   type BallAnchor,
+  type OcrActivation,
   type ThemeMode,
 } from "../../contracts/src/ui-shell.js";
 import type { SettingsRepository } from "./repositories.js";
@@ -309,4 +311,145 @@ export class SqlitePhase2SettingsRepository {
 
 function isBoolean(value: unknown): value is boolean {
   return typeof value === "boolean";
+}
+
+export const PHASE3_SETTING_KEYS = Object.freeze({
+  ...PHASE2_SETTING_KEYS,
+  selectionEnabled: "selection.enabled",
+  ocrActivation: "selection.ocrActivation",
+} as const);
+
+export type Phase3SettingKey = (typeof PHASE3_SETTING_KEYS)[keyof typeof PHASE3_SETTING_KEYS];
+
+export interface Phase3UiSettings extends Phase2UiSettings {
+  readonly selection: {
+    readonly enabled: boolean;
+    readonly ocrActivation: OcrActivation;
+  };
+}
+
+export const DEFAULT_PHASE3_UI_SETTINGS: Phase3UiSettings = Object.freeze({
+  ...DEFAULT_PHASE2_UI_SETTINGS,
+  selection: Object.freeze({ enabled: true, ocrActivation: "fallback" }),
+});
+
+export interface SqlitePhase3SettingsRepositoryOptions {
+  readonly now?: () => string;
+  /** Receives only the invalid key; persisted values never cross this boundary. */
+  readonly onInvalidSetting?: (key: Phase3SettingKey) => void;
+}
+
+export class SqlitePhase3SettingsRepository {
+  readonly #settings: SqliteSettingsRepository;
+  readonly #select: StatementSync;
+  readonly #now: () => string;
+  readonly #onInvalidSetting: ((key: Phase3SettingKey) => void) | undefined;
+
+  constructor(database: DatabaseSync, options: SqlitePhase3SettingsRepositoryOptions = {}) {
+    this.#settings = new SqliteSettingsRepository(database);
+    this.#select = database.prepare("SELECT value_json AS valueJson FROM settings WHERE key = ?");
+    this.#now = options.now ?? (() => new Date().toISOString());
+    this.#onInvalidSetting = options.onInvalidSetting;
+  }
+
+  async load(): Promise<Phase3UiSettings> {
+    const visible = this.#readValidated(PHASE3_SETTING_KEYS.ballVisible, isBoolean, true);
+    const edgeSnap = this.#readValidated(PHASE3_SETTING_KEYS.ballEdgeSnap, isBoolean, true);
+    const anchor = this.#readValidated(PHASE3_SETTING_KEYS.ballAnchor, isBallAnchor, undefined);
+    const theme = this.#readValidated(PHASE3_SETTING_KEYS.theme, isThemeMode, "system");
+    const enabled = this.#readValidated(PHASE3_SETTING_KEYS.selectionEnabled, isBoolean, true);
+    const ocrActivation = this.#readValidated(
+      PHASE3_SETTING_KEYS.ocrActivation,
+      isOcrActivation,
+      "fallback",
+    );
+    const ball = anchor === undefined
+      ? { visible, edgeSnap }
+      : { visible, edgeSnap, anchor };
+    return { ball, theme, selection: { enabled, ocrActivation } };
+  }
+
+  async setBallVisible(value: boolean): Promise<void> {
+    if (typeof value !== "boolean") throw new TypeError("Ball visibility must be a boolean");
+    await this.#settings.set(PHASE3_SETTING_KEYS.ballVisible, value, this.#now());
+  }
+
+  async setEdgeSnap(value: boolean): Promise<void> {
+    if (typeof value !== "boolean") throw new TypeError("Edge snap must be a boolean");
+    await this.#settings.set(PHASE3_SETTING_KEYS.ballEdgeSnap, value, this.#now());
+  }
+
+  async setTheme(value: ThemeMode): Promise<void> {
+    if (!isThemeMode(value)) throw new TypeError("Theme must be system, light, or dark");
+    await this.#settings.set(PHASE3_SETTING_KEYS.theme, value, this.#now());
+  }
+
+  async setBallAnchor(value: BallAnchor): Promise<void> {
+    if (!isBallAnchor(value)) throw new TypeError("Ball anchor is invalid");
+    await this.#settings.set(PHASE3_SETTING_KEYS.ballAnchor, value, this.#now());
+  }
+
+  async resetBallAnchor(): Promise<void> {
+    await this.#settings.delete(PHASE3_SETTING_KEYS.ballAnchor);
+  }
+
+  async setSelectionEnabled(value: boolean): Promise<void> {
+    if (typeof value !== "boolean") throw new TypeError("Selection enabled must be a boolean");
+    await this.#settings.set(PHASE3_SETTING_KEYS.selectionEnabled, value, this.#now());
+  }
+
+  async setOcrActivation(value: OcrActivation): Promise<void> {
+    if (!isOcrActivation(value)) throw new TypeError("OCR activation is invalid");
+    await this.#settings.set(PHASE3_SETTING_KEYS.ocrActivation, value, this.#now());
+  }
+
+  #readValidated<T>(key: Phase3SettingKey, guard: (value: unknown) => value is T, fallback: T): T {
+    const row = this.#select.get(key) as unknown as SettingRow | undefined;
+    if (!row) return fallback;
+    try {
+      const value = JSON.parse(row.valueJson) as unknown;
+      if (guard(value)) return value;
+    } catch {
+      // Invalid values use the safe fallback path below.
+    }
+    try {
+      this.#onInvalidSetting?.(key);
+    } catch {
+      // Diagnostics must never prevent safe startup defaults.
+    }
+    return fallback;
+  }
+}
+
+export class SqliteAppExclusionsRepository {
+  readonly #listEnabled: StatementSync;
+
+  constructor(database: DatabaseSync) {
+    this.#listEnabled = database.prepare(
+      "SELECT process_name AS processName, enabled FROM app_exclusions WHERE enabled = 1 ORDER BY process_name COLLATE NOCASE",
+    );
+  }
+
+  async listEnabledProcessNames(): Promise<readonly string[]> {
+    const rows = this.#listEnabled.all() as unknown as Array<{
+      readonly processName: string;
+      readonly enabled: number;
+    }>;
+    return rows
+      .filter((row) => row.enabled === 1 && isWindowsProcessBasename(row.processName))
+      .map((row) => row.processName);
+  }
+}
+
+function isWindowsProcessBasename(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length >= 1 &&
+    value.length <= 260 &&
+    value !== "." &&
+    value !== ".." &&
+    !value.endsWith(".") &&
+    !value.endsWith(" ") &&
+    !/[<>:"/\\|?*\u0000-\u001f]/u.test(value)
+  );
 }

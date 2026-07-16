@@ -1,5 +1,6 @@
 import {
   isUiShellSnapshot,
+  type OcrActivation,
   type ThemeMode,
   type UiShellSnapshot
 } from '@desktop-translate/contracts/ui-shell';
@@ -19,6 +20,8 @@ export interface SettingsRendererBridge {
   setBallVisible(visible: boolean): Promise<void>;
   setEdgeSnap(enabled: boolean): Promise<void>;
   setTheme(theme: ThemeMode): Promise<void>;
+  setSelectionEnabled(enabled: boolean): Promise<void>;
+  setOcrActivation(activation: OcrActivation): Promise<void>;
   resetBallPosition(): Promise<void>;
   onSnapshotChanged(listener: SnapshotChangedListener): () => void;
 }
@@ -75,6 +78,10 @@ export function createSettingsRendererBridge(ipc: IpcRendererBridgePort): Settin
     setEdgeSnap: (value: boolean) =>
       invokeVoid(ipc, UI_SHELL_CHANNELS.setEdgeSnap, { value }),
     setTheme: (value: ThemeMode) => invokeVoid(ipc, UI_SHELL_CHANNELS.setTheme, { value }),
+    setSelectionEnabled: (value: boolean) =>
+      invokeVoid(ipc, UI_SHELL_CHANNELS.setSelectionEnabled, { value }),
+    setOcrActivation: (value: OcrActivation) =>
+      invokeVoid(ipc, UI_SHELL_CHANNELS.setOcrActivation, { value }),
     resetBallPosition: () => invokeVoid(ipc, UI_SHELL_CHANNELS.resetBallPosition),
     onSnapshotChanged: (listener: SnapshotChangedListener) => subscribe(ipc, listener)
   });

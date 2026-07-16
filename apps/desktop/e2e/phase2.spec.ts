@@ -23,6 +23,11 @@ interface DebugState {
     readonly ball: { readonly visible: boolean; readonly edgeSnap: boolean; readonly anchor?: unknown };
     readonly theme: string;
     readonly native: { readonly status: string; readonly degradedCapabilities: readonly string[] };
+    readonly selection: {
+      readonly enabled: boolean;
+      readonly lifecycle: string;
+      readonly ocrActivation: string;
+    };
   };
   readonly trayCreated: boolean;
   readonly ballCreated: boolean;
@@ -30,6 +35,8 @@ interface DebugState {
   readonly ballBounds?: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
   readonly settingsCreated: boolean;
   readonly settingsVisible: boolean;
+  readonly cardCreated: boolean;
+  readonly cardVisible: boolean;
 }
 
 function environment(userData: string, nativeMode?: string): Record<string, string> {
@@ -251,7 +258,7 @@ test('Phase 2 shell stays usable without Native Host and persists UI settings @s
   }
 });
 
-test('Native fixture reports degraded OCR while listening remains disabled @smoke', async () => {
+test('Native fixture reports degraded OCR while UIA selection remains listening @smoke', async () => {
   const userData = await mkdtemp(join(tmpdir(), 'desktop-translate-native-'));
   let application: ElectronApplication | undefined;
   try {
@@ -260,7 +267,8 @@ test('Native fixture reports degraded OCR while listening remains disabled @smok
     await waitForShell(runningApplication);
     await expect.poll(() => debugState(runningApplication)).toMatchObject({
       snapshot: {
-        native: { status: 'degraded', degradedCapabilities: ['ocr'] }
+        native: { status: 'degraded', degradedCapabilities: ['ocr'] },
+        selection: { enabled: true, lifecycle: 'degraded' }
       }
     });
     await runningApplication.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
@@ -275,9 +283,55 @@ test('Native fixture reports degraded OCR while listening remains disabled @smok
       .split(/\r?\n/u);
     expect(nativeMethods[0]).toBe('hello');
     expect(nativeMethods.at(-1)).toBe('shutdown');
-    expect(nativeMethods).not.toContain('start');
-    expect(nativeMethods.every((method) => ['hello', 'health', 'shutdown'].includes(method)))
+    expect(nativeMethods).toContain('start');
+    expect(nativeMethods.every((method) => ['hello', 'start', 'health', 'shutdown'].includes(method)))
       .toBe(true);
+  } finally {
+    if (application !== undefined) {
+      await quitApplication(application).catch(() => application?.process().kill());
+    }
+    await removeUserData(userData);
+  }
+});
+
+test('Native selection event opens a sandboxed source-only card @smoke', async () => {
+  const userData = await mkdtemp(join(tmpdir(), 'desktop-translate-selection-'));
+  let application: ElectronApplication | undefined;
+  try {
+    application = await launch(userData, 'selection');
+    const runningApplication = application;
+    await waitForShell(runningApplication);
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({
+      snapshot: { selection: { enabled: true, lifecycle: 'listening' } },
+      cardCreated: true,
+      cardVisible: true
+    });
+
+    const card = await findWindow(runningApplication, '桌面翻译识别结果');
+    await expect(card.getByRole('heading', { name: '识别结果' })).toBeVisible();
+    await expect(card.getByText('Phase 3 selection preview')).toBeVisible();
+    await expect(card.getByText('应用文字')).toBeVisible();
+    expect(await card.evaluate(() => typeof window.require)).toBe('undefined');
+    expect(await card.evaluate(() => typeof window.process)).toBe('undefined');
+    expect(await card.evaluate(() => {
+      const exposed = window as typeof window & {
+        readonly desktopTranslateCard?: object;
+        readonly electron?: unknown;
+        readonly ipcRenderer?: unknown;
+      };
+      return {
+        electron: typeof exposed.electron,
+        ipcRenderer: typeof exposed.ipcRenderer,
+        bridgeKeys: Object.keys(exposed.desktopTranslateCard ?? {}).sort()
+      };
+    })).toEqual({
+      electron: 'undefined',
+      ipcRenderer: 'undefined',
+      bridgeKeys: ['dismiss', 'getCurrent', 'onChanged']
+    });
+
+    await card.getByRole('button', { name: '关闭识别结果' }).click();
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({ cardVisible: false });
   } finally {
     if (application !== undefined) {
       await quitApplication(application).catch(() => application?.process().kill());

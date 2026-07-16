@@ -185,18 +185,19 @@ v1 只有两个 event method：
 
 错误 payload 包含：稳定 `code`、供开发者理解的 `message`、`scope`、`recoverable`，以及可选 `relatedRequestId`、`selectionId`、标量 `details`。`message/details` 禁止包含原文、OCR 图像、窗口标题、nonce、Pipe 名或密钥。
 
-Phase 1 Host 当前错误码（内部 snake_case 在协议边界转为以下大写形式）：
+Phase 3 Host 当前错误码（内部 snake_case 在协议边界转为以下大写形式）：
 
 | Scope | Code | 典型处理 |
 |---|---|---|
 | protocol | `INVALID_ARGUMENT`、`FRAME_TOO_LARGE`、`MALFORMED_FRAME`、`MALFORMED_JSON`、`UNSUPPORTED_PROTOCOL`、`HANDSHAKE_REQUIRED`、`NONCE_MISMATCH`、`UNAUTHORIZED_CLIENT` | 通常断开；不得自动重放 |
-| hook | `HOOK_INSTALL_FAILED` | 降级/停止监听；提示重试 |
+| hook | `HOOK_INSTALL_FAILED`、`HOOK_QUEUE_OVERFLOW` | 降级/停止监听或取消本次任务；提示重试 |
 | uia | `UIA_UNAVAILABLE`、`UIA_PASSWORD_FIELD`、`UIA_NO_SELECTION`、`UIA_TIMEOUT` | 仅 unavailable/no-selection/timeout 可按策略 OCR；密码目标禁止绕过 |
-| capture | `CAPTURE_UNAVAILABLE`、`CAPTURE_TIMEOUT` | 结束本次任务或在安全边界内重建 capture |
-| ocr | `OCR_UNAVAILABLE` | 结束本次任务；不猜测文本 |
-| host | `INVALID_STATE`、`PIPE_ERROR`、`PARENT_EXITED`、`INTERNAL_ERROR` | 按请求失败、断开或触发有限重启 |
+| capture | `CAPTURE_UNAVAILABLE`、`CAPTURE_TIMEOUT`、`CAPTURE_ACCESS_LOST`、`CAPTURE_PROTECTED`、`CROSS_MONITOR_UNSUPPORTED` | 结束本次任务；下一任务可在安全边界内重建 capture |
+| ocr | `OCR_UNAVAILABLE`、`OCR_TIMEOUT`、`OCR_NO_TEXT`、`OCR_LOW_CONFIDENCE` | 结束本次任务；不猜测文本 |
+| host | `SELECTION_CANCELLED`、`TARGET_ELEVATED`、`SECURE_DESKTOP`、`PROTECTED_CONTENT`、`INVALID_STATE`、`PIPE_ERROR`、`PARENT_EXITED`、`INTERNAL_ERROR` | 安全边界拒绝、请求失败、断开或触发有限重启 |
 
-在完整采集探针进入主干前，还必须登记能区分以下语义的稳定 code：队列过载、取消、target elevated、secure desktop、capture access-lost/protected、OCR timeout/no-text/low-confidence。新增 code 需同步 C++/TS fixtures 和本文，不得用 `INTERNAL_ERROR` 长期掩盖预期分支。
+以上稳定 code 已在 Phase 3 Native Host 中落地。新增 code 仍需同步 C++/TS fixtures 和本文，
+不得用 `INTERNAL_ERROR` 长期掩盖预期分支。
 
 预期的“没有选中文字”不应刷屏为全局错误；实现可以静默结束该 selection。若发送 error，带 `selectionId` 以便 Main 关联。
 

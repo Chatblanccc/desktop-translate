@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_UI_SHELL_SNAPSHOT } from '@desktop-translate/contracts/ui-shell';
+import { SELECTION_CARD_CHANNELS } from '../../shared/selection-card-channels.js';
 import { UI_SHELL_CHANNELS } from '../../shared/ui-shell-channels.js';
 
 type Handler = (...args: unknown[]) => void;
@@ -106,6 +107,7 @@ vi.mock('electron', () => ({
 import {
   WindowManager,
   createBallWindowOptions,
+  createCardWindowOptions,
   createSecureWebPreferences,
   createSettingsWindowOptions,
   createSystemAccentCss
@@ -115,14 +117,16 @@ const initialBounds = { x: 100, y: 200, width: 56, height: 56 };
 
 function makeManager(initialBallVisible = true) {
   const onBallMoved = vi.fn();
+  const onCardDismissed = vi.fn();
   const manager = new WindowManager({
     appPath: 'C:\\app',
     buildDirectory: 'C:\\app\\.vite\\build',
     initialBallBounds: initialBounds,
     initialBallVisible,
-    onBallMoved
+    onBallMoved,
+    onCardDismissed
   });
-  return { manager, onBallMoved };
+  return { manager, onBallMoved, onCardDismissed };
 }
 
 function latestWindow(): InstanceType<typeof electron.BrowserWindow> {
@@ -181,6 +185,22 @@ describe('secure window options', () => {
     expect(createSettingsWindowOptions('C:\\settings.cjs').backgroundColor).toBe('#202020');
   });
 
+  it('creates a fixed, secure, non-taskbar source card', () => {
+    expect(createCardWindowOptions('C:\\card.cjs', { x: 10, y: 20, width: 1, height: 1 }))
+      .toMatchObject({
+        x: 10,
+        y: 20,
+        width: 380,
+        height: 220,
+        frame: false,
+        transparent: true,
+        alwaysOnTop: true,
+        skipTaskbar: true,
+        resizable: false,
+        show: false
+      });
+  });
+
   it('validates Windows system colors before generating accent CSS', () => {
     expect(createSystemAccentCss('#112233ff', '#fefefeff')).toContain('#112233ff');
     expect(createSystemAccentCss('unsafe; color: red', 'invalid')).toContain('#005fb8');
@@ -193,6 +213,9 @@ describe('WindowManager', () => {
   beforeEach(() => {
     electron.BrowserWindow.instances.length = 0;
     electron.nativeTheme.shouldUseDarkColors = false;
+    electron.systemPreferences.getColor.mockImplementation(
+      (name: string) => name === 'highlight' ? '#112233ff' : '#fefefeff'
+    );
   });
 
   it('creates and secures one Ball window, shows it inactive, and reports moves', async () => {
@@ -339,18 +362,114 @@ describe('WindowManager', () => {
     expect(manager.getBallWindow()).toBeUndefined();
   });
 
-  it('destroys both windows during an idempotent shutdown without close-to-hide', async () => {
+  it('creates one source card lazily, presents replacements, and returns isolated state', async () => {
+    const { manager } = makeManager();
+    await manager.start();
+    const first = {
+      selectionId: '123e4567-e89b-42d3-a456-426614174000',
+      text: 'First source text',
+      source: 'uia' as const,
+      confidence: 1
+    };
+    const firstBounds = { x: 100, y: 120, width: 380, height: 220 };
+    manager.presentSelectionCard(first, firstBounds);
+    await Promise.resolve();
+    expect(electron.BrowserWindow.instances).toHaveLength(2);
+    const card = latestWindow();
+    expect(card.loadedFile).toMatch(/card[\\/]index\.html$/u);
+    expect(card.setAlwaysOnTop).toHaveBeenCalledWith(true, 'floating');
+    expect(card.showInactive).not.toHaveBeenCalled();
+    expect(manager.getCurrentSelectionCard()).toEqual(first);
+
+    const returned = manager.getCurrentSelectionCard()!;
+    (returned as { text: string }).text = 'mutated';
+    expect(manager.getCurrentSelectionCard()?.text).toBe(first.text);
+
+    card.emit('ready-to-show');
+    expect(card.setBounds).toHaveBeenCalledWith(firstBounds, false);
+    expect(card.webContents.send).toHaveBeenCalledWith(SELECTION_CARD_CHANNELS.changed, first);
+    expect(card.showInactive).toHaveBeenCalledOnce();
+
+    const replacement = { ...first, text: 'Replacement source text', source: 'ocr' as const };
+    const replacementBounds = { x: -500, y: 700, width: 380, height: 220 };
+    manager.presentSelectionCard(replacement, replacementBounds);
+    expect(card.setBounds).toHaveBeenLastCalledWith(replacementBounds, false);
+    expect(card.webContents.send).toHaveBeenLastCalledWith(
+      SELECTION_CARD_CHANNELS.changed,
+      replacement
+    );
+    expect(card.showInactive).toHaveBeenCalledTimes(2);
+    expect(electron.BrowserWindow.instances).toHaveLength(2);
+  });
+
+  it('dismisses cards before or after ready and reports an explicit user dismissal', async () => {
+    const { manager, onCardDismissed } = makeManager();
+    await manager.start();
+    const cardModel = {
+      selectionId: '123e4567-e89b-42d3-a456-426614174000',
+      text: 'Source text',
+      source: 'uia' as const,
+      confidence: 1
+    };
+    manager.presentSelectionCard(cardModel, { x: 1, y: 2, width: 380, height: 220 });
+    await Promise.resolve();
+    const card = latestWindow();
+    manager.dismissSelectionCard();
+    expect(manager.getCurrentSelectionCard()).toBeUndefined();
+    card.emit('ready-to-show');
+    expect(card.showInactive).not.toHaveBeenCalled();
+
+    manager.presentSelectionCard(cardModel, { x: 3, y: 4, width: 380, height: 220 });
+    expect(card.showInactive).toHaveBeenCalledOnce();
+    expect(card.close().prevented).toBe(true);
+    expect(card.webContents.send).toHaveBeenLastCalledWith(
+      SELECTION_CARD_CHANNELS.changed,
+      undefined
+    );
+    expect(card.hide).toHaveBeenCalledTimes(2);
+    expect(onCardDismissed).toHaveBeenCalledOnce();
+
+    card.destroy();
+    expect(manager.getCardWindow()).toBeUndefined();
+    manager.dismissSelectionCard(true);
+    expect(onCardDismissed).toHaveBeenCalledTimes(2);
+  });
+
+  it('falls back safely when Windows accent lookup and CSS injection fail', async () => {
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    electron.systemPreferences.getColor.mockImplementation(() => { throw new Error('color'); });
+    const { manager } = makeManager();
+    const start = manager.start();
+    const ball = latestWindow();
+    ball.webContents.insertCSS.mockRejectedValueOnce(new Error('css'));
+    await start;
+    expect(warning).toHaveBeenCalledWith(expect.stringMatching(/accent color/u));
+    expect(warning).toHaveBeenCalledWith(expect.stringMatching(/apply/u));
+    warning.mockRestore();
+  });
+
+  it('destroys all role windows during an idempotent shutdown without close-to-hide', async () => {
     const { manager } = makeManager();
     await manager.start();
     const ball = latestWindow();
     manager.openSettings();
     await Promise.resolve();
     const settings = latestWindow();
+    manager.presentSelectionCard({
+      selectionId: '123e4567-e89b-42d3-a456-426614174000',
+      text: 'Source text',
+      source: 'uia',
+      confidence: 1
+    }, { x: 1, y: 2, width: 380, height: 220 });
+    await Promise.resolve();
+    const card = latestWindow();
     manager.dispose();
     manager.dispose();
     expect(ball.destroyed).toBe(true);
     expect(settings.destroyed).toBe(true);
+    expect(card.destroyed).toBe(true);
     expect(manager.getBallWindow()).toBeUndefined();
     expect(manager.getSettingsWindow()).toBeUndefined();
+    expect(manager.getCardWindow()).toBeUndefined();
   });
 });

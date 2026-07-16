@@ -3,10 +3,12 @@ import {
   DEFAULT_UI_SHELL_SNAPSHOT,
   type BallAnchor,
   type NativeUiStatus,
+  type OcrActivation,
+  type SelectionLifecycle,
   type ThemeMode,
   type UiShellSnapshot
 } from '@desktop-translate/contracts/ui-shell';
-import type { Phase2UiSettings } from '@desktop-translate/storage';
+import type { Phase3UiSettings } from '@desktop-translate/storage';
 
 export class UiShellState extends EventEmitter {
   private snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT;
@@ -15,7 +17,7 @@ export class UiShellState extends EventEmitter {
     return structuredClone(this.snapshot);
   }
 
-  public initialize(settings: Phase2UiSettings): void {
+  public initialize(settings: Phase3UiSettings): void {
     this.replace({
       ...this.snapshot,
       ball: settings.ball.anchor === undefined
@@ -25,7 +27,12 @@ export class UiShellState extends EventEmitter {
             edgeSnap: settings.ball.edgeSnap,
             anchor: settings.ball.anchor
           },
-      theme: settings.theme
+      theme: settings.theme,
+      selection: {
+        enabled: settings.selection.enabled,
+        lifecycle: settings.selection.enabled ? 'starting' : 'disabled',
+        ocrActivation: settings.selection.ocrActivation
+      }
     });
   }
 
@@ -55,6 +62,31 @@ export class UiShellState extends EventEmitter {
     this.replace({
       ...this.snapshot,
       native: { status, degradedCapabilities: [...degradedCapabilities] }
+    });
+  }
+
+  public setSelectionEnabled(enabled: boolean): void {
+    this.replace({
+      ...this.snapshot,
+      selection: {
+        ...this.snapshot.selection,
+        enabled,
+        lifecycle: enabled ? 'starting' : 'disabled'
+      }
+    });
+  }
+
+  public setSelectionLifecycle(lifecycle: SelectionLifecycle): void {
+    this.replace({
+      ...this.snapshot,
+      selection: { ...this.snapshot.selection, lifecycle }
+    });
+  }
+
+  public setOcrActivation(ocrActivation: OcrActivation): void {
+    this.replace({
+      ...this.snapshot,
+      selection: { ...this.snapshot.selection, ocrActivation }
     });
   }
 

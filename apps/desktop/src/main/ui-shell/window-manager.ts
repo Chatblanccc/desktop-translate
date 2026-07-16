@@ -8,8 +8,11 @@ import {
   type Rectangle
 } from 'electron';
 import type { UiShellSnapshot } from '@desktop-translate/contracts/ui-shell';
+import type { SelectionCardViewModel } from '@desktop-translate/contracts/selection-card';
+import { SELECTION_CARD_CHANNELS } from '../../shared/selection-card-channels.js';
 import { UI_SHELL_CHANNELS } from '../../shared/ui-shell-channels.js';
 import { BALL_SIZE_DIP } from './ball-position.js';
+import { CARD_HEIGHT_DIP, CARD_WIDTH_DIP } from './selection-card-position.js';
 import type { InvokeEventLike, WindowRole } from './ui-shell-ipc.js';
 
 export interface WindowManagerOptions {
@@ -18,6 +21,7 @@ export interface WindowManagerOptions {
   readonly initialBallBounds: Rectangle;
   readonly initialBallVisible: boolean;
   readonly onBallMoved: (bounds: Rectangle) => void;
+  readonly onCardDismissed: () => void;
 }
 
 interface WindowRegistration {
@@ -76,6 +80,28 @@ export function createSettingsWindowOptions(preload: string): BrowserWindowConst
   };
 }
 
+export function createCardWindowOptions(preload: string, bounds: Rectangle): BrowserWindowConstructorOptions {
+  return {
+    ...bounds,
+    width: CARD_WIDTH_DIP,
+    height: CARD_HEIGHT_DIP,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: true,
+    hasShadow: false,
+    webPreferences: createSecureWebPreferences(preload)
+  };
+}
+
 export function createSystemAccentCss(accentColor: string, accentTextColor: string): string {
   const isVisibleColor = (value: string): boolean =>
     /^#[0-9a-f]{6}(?:[0-9a-f]{2})?$/iu.test(value) &&
@@ -101,6 +127,10 @@ export class WindowManager {
   private readonly registrations = new Map<number, WindowRegistration>();
   private ballWindow: BrowserWindow | undefined;
   private settingsWindow: BrowserWindow | undefined;
+  private cardWindow: BrowserWindow | undefined;
+  private cardReady = false;
+  private currentCard: SelectionCardViewModel | undefined;
+  private currentCardBounds: Rectangle | undefined;
   private ballReady = false;
   private ballVisible: boolean;
   private settingsShouldShow = false;
@@ -185,6 +215,39 @@ export class WindowManager {
     return this.settingsWindow;
   }
 
+  public getCardWindow(): BrowserWindow | undefined {
+    return this.cardWindow;
+  }
+
+  public getCurrentSelectionCard(): SelectionCardViewModel | undefined {
+    return this.currentCard === undefined ? undefined : structuredClone(this.currentCard);
+  }
+
+  public presentSelectionCard(card: SelectionCardViewModel, bounds: Rectangle): void {
+    this.currentCard = structuredClone(card);
+    this.currentCardBounds = { ...bounds };
+    const window = this.cardWindow;
+    if (window === undefined || window.isDestroyed()) {
+      void this.createCardWindow();
+      return;
+    }
+    if (!this.cardReady) return;
+    window.setBounds(bounds, false);
+    window.webContents.send(SELECTION_CARD_CHANNELS.changed, this.currentCard);
+    window.showInactive();
+  }
+
+  public dismissSelectionCard(notify = false): void {
+    this.currentCard = undefined;
+    this.currentCardBounds = undefined;
+    const window = this.cardWindow;
+    if (window !== undefined && !window.isDestroyed()) {
+      if (this.cardReady) window.webContents.send(SELECTION_CARD_CHANNELS.changed, undefined);
+      window.hide();
+    }
+    if (notify) this.options.onCardDismissed();
+  }
+
   public broadcast(snapshot: UiShellSnapshot): void {
     for (const window of [this.ballWindow, this.settingsWindow]) {
       if (window !== undefined && !window.isDestroyed()) {
@@ -195,11 +258,14 @@ export class WindowManager {
 
   public dispose(): void {
     this.quitting = true;
-    for (const window of [this.settingsWindow, this.ballWindow]) {
+    for (const window of [this.cardWindow, this.settingsWindow, this.ballWindow]) {
       if (window !== undefined && !window.isDestroyed()) window.destroy();
     }
     this.settingsWindow = undefined;
     this.ballWindow = undefined;
+    this.cardWindow = undefined;
+    this.currentCard = undefined;
+    this.currentCardBounds = undefined;
     this.registrations.clear();
   }
 
@@ -226,6 +292,44 @@ export class WindowManager {
       if (!this.settingsShouldShow || window.isDestroyed()) return;
       window.show();
       window.focus();
+    });
+    await window.loadFile(html);
+    await this.applySystemAccent(window);
+  }
+
+  private async createCardWindow(): Promise<void> {
+    if (this.cardWindow !== undefined || this.currentCard === undefined || this.currentCardBounds === undefined) {
+      return;
+    }
+    const preload = join(this.options.buildDirectory, 'card-preload.cjs');
+    const html = join(this.options.appPath, '.vite', 'renderer', 'card', 'index.html');
+    const window = new BrowserWindow(createCardWindowOptions(preload, this.currentCardBounds));
+    const webContentsId = window.webContents.id;
+    this.cardWindow = window;
+    window.setAlwaysOnTop(true, 'floating');
+    this.register(window, 'card', html);
+    this.secure(window);
+    window.on('close', (event) => {
+      if (!this.quitting) {
+        event.preventDefault();
+        this.dismissSelectionCard(true);
+      }
+    });
+    window.on('closed', () => {
+      this.registrations.delete(webContentsId);
+      if (this.cardWindow === window) this.cardWindow = undefined;
+      this.cardReady = false;
+    });
+    window.once('ready-to-show', () => {
+      this.cardReady = true;
+      if (
+        this.currentCard === undefined ||
+        this.currentCardBounds === undefined ||
+        window.isDestroyed()
+      ) return;
+      window.setBounds(this.currentCardBounds, false);
+      window.webContents.send(SELECTION_CARD_CHANNELS.changed, this.currentCard);
+      window.showInactive();
     });
     await window.loadFile(html);
     await this.applySystemAccent(window);

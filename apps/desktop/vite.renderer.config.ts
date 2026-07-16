@@ -23,6 +23,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         ball: resolve(__dirname, 'src/renderer/ball/index.html'),
+        card: resolve(__dirname, 'src/renderer/card/index.html'),
         settings: resolve(__dirname, 'src/renderer/settings/index.html')
       }
     }

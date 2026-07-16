@@ -1,13 +1,14 @@
 import { useId, useState, type JSX } from 'react';
 import {
   type NativeUiStatus,
+  type OcrActivation,
   type SettingsRendererApi,
   type ThemeMode,
   useDocumentTheme,
   useUiShellSnapshot
 } from '../shared/shell-api.js';
 
-const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.2.0-phase2';
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.3.0-phase3';
 
 const NATIVE_STATUS: Readonly<
   Record<NativeUiStatus, { readonly title: string; readonly description: string }>
@@ -22,7 +23,7 @@ const NATIVE_STATUS: Readonly<
   },
   ready: {
     title: '可用',
-    description: '原生服务运行正常；Phase 2 不会启动全局取词。'
+    description: '原生服务运行正常，可按取词设置启动监听。'
   },
   degraded: {
     title: '部分可用',
@@ -46,7 +47,19 @@ const THEME_OPTIONS: ReadonlyArray<{ readonly value: ThemeMode; readonly label: 
   { value: 'dark', label: '深色' }
 ];
 
-type PendingAction = 'ball-visible' | 'edge-snap' | 'theme' | 'reset' | null;
+const OCR_OPTIONS: ReadonlyArray<{ readonly value: OcrActivation; readonly label: string }> = [
+  { value: 'fallback', label: '自动回退' },
+  { value: 'alt-drag', label: '仅 Alt + 拖动' }
+];
+
+type PendingAction =
+  | 'ball-visible'
+  | 'edge-snap'
+  | 'theme'
+  | 'selection-enabled'
+  | 'ocr-activation'
+  | 'reset'
+  | null;
 
 export interface SettingsAppProps {
   readonly api: SettingsRendererApi;
@@ -123,7 +136,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
         </span>
         <span>
           <span className="app-name">桌面翻译</span>
-          <span className="app-stage">Phase 2 · 内部开发预览</span>
+          <span className="app-stage">Phase 3 · 内部开发预览</span>
         </span>
       </header>
 
@@ -170,6 +183,53 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
               {pendingAction === 'reset' ? '重置中…' : '重置位置'}
             </button>
           </div>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="selection-heading">
+        <h2 id="selection-heading">划词取词</h2>
+        <div className="settings-card">
+          <SettingRow
+            title="启用划词取词"
+            description="监听鼠标划选，优先读取应用提供的真实文字选区。"
+            checked={snapshot.selection.enabled}
+            disabled={controlsDisabled}
+            onChange={(enabled) => {
+              runAction('selection-enabled', () => api.setSelectionEnabled(enabled));
+            }}
+          />
+          <fieldset className="selection-mode-fieldset">
+            <legend className="setting-title">本地 OCR 使用方式</legend>
+            <p className="setting-description">
+              自动回退会在应用无法提供文字选区时识别本机屏幕像素；截图不会上传或保存。
+            </p>
+            <div className="theme-options">
+              {OCR_OPTIONS.map((option) => (
+                <label className="theme-option" key={option.value}>
+                  <input
+                    type="radio"
+                    name="ocr-activation"
+                    value={option.value}
+                    checked={snapshot.selection.ocrActivation === option.value}
+                    disabled={controlsDisabled}
+                    onChange={() => {
+                      runAction('ocr-activation', () => api.setOcrActivation(option.value));
+                    }}
+                  />
+                  <span>{option.label}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <output className="selection-lifecycle" aria-live="polite">
+            取词状态：{
+              snapshot.selection.lifecycle === 'disabled' ? '已暂停'
+                : snapshot.selection.lifecycle === 'starting' ? '正在启动'
+                  : snapshot.selection.lifecycle === 'listening' ? '监听中'
+                    : snapshot.selection.lifecycle === 'degraded' ? '监听中，部分能力不可用'
+                      : '取词故障'
+            }
+          </output>
         </div>
       </section>
 

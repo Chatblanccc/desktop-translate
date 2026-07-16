@@ -44,7 +44,21 @@ describe('role-isolated preload entrypoints', () => {
       'resetBallPosition',
       'setBallVisible',
       'setEdgeSnap',
+      'setOcrActivation',
+      'setSelectionEnabled',
       'setTheme'
+    ]);
+  });
+
+  it('exposes only the source card API under the Card namespace', async () => {
+    await import('./card.js');
+    expect(electron.exposeInMainWorld).toHaveBeenCalledOnce();
+    const [namespace, api] = electron.exposeInMainWorld.mock.calls[0] ?? [];
+    expect(namespace).toBe('desktopTranslateCard');
+    expect(Object.keys(api as object).sort()).toEqual([
+      'dismiss',
+      'getCurrent',
+      'onChanged'
     ]);
   });
 });

@@ -5,26 +5,32 @@ import {
   DEFAULT_UI_SHELL_SNAPSHOT,
   isBallAnchor,
   isNativeUiStatus,
+  isOcrActivation,
+  isSelectionLifecycle,
   isSetBallVisiblePayload,
   isSetEdgeSnapPayload,
   isSetThemePayload,
+  isSetOcrActivationPayload,
+  isSetSelectionEnabledPayload,
   isThemeMode,
   isUiShellSettingsWritePayload,
   isUiShellSnapshot,
 } from "../../packages/contracts/src/ui-shell.ts";
 
-test("Phase 2 default snapshot is strict, safe, and deeply immutable", () => {
+test("Phase 3 default snapshot is strict, safe, and deeply immutable", () => {
   assert.deepEqual(DEFAULT_UI_SHELL_SNAPSHOT, {
-    version: 1,
+    version: 2,
     ball: { visible: true, edgeSnap: true },
     theme: "system",
     native: { status: "unavailable", degradedCapabilities: [] },
+    selection: { enabled: true, lifecycle: "starting", ocrActivation: "fallback" },
   });
   assert.equal(isUiShellSnapshot(DEFAULT_UI_SHELL_SNAPSHOT), true);
   assert.equal(Object.isFrozen(DEFAULT_UI_SHELL_SNAPSHOT), true);
   assert.equal(Object.isFrozen(DEFAULT_UI_SHELL_SNAPSHOT.ball), true);
   assert.equal(Object.isFrozen(DEFAULT_UI_SHELL_SNAPSHOT.native), true);
   assert.equal(Object.isFrozen(DEFAULT_UI_SHELL_SNAPSHOT.native.degradedCapabilities), true);
+  assert.equal(Object.isFrozen(DEFAULT_UI_SHELL_SNAPSHOT.selection), true);
 });
 
 test("theme and native status guards accept only the locked vocabulary", () => {
@@ -32,6 +38,10 @@ test("theme and native status guards accept only the locked vocabulary", () => {
   for (const status of ["unavailable", "starting", "ready", "degraded", "faulted"]) {
     assert.equal(isNativeUiStatus(status), true);
   }
+  for (const lifecycle of ["disabled", "starting", "listening", "degraded", "faulted"]) {
+    assert.equal(isSelectionLifecycle(lifecycle), true);
+  }
+  for (const activation of ["fallback", "alt-drag"]) assert.equal(isOcrActivation(activation), true);
   for (const invalid of ["auto", "high-contrast", "", null, 1]) assert.equal(isThemeMode(invalid), false);
   for (const invalid of ["stopping", "offline", "", null, 1]) assert.equal(isNativeUiStatus(invalid), false);
 });
@@ -54,7 +64,7 @@ test("ball anchors support edge ratios and reject unsafe or extra fields", () =>
 
 test("snapshot guard rejects unknown fields, malformed anchors, and duplicate capabilities", () => {
   const valid = {
-    version: 1,
+    version: 2,
     ball: {
       visible: false,
       edgeSnap: true,
@@ -62,6 +72,7 @@ test("snapshot guard rejects unknown fields, malformed anchors, and duplicate ca
     },
     theme: "dark",
     native: { status: "degraded", degradedCapabilities: ["ocr"] },
+    selection: { enabled: true, lifecycle: "degraded", ocrActivation: "fallback" },
   };
   assert.equal(isUiShellSnapshot(valid), true);
   assert.equal(isUiShellSnapshot({ ...valid, applicationVersion: "0.2.0-phase2" }), false);
@@ -80,6 +91,8 @@ test("settings payload guards are exact and role-safe", () => {
   assert.equal(isSetBallVisiblePayload({ value: false }), true);
   assert.equal(isSetEdgeSnapPayload({ value: true }), true);
   assert.equal(isSetThemePayload({ value: "light" }), true);
+  assert.equal(isSetSelectionEnabledPayload({ value: false }), true);
+  assert.equal(isSetOcrActivationPayload({ value: "alt-drag" }), true);
   assert.equal(isSetBallVisiblePayload({ value: false, unexpected: true }), false);
   assert.equal(isSetEdgeSnapPayload({ value: "true" }), false);
   assert.equal(isSetThemePayload({ value: "sepia" }), false);
@@ -88,6 +101,8 @@ test("settings payload guards are exact and role-safe", () => {
     { kind: "setBallVisible", value: false },
     { kind: "setEdgeSnap", value: true },
     { kind: "setTheme", value: "system" },
+    { kind: "setSelectionEnabled", value: false },
+    { kind: "setOcrActivation", value: "fallback" },
     { kind: "resetBallPosition" },
   ]) assert.equal(isUiShellSettingsWritePayload(payload), true);
 

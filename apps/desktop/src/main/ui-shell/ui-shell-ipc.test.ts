@@ -21,6 +21,8 @@ function setup(role: 'ball' | 'settings' = 'settings') {
     setBallVisible: vi.fn().mockResolvedValue(undefined),
     setEdgeSnap: vi.fn().mockResolvedValue(undefined),
     setTheme: vi.fn().mockResolvedValue(undefined),
+    setSelectionEnabled: vi.fn().mockResolvedValue(undefined),
+    setOcrActivation: vi.fn().mockResolvedValue(undefined),
     resetBallPosition: vi.fn().mockResolvedValue(undefined)
   };
   const mainFrame = { url: `file:///desktop/${role}.html` };
@@ -47,10 +49,16 @@ describe('UI shell IPC', () => {
     await requireHandler(handlers, UI_SHELL_CHANNELS.setBallVisible)(event, { value: false });
     await requireHandler(handlers, UI_SHELL_CHANNELS.setEdgeSnap)(event, { value: false });
     await requireHandler(handlers, UI_SHELL_CHANNELS.setTheme)(event, { value: 'dark' });
+    await requireHandler(handlers, UI_SHELL_CHANNELS.setSelectionEnabled)(event, { value: false });
+    await requireHandler(handlers, UI_SHELL_CHANNELS.setOcrActivation)(event, {
+      value: 'alt-drag'
+    });
     await requireHandler(handlers, UI_SHELL_CHANNELS.resetBallPosition)(event);
     expect(actions.setBallVisible).toHaveBeenCalledWith(false);
     expect(actions.setEdgeSnap).toHaveBeenCalledWith(false);
     expect(actions.setTheme).toHaveBeenCalledWith('dark');
+    expect(actions.setSelectionEnabled).toHaveBeenCalledWith(false);
+    expect(actions.setOcrActivation).toHaveBeenCalledWith('alt-drag');
     expect(actions.resetBallPosition).toHaveBeenCalledOnce();
     await expect(
       requireHandler(handlers, UI_SHELL_CHANNELS.setTheme)(event, { value: 'remote-code' })
@@ -89,6 +97,12 @@ describe('UI shell IPC', () => {
     await expect(
       requireHandler(handlers, UI_SHELL_CHANNELS.setTheme)(event, { value: 'dark', extra: true })
     ).rejects.toThrow(/Invalid theme/u);
+    await expect(
+      requireHandler(handlers, UI_SHELL_CHANNELS.setSelectionEnabled)(event, { value: 'yes' })
+    ).rejects.toThrow(/Invalid selection/u);
+    await expect(
+      requireHandler(handlers, UI_SHELL_CHANNELS.setOcrActivation)(event, { value: 'always' })
+    ).rejects.toThrow(/Invalid OCR/u);
     await expect(
       requireHandler(handlers, UI_SHELL_CHANNELS.resetBallPosition)(event, {})
     ).rejects.toThrow(/does not accept/u);

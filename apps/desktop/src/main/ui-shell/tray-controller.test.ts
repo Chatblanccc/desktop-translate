@@ -56,6 +56,7 @@ function createActions(): TrayControllerActions {
   return {
     openSettings: vi.fn(),
     setBallVisible: vi.fn().mockResolvedValue(undefined),
+    setSelectionEnabled: vi.fn().mockResolvedValue(undefined),
     resetBallPosition: vi.fn().mockResolvedValue(undefined),
     quit: vi.fn()
   };
@@ -112,13 +113,15 @@ describe('TrayController', () => {
     expect(latestTemplate[0]?.enabled).toBe(false);
     expect(latestTemplate.map(({ label, type }) => label ?? type)).toEqual([
       '状态：原生服务连接故障',
+      '取词：正在启动',
+      '启用划词取词',
       '显示悬浮球',
       '打开设置',
       '重置位置',
       'separator',
       '退出'
     ]);
-    expect(latestTemplate[1]?.checked).toBe(false);
+    expect(latestTemplate[3]?.checked).toBe(false);
   });
 
   it('routes each actionable menu item without exposing Electron', async () => {
@@ -128,11 +131,13 @@ describe('TrayController', () => {
     const template = electron.menus.at(-1)?.template as Array<{
       click?: (item: { checked: boolean }) => void;
     }>;
-    template[1]?.click?.({ checked: false });
     template[2]?.click?.({ checked: false });
     template[3]?.click?.({ checked: false });
+    template[4]?.click?.({ checked: false });
     template[5]?.click?.({ checked: false });
+    template[7]?.click?.({ checked: false });
     await Promise.resolve();
+    expect(actions.setSelectionEnabled).toHaveBeenCalledWith(false);
     expect(actions.setBallVisible).toHaveBeenCalledWith(false);
     expect(actions.openSettings).toHaveBeenCalledOnce();
     expect(actions.resetBallPosition).toHaveBeenCalledOnce();
@@ -149,8 +154,8 @@ describe('TrayController', () => {
     const template = electron.menus.at(-1)?.template as Array<{
       click?: (item: { checked: boolean }) => void;
     }>;
-    template[1]?.click?.({ checked: false });
     template[3]?.click?.({ checked: false });
+    template[5]?.click?.({ checked: false });
     await Promise.resolve();
     await Promise.resolve();
     expect(warning).toHaveBeenCalledTimes(2);

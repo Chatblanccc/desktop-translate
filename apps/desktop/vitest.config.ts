@@ -17,6 +17,7 @@ export default defineConfig({
       exclude: [
         'src/main/index.ts',
         'src/main/phase1-smoke.ts',
+        'src/main/phase3-smoke.ts',
         'src/renderer/**/main.tsx',
         'src/renderer/global.d.ts'
       ],

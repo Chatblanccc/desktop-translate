@@ -4,6 +4,7 @@ import {
   type UiShellSnapshot
 } from '@desktop-translate/contracts/ui-shell';
 import type { HealthResponse } from '@desktop-translate/contracts/native-ipc';
+import type { SelectionResult } from '@desktop-translate/contracts/native-ipc';
 
 type EventHandler = (...args: unknown[]) => void;
 
@@ -12,7 +13,7 @@ const mocks = vi.hoisted(() => {
   const app = {
     getPath: vi.fn(() => 'C:\\profile'),
     getAppPath: vi.fn(() => 'C:\\repo\\apps\\desktop'),
-    getVersion: vi.fn(() => '0.2.0-phase2'),
+    getVersion: vi.fn(() => '0.3.0-phase3'),
     get isPackaged(): boolean { return appState.isPackaged; }
   };
 
@@ -28,6 +29,8 @@ const mocks = vi.hoisted(() => {
   const screen = {
     getPrimaryDisplay: vi.fn(() => primaryDisplay),
     getAllDisplays: vi.fn(() => [primaryDisplay, secondaryDisplay]),
+    screenToDipRect: vi.fn((_window: unknown, rect: object) => rect),
+    getDisplayNearestPoint: vi.fn(() => primaryDisplay),
     on: vi.fn((event: string, handler: EventHandler) => {
       const handlers = screenHandlers.get(event) ?? new Set<EventHandler>();
       handlers.add(handler);
@@ -67,10 +70,15 @@ const mocks = vi.hoisted(() => {
     loadResult: {
       ball: { visible: boolean; edgeSnap: boolean; anchor?: BallAnchor };
       theme: 'system' | 'light' | 'dark';
+      selection: { enabled: boolean; ocrActivation: 'fallback' | 'alt-drag' };
     };
     rejectAnchor: boolean;
   } = {
-    loadResult: { ball: { visible: true, edgeSnap: true }, theme: 'system' },
+    loadResult: {
+      ball: { visible: true, edgeSnap: true },
+      theme: 'system',
+      selection: { enabled: true, ocrActivation: 'fallback' }
+    },
     rejectAnchor: false
   };
   class FakeSettingsRepository {
@@ -79,6 +87,8 @@ const mocks = vi.hoisted(() => {
     public readonly setBallVisible = vi.fn(async (_value: boolean) => undefined);
     public readonly setEdgeSnap = vi.fn(async (_value: boolean) => undefined);
     public readonly setTheme = vi.fn(async (_value: string) => undefined);
+    public readonly setSelectionEnabled = vi.fn(async (_value: boolean) => undefined);
+    public readonly setOcrActivation = vi.fn(async (_value: string) => undefined);
     public readonly setBallAnchor = vi.fn(async (_value: BallAnchor) => {
       if (settingsState.rejectAnchor) throw new Error('anchor write failed');
     });
@@ -89,6 +99,13 @@ const mocks = vi.hoisted(() => {
       FakeSettingsRepository.instances.push(this);
     }
   }
+
+  class FakeExclusionsRepository {
+    public static readonly instances: FakeExclusionsRepository[] = [];
+    public readonly listEnabledProcessNames = vi.fn(async () => [...exclusionsState.result]);
+    public constructor() { FakeExclusionsRepository.instances.push(this); }
+  }
+  const exclusionsState = { result: [] as string[] };
 
   function makeBrowserWindow(bounds: { x: number; y: number; width: number; height: number }) {
     return {
@@ -126,10 +143,13 @@ const mocks = vi.hoisted(() => {
     public readonly dispose = vi.fn(() => {
       this.ball = undefined;
       this.settings = undefined;
+      this.card = undefined;
     });
     public readonly resolveRole = vi.fn(() => 'ball' as const);
     public ball: ReturnType<typeof makeBrowserWindow> | undefined;
     public settings: ReturnType<typeof makeBrowserWindow> | undefined;
+    public card: ReturnType<typeof makeBrowserWindow> | undefined;
+    public currentCard: unknown;
 
     public constructor(public readonly options: {
       readonly initialBallBounds: { x: number; y: number; width: number; height: number };
@@ -146,6 +166,16 @@ const mocks = vi.hoisted(() => {
     }
     public getBallWindow(): ReturnType<typeof makeBrowserWindow> | undefined { return this.ball; }
     public getSettingsWindow(): ReturnType<typeof makeBrowserWindow> | undefined { return this.settings; }
+    public getCardWindow(): ReturnType<typeof makeBrowserWindow> | undefined { return this.card; }
+    public getCurrentSelectionCard(): unknown { return this.currentCard; }
+    public presentSelectionCard = vi.fn((card: unknown, bounds: { x: number; y: number; width: number; height: number }) => {
+      this.currentCard = card;
+      this.card = makeBrowserWindow(bounds);
+    });
+    public dismissSelectionCard = vi.fn(() => {
+      this.currentCard = undefined;
+      if (this.card !== undefined) this.card.visible = false;
+    });
   }
 
   class FakeTrayController {
@@ -163,6 +193,8 @@ const mocks = vi.hoisted(() => {
 
   const ipcDispose = vi.fn();
   const registerUiShellIpc = vi.fn(() => ipcDispose);
+  const cardIpcDispose = vi.fn();
+  const registerSelectionCardIpc = vi.fn(() => cardIpcDispose);
 
   const existsSync = vi.fn(() => false);
   const readyHealth: HealthResponse = {
@@ -181,16 +213,37 @@ const mocks = vi.hoisted(() => {
   const nativeState: {
     rejectStart: boolean;
     rejectStop: boolean;
+    rejectRequestStart: boolean;
+    rejectRequestStop: boolean;
     health: HealthResponse;
-  } = { rejectStart: false, rejectStop: false, health: readyHealth };
+  } = {
+    rejectStart: false,
+    rejectStop: false,
+    rejectRequestStart: false,
+    rejectRequestStop: false,
+    health: readyHealth
+  };
 
   class FakeNativeHostSupervisor {
     public static readonly instances: FakeNativeHostSupervisor[] = [];
     private readonly handlers = new Map<string, EventHandler[]>();
-    public readonly request = vi.fn(async (_type: string, _payload: object) => nativeState.health);
+    public readonly request = vi.fn(async (type: string, _payload: object) => {
+      if (type === 'health') return nativeState.health;
+      if (type === 'start') {
+        if (nativeState.rejectRequestStart) throw new Error('start request failed');
+        return { v: 1, kind: 'response', id: 'start', method: 'start', timestamp: '2026-07-16T00:00:00.000Z', payload: { ok: true, listening: true } };
+      }
+      if (nativeState.rejectRequestStop) throw new Error('stop request failed');
+      return { v: 1, kind: 'response', id: 'stop', method: 'stop', timestamp: '2026-07-16T00:00:00.000Z', payload: { ok: true, listening: false } };
+    });
     public readonly start = vi.fn(async () => {
       if (nativeState.rejectStart) throw new Error('native start failed');
-      return { request: this.request };
+      const client = { request: this.request };
+      queueMicrotask(() => {
+        this.emit('ready', {});
+        this.emit('clientReady', client, {});
+      });
+      return client;
     });
     public readonly stop = vi.fn(async () => {
       if (nativeState.rejectStop) throw new Error('native stop failed');
@@ -225,10 +278,14 @@ const mocks = vi.hoisted(() => {
     settingsState,
     startupState,
     FakeSettingsRepository,
+    FakeExclusionsRepository,
+    exclusionsState,
     FakeWindowManager,
     FakeTrayController,
     ipcDispose,
     registerUiShellIpc,
+    cardIpcDispose,
+    registerSelectionCardIpc,
     existsSync,
     readyHealth,
     nativeState,
@@ -246,7 +303,8 @@ vi.mock('electron', () => ({
   session: mocks.session
 }));
 vi.mock('@desktop-translate/storage', () => ({
-  SqlitePhase2SettingsRepository: mocks.FakeSettingsRepository,
+  SqlitePhase3SettingsRepository: mocks.FakeSettingsRepository,
+  SqliteAppExclusionsRepository: mocks.FakeExclusionsRepository,
   runStorageMigrations: mocks.runStorageMigrations
 }));
 vi.mock('../native-host/native-host-supervisor.js', () => ({
@@ -255,6 +313,9 @@ vi.mock('../native-host/native-host-supervisor.js', () => ({
 vi.mock('./window-manager.js', () => ({ WindowManager: mocks.FakeWindowManager }));
 vi.mock('./tray-controller.js', () => ({ TrayController: mocks.FakeTrayController }));
 vi.mock('./ui-shell-ipc.js', () => ({ registerUiShellIpc: mocks.registerUiShellIpc }));
+vi.mock('./selection-card-ipc.js', () => ({
+  registerSelectionCardIpc: mocks.registerSelectionCardIpc
+}));
 
 import { ShellController } from './shell-controller.js';
 
@@ -297,20 +358,49 @@ function latestSupervisor(): InstanceType<typeof mocks.FakeNativeHostSupervisor>
   return supervisor;
 }
 
+function selectionResult(overrides: Partial<SelectionResult> = {}): SelectionResult {
+  return {
+    selectionId: '123e4567-e89b-42d3-a456-426614174000',
+    source: 'uia',
+    text: 'Phase Three source text',
+    ranges: [{ start: 0, end: 23 }],
+    confidence: 1,
+    physicalRects: [{ x: 700, y: 300, width: 200, height: 30 }],
+    releasePoint: { x: 900, y: 330 },
+    monitor: {
+      id: 'primary',
+      handle: '1',
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      workArea: { x: 0, y: 0, width: 1920, height: 1032 },
+      dpiX: 96,
+      dpiY: 96,
+      scaleFactor: 1
+    },
+    target: { pid: '100', hwnd: '200', processName: 'notepad.exe' },
+    coordinateSpace: 'physical-px',
+    timestamp: '2026-07-16T00:00:00.000Z',
+    ...overrides
+  };
+}
+
 describe('ShellController', () => {
   beforeEach(() => {
     for (const key of ENVIRONMENT_KEYS) delete process.env[key];
     mocks.appState.isPackaged = false;
     mocks.settingsState.loadResult = {
       ball: { visible: true, edgeSnap: true },
-      theme: 'system'
+      theme: 'system',
+      selection: { enabled: true, ocrActivation: 'fallback' }
     };
     mocks.settingsState.rejectAnchor = false;
     mocks.startupState.windowStart = Promise.resolve();
     mocks.startupState.recreateWindowAfterStart = false;
     mocks.nativeState.rejectStart = false;
     mocks.nativeState.rejectStop = false;
+    mocks.nativeState.rejectRequestStart = false;
+    mocks.nativeState.rejectRequestStop = false;
     mocks.nativeState.health = mocks.readyHealth;
+    mocks.exclusionsState.result = [];
     mocks.existsSync.mockReset().mockReturnValue(false);
     mocks.app.getPath.mockClear();
     mocks.app.getAppPath.mockClear();
@@ -319,6 +409,10 @@ describe('ShellController', () => {
     mocks.screen.getPrimaryDisplay.mockReturnValue(mocks.primaryDisplay);
     mocks.screen.getAllDisplays.mockClear();
     mocks.screen.getAllDisplays.mockReturnValue([mocks.primaryDisplay, mocks.secondaryDisplay]);
+    mocks.screen.screenToDipRect.mockClear();
+    mocks.screen.screenToDipRect.mockImplementation((_window: unknown, rect: object) => rect);
+    mocks.screen.getDisplayNearestPoint.mockClear();
+    mocks.screen.getDisplayNearestPoint.mockReturnValue(mocks.primaryDisplay);
     mocks.screen.on.mockClear();
     mocks.screen.removeListener.mockClear();
     mocks.screenHandlers.clear();
@@ -327,6 +421,7 @@ describe('ShellController', () => {
     mocks.sessionOn.mockClear();
     mocks.FakeDatabaseSync.instances.length = 0;
     mocks.FakeSettingsRepository.instances.length = 0;
+    mocks.FakeExclusionsRepository.instances.length = 0;
     mocks.FakeWindowManager.instances.length = 0;
     mocks.FakeTrayController.instances.length = 0;
     mocks.FakeNativeHostSupervisor.instances.length = 0;
@@ -364,6 +459,7 @@ describe('ShellController', () => {
     expect(latestWindows().start).toHaveBeenCalledOnce();
     expect(mocks.screen.on).toHaveBeenCalledTimes(3);
     expect(controller.getDebugState().snapshot.native.status).toBe('unavailable');
+    expect(controller.getDebugState().snapshot.selection.lifecycle).toBe('faulted');
     expect(mocks.FakeNativeHostSupervisor.instances).toHaveLength(0);
 
     const check = mocks.permissionCheck.mock.calls[0]?.[0] as () => boolean;
@@ -386,7 +482,8 @@ describe('ShellController', () => {
     const anchor: BallAnchor = { displayId: '2', edge: 'left', verticalRatio: 0.4 };
     mocks.settingsState.loadResult = {
       ball: { visible: false, edgeSnap: false, anchor },
-      theme: 'dark'
+      theme: 'dark',
+      selection: { enabled: true, ocrActivation: 'fallback' }
     };
     const controller = new ShellController({ requestQuit: vi.fn() });
     await controller.start();
@@ -425,7 +522,7 @@ describe('ShellController', () => {
     };
     expect(registration.ipcMain).toBe(mocks.ipcMain);
     expect(registration.resolveRole({})).toBe('ball');
-    expect(registration.actions.getSnapshot?.()).toMatchObject({ version: 1 });
+    expect(registration.actions.getSnapshot?.()).toMatchObject({ version: 2 });
     registration.actions.openSettings?.();
     registration.actions.openContextMenu?.();
     expect(latestWindows().openSettings).toHaveBeenCalledOnce();
@@ -555,7 +652,7 @@ describe('ShellController', () => {
     const supervisor = latestSupervisor();
     expect(supervisor.options).toMatchObject({
       executablePath: 'C:\\native\\selection-host.exe',
-      desktopVersion: '0.2.0-phase2'
+      desktopVersion: '0.3.0-phase3'
     });
     expect(supervisor.request).toHaveBeenCalledWith('health', {});
     expect(controller.getDebugState().snapshot.native.status).toBe('ready');
@@ -587,8 +684,9 @@ describe('ShellController', () => {
       ...mocks.readyHealth,
       payload: { status: 'ready', listening: true, uptimeMs: 20, degradedCapabilities: [] }
     });
-    expect(controller.getDebugState().snapshot.native.status).toBe('faulted');
-    expect(supervisor.stop).toHaveBeenCalled();
+    expect(controller.getDebugState().snapshot.native.status).toBe('ready');
+    expect(controller.getDebugState().snapshot.selection.lifecycle).toBe('listening');
+    expect(supervisor.stop).not.toHaveBeenCalled();
   });
 
   it('faults safely when Native startup fails', async () => {
@@ -601,29 +699,169 @@ describe('ShellController', () => {
     expect(controller.getDebugState().snapshot.native.status).toBe('faulted');
   });
 
-  it('contains and redacts a stop failure when health unexpectedly reports listening', async () => {
+  it('accepts listening health as the expected Phase 3 state', async () => {
     process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
     mocks.existsSync.mockReturnValue(true);
     const controller = new ShellController({ requestQuit: vi.fn() });
     await controller.start();
     await flushAsyncWork();
     const supervisor = latestSupervisor();
-    mocks.nativeState.rejectStop = true;
-    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-
     supervisor.emit('health', {
       ...mocks.readyHealth,
       payload: { status: 'ready', listening: true, uptimeMs: 20, degradedCapabilities: [] }
     });
     await flushAsyncWork();
 
-    expect(controller.getDebugState().snapshot.native.status).toBe('faulted');
-    expect(supervisor.stop).toHaveBeenCalledOnce();
-    expect(warning).toHaveBeenCalledWith(
-      '[phase2:native] Failed to stop Native Host after an invalid health state.'
-    );
-    expect(warning).not.toHaveBeenCalledWith(expect.stringContaining('native stop failed'));
-    warning.mockRestore();
+    expect(controller.getDebugState().snapshot.native.status).toBe('ready');
+    expect(controller.getDebugState().snapshot.selection.lifecycle).toBe('listening');
+    expect(supervisor.stop).not.toHaveBeenCalled();
+  });
+
+  it('persists selection controls and restarts the Host with current exclusions', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    mocks.exclusionsState.result = ['blocked.exe', 'BLOCKED.exe'];
+    mocks.nativeState.health = {
+      ...mocks.readyHealth,
+      payload: { ...mocks.readyHealth.payload, listening: true }
+    };
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    await flushAsyncWork();
+    const supervisor = latestSupervisor();
+
+    const initialStart = supervisor.request.mock.calls.find(([method]) => method === 'start');
+    if (initialStart === undefined) throw new Error('Expected an initial start request');
+    const initialConfig = initialStart[1] as { excludedProcessNames: string[] };
+    expect(initialConfig).toMatchObject({
+      enableUia: true,
+      enableOcrFallback: true,
+      ocrActivation: 'fallback',
+      excludedProcessNames: expect.arrayContaining(['BLOCKED.exe'])
+    });
+    expect(new Set(initialConfig.excludedProcessNames).size).toBe(2);
+
+    await controller.setSelectionEnabled(false);
+    expect(latestSettings().setSelectionEnabled).toHaveBeenCalledWith(false);
+    expect(supervisor.request).toHaveBeenCalledWith('stop', { reason: 'selection-disabled' });
+    expect(controller.getDebugState().snapshot.selection.lifecycle).toBe('disabled');
+    expect(latestWindows().dismissSelectionCard).toHaveBeenCalled();
+
+    await controller.setSelectionEnabled(true);
+    expect(controller.getDebugState().snapshot.selection.lifecycle).toBe('listening');
+    await controller.setOcrActivation('alt-drag');
+    expect(latestSettings().setOcrActivation).toHaveBeenCalledWith('alt-drag');
+    expect(supervisor.request).toHaveBeenCalledWith('stop', {
+      reason: 'selection-config-changed'
+    });
+    const latestStart = supervisor.request.mock.calls.filter(([method]) => method === 'start').at(-1);
+    expect(latestStart?.[1]).toMatchObject({ ocrActivation: 'alt-drag' });
+    expect(controller.getDebugState().snapshot.selection.ocrActivation).toBe('alt-drag');
+  });
+
+  it('keeps disabled persisted selection stopped when the Host becomes ready', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    mocks.settingsState.loadResult.selection.enabled = false;
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    await flushAsyncWork();
+    expect(latestSupervisor().request).not.toHaveBeenCalledWith('start', expect.anything());
+    expect(controller.getDebugState().snapshot.selection.lifecycle).toBe('disabled');
+
+    await controller.setOcrActivation('alt-drag');
+    expect(latestSettings().setOcrActivation).toHaveBeenCalledWith('alt-drag');
+    expect(latestSupervisor().request).not.toHaveBeenCalledWith('start', expect.anything());
+  });
+
+  it('converts Native selection rectangles to DIP and presents a source-only card', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    mocks.screen.screenToDipRect.mockImplementation((_window: unknown, value: object) => {
+      const rect = value as { x: number; y: number; width: number; height: number };
+      return {
+        ...rect,
+        x: rect.x / 2,
+        y: rect.y / 2,
+        width: rect.width / 2,
+        height: rect.height / 2
+      };
+    });
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    await flushAsyncWork();
+    const supervisor = latestSupervisor();
+    supervisor.emit('selection', selectionResult({ source: 'ocr', confidence: 0.75 }));
+
+    expect(mocks.screen.screenToDipRect).toHaveBeenCalledOnce();
+    expect(latestWindows().presentSelectionCard).toHaveBeenCalledWith({
+      selectionId: '123e4567-e89b-42d3-a456-426614174000',
+      text: 'Phase Three source text',
+      source: 'ocr',
+      confidence: 0.75
+    }, { x: 210, y: 175, width: 380, height: 220 });
+    expect(controller.getDebugState()).toMatchObject({ cardCreated: true, cardVisible: true });
+
+    latestWindows().presentSelectionCard.mockClear();
+    supervisor.emit('selection', selectionResult({
+      selectionId: '123e4567-e89b-42d3-a456-426614174001',
+      physicalRects: [],
+      releasePoint: { x: 100, y: 200 }
+    }));
+    expect(latestWindows().presentSelectionCard).toHaveBeenCalledOnce();
+
+    await controller.setSelectionEnabled(false);
+    latestWindows().presentSelectionCard.mockClear();
+    supervisor.emit('selection', selectionResult());
+    expect(latestWindows().presentSelectionCard).not.toHaveBeenCalled();
+  });
+
+  it('contains Host errors, disconnects, and display-driven listener restarts', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    await flushAsyncWork();
+    const supervisor = latestSupervisor();
+
+    supervisor.emit('hostError', {
+      code: 'uia_no_selection', scope: 'uia', recoverable: true,
+      message: 'safe', selectionId: '123e4567-e89b-42d3-a456-426614174000'
+    });
+    expect(controller.getDebugState().snapshot.selection.lifecycle).not.toBe('faulted');
+    supervisor.emit('hostError', {
+      code: 'pipe_error', scope: 'host', recoverable: false, message: 'safe'
+    });
+    expect(controller.getDebugState().snapshot.selection.lifecycle).toBe('faulted');
+    expect(latestWindows().dismissSelectionCard).toHaveBeenCalled();
+
+    supervisor.request.mockClear();
+    mocks.screen.emit('display-metrics-changed');
+    await flushAsyncWork();
+    expect(supervisor.request).toHaveBeenCalledWith('stop', {
+      reason: 'selection-config-changed'
+    });
+    expect(supervisor.request).toHaveBeenCalledWith('start', expect.anything(), 3_000);
+
+    supervisor.emit('unhealthy');
+    expect(controller.getDebugState().snapshot.selection.lifecycle).toBe('starting');
+    supervisor.emit('restarting');
+    expect(controller.getDebugState().snapshot.selection.lifecycle).toBe('starting');
+  });
+
+  it('faults a rejected background start command without an unhandled rejection', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    mocks.nativeState.rejectRequestStart = true;
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    await flushAsyncWork();
+    expect(controller.getDebugState().snapshot.selection.lifecycle).toBe('faulted');
+
+    mocks.nativeState.rejectRequestStart = false;
+    await controller.setSelectionEnabled(false);
+    mocks.nativeState.rejectRequestStart = true;
+    await expect(controller.setSelectionEnabled(true)).rejects.toThrow(/start request/u);
   });
 
   it('builds E2E and packaged Native launch options without accepting arbitrary packaged paths', async () => {

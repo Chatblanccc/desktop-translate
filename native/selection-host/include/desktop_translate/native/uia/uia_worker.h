@@ -6,11 +6,17 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <string_view>
 #include <thread>
 
 #include "desktop_translate/native/core/types.h"
 
 namespace desktop_translate::native {
+
+// Chromium may expose masked password glyphs from a text descendant whose
+// IsPassword flag is false. Treat a selection made only of common masking
+// glyphs as a password representation and fail closed.
+[[nodiscard]] bool IsMaskedPasswordRepresentation(std::wstring_view text) noexcept;
 
 class UiaWorker {
  public:

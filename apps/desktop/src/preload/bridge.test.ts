@@ -36,11 +36,15 @@ describe('renderer bridges', () => {
     await api.setBallVisible(false);
     await api.setEdgeSnap(false);
     await api.setTheme('dark');
+    await api.setSelectionEnabled(false);
+    await api.setOcrActivation('alt-drag');
     await api.resetBallPosition();
     expect(invoke.mock.calls).toEqual([
       [UI_SHELL_CHANNELS.setBallVisible, { value: false }],
       [UI_SHELL_CHANNELS.setEdgeSnap, { value: false }],
       [UI_SHELL_CHANNELS.setTheme, { value: 'dark' }],
+      [UI_SHELL_CHANNELS.setSelectionEnabled, { value: false }],
+      [UI_SHELL_CHANNELS.setOcrActivation, { value: 'alt-drag' }],
       [UI_SHELL_CHANNELS.resetBallPosition]
     ]);
   });

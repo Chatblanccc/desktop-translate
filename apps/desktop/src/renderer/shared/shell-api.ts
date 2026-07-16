@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   DEFAULT_UI_SHELL_SNAPSHOT,
+  type OcrActivation,
   type ThemeMode,
   type UiShellSnapshot
 } from '@desktop-translate/contracts/ui-shell';
@@ -9,6 +10,8 @@ export {
   DEFAULT_UI_SHELL_SNAPSHOT,
   type BallAnchor,
   type NativeUiStatus,
+  type OcrActivation,
+  type SelectionLifecycle,
   type ThemeMode,
   type UiShellSnapshot
 } from '@desktop-translate/contracts/ui-shell';
@@ -29,6 +32,8 @@ export interface SettingsRendererApi extends UiShellReaderApi {
   setBallVisible(visible: boolean): Promise<void>;
   setEdgeSnap(enabled: boolean): Promise<void>;
   setTheme(theme: ThemeMode): Promise<void>;
+  setSelectionEnabled(enabled: boolean): Promise<void>;
+  setOcrActivation(activation: OcrActivation): Promise<void>;
   resetBallPosition(): Promise<void>;
 }
 

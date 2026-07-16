@@ -56,7 +56,8 @@ describe('BallApp', () => {
       native: {
         status: 'degraded',
         degradedCapabilities: ['ocr']
-      }
+      },
+      selection: { ...DEFAULT_UI_SHELL_SNAPSHOT.selection, lifecycle: 'degraded' }
     };
     const { api } = createBallApi(degradedSnapshot);
     render(<BallApp api={api} />);

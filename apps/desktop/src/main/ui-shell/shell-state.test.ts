@@ -6,7 +6,11 @@ describe('UiShellState', () => {
     const state = new UiShellState();
     const changed = vi.fn();
     state.on('changed', changed);
-    state.initialize({ ball: { visible: false, edgeSnap: true }, theme: 'dark' });
+    state.initialize({
+      ball: { visible: false, edgeSnap: true },
+      theme: 'dark',
+      selection: { enabled: true, ocrActivation: 'fallback' }
+    });
     const snapshot = state.getSnapshot();
     expect(snapshot.ball.visible).toBe(false);
     expect(snapshot.theme).toBe('dark');
@@ -25,5 +29,27 @@ describe('UiShellState', () => {
       edgeSnap: false,
       anchor: { displayId: '1', edge: 'right', verticalRatio: 0.5 }
     });
+  });
+
+  it('tracks Phase 3 Native and selection lifecycle transitions', () => {
+    const state = new UiShellState();
+    state.initialize({
+      ball: { visible: true, edgeSnap: true },
+      theme: 'system',
+      selection: { enabled: false, ocrActivation: 'fallback' }
+    });
+    expect(state.getSnapshot().selection.lifecycle).toBe('disabled');
+    state.setSelectionEnabled(true);
+    state.setSelectionLifecycle('listening');
+    state.setOcrActivation('alt-drag');
+    state.setNativeStatus('degraded', ['ocr']);
+    expect(state.getSnapshot()).toMatchObject({
+      native: { status: 'degraded', degradedCapabilities: ['ocr'] },
+      selection: { enabled: true, lifecycle: 'listening', ocrActivation: 'alt-drag' }
+    });
+    state.setBallAnchor(undefined);
+    expect(state.getSnapshot().ball.anchor).toBeUndefined();
+    state.setSelectionEnabled(false);
+    expect(state.getSnapshot().selection.lifecycle).toBe('disabled');
   });
 });

@@ -1,6 +1,6 @@
 {
   "name": "@desktop-translate/translation",
-  "version": "0.2.0-phase2",
+  "version": "0.3.0-phase3",
   "private": true,
   "type": "module",
   "scripts": {

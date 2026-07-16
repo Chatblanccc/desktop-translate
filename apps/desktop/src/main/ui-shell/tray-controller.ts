@@ -8,7 +8,11 @@ import {
   type MenuItemConstructorOptions,
   type NativeImage
 } from 'electron';
-import type { NativeUiStatus, UiShellSnapshot } from '@desktop-translate/contracts/ui-shell';
+import type {
+  NativeUiStatus,
+  SelectionLifecycle,
+  UiShellSnapshot
+} from '@desktop-translate/contracts/ui-shell';
 
 const STATUS_LABELS: Readonly<Record<NativeUiStatus, string>> = {
   unavailable: '状态：原生服务未连接',
@@ -16,6 +20,14 @@ const STATUS_LABELS: Readonly<Record<NativeUiStatus, string>> = {
   ready: '状态：原生服务可用',
   degraded: '状态：部分原生能力不可用',
   faulted: '状态：原生服务连接故障'
+};
+
+const SELECTION_STATUS_LABELS: Readonly<Record<SelectionLifecycle, string>> = {
+  disabled: '取词：已暂停',
+  starting: '取词：正在启动',
+  listening: '取词：监听中',
+  degraded: '取词：监听中，部分能力不可用',
+  faulted: '取词：故障'
 };
 
 const TRAY_ICON_SVG = `
@@ -27,6 +39,7 @@ const TRAY_ICON_SVG = `
 export interface TrayControllerActions {
   readonly openSettings: () => void;
   readonly setBallVisible: (visible: boolean) => Promise<void>;
+  readonly setSelectionEnabled: (enabled: boolean) => Promise<void>;
   readonly resetBallPosition: () => Promise<void>;
   readonly quit: () => void;
 }
@@ -43,7 +56,7 @@ export class TrayController {
     this.snapshot = snapshot;
     const tray = new Tray(await createTrayIcon());
     this.tray = tray;
-    tray.setToolTip('桌面翻译 · Phase 2');
+    tray.setToolTip('桌面翻译 · Phase 3');
     tray.on('click', this.actions.openSettings);
     this.rebuild(snapshot);
   }
@@ -71,6 +84,13 @@ export class TrayController {
   private rebuild(snapshot: UiShellSnapshot): void {
     const template: MenuItemConstructorOptions[] = [
       { label: STATUS_LABELS[snapshot.native.status], enabled: false },
+      { label: SELECTION_STATUS_LABELS[snapshot.selection.lifecycle], enabled: false },
+      {
+        label: '启用划词取词',
+        type: 'checkbox',
+        checked: snapshot.selection.enabled,
+        click: (item) => this.runAction(() => this.actions.setSelectionEnabled(item.checked))
+      },
       {
         label: '显示悬浮球',
         type: 'checkbox',

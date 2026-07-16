@@ -18,13 +18,24 @@ enum class ErrorCode {
   kPipeError,
   kParentExited,
   kHookInstallFailed,
+  kHookQueueOverflow,
+  kSelectionCancelled,
+  kTargetElevated,
+  kSecureDesktop,
+  kProtectedContent,
   kUiaUnavailable,
   kUiaPasswordField,
   kUiaNoSelection,
   kUiaTimeout,
   kCaptureUnavailable,
   kCaptureTimeout,
+  kCaptureAccessLost,
+  kCaptureProtected,
+  kCrossMonitorUnsupported,
   kOcrUnavailable,
+  kOcrTimeout,
+  kOcrNoText,
+  kOcrLowConfidence,
   kInternalError,
 };
 
@@ -43,13 +54,24 @@ enum class ErrorCode {
     case ErrorCode::kPipeError: return "pipe_error";
     case ErrorCode::kParentExited: return "parent_exited";
     case ErrorCode::kHookInstallFailed: return "hook_install_failed";
+    case ErrorCode::kHookQueueOverflow: return "hook_queue_overflow";
+    case ErrorCode::kSelectionCancelled: return "selection_cancelled";
+    case ErrorCode::kTargetElevated: return "target_elevated";
+    case ErrorCode::kSecureDesktop: return "secure_desktop";
+    case ErrorCode::kProtectedContent: return "protected_content";
     case ErrorCode::kUiaUnavailable: return "uia_unavailable";
     case ErrorCode::kUiaPasswordField: return "uia_password_field";
     case ErrorCode::kUiaNoSelection: return "uia_no_selection";
     case ErrorCode::kUiaTimeout: return "uia_timeout";
     case ErrorCode::kCaptureUnavailable: return "capture_unavailable";
     case ErrorCode::kCaptureTimeout: return "capture_timeout";
+    case ErrorCode::kCaptureAccessLost: return "capture_access_lost";
+    case ErrorCode::kCaptureProtected: return "capture_protected";
+    case ErrorCode::kCrossMonitorUnsupported: return "cross_monitor_unsupported";
     case ErrorCode::kOcrUnavailable: return "ocr_unavailable";
+    case ErrorCode::kOcrTimeout: return "ocr_timeout";
+    case ErrorCode::kOcrNoText: return "ocr_no_text";
+    case ErrorCode::kOcrLowConfidence: return "ocr_low_confidence";
     case ErrorCode::kInternalError: return "internal_error";
   }
   return "internal_error";

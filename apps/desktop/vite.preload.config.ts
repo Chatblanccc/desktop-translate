@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 
 export default defineConfig(({ mode }) => {
-  const role = mode === 'settings' ? 'settings' : 'ball';
+  const role = mode === 'settings' ? 'settings' : mode === 'card' ? 'card' : 'ball';
 
   return {
     build: {

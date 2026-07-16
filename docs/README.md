@@ -1,10 +1,10 @@
 # Desktop Translate 文档索引
 
-状态：Phase 2（桌面壳层开发基线，尚未验收）
+状态：Phase 3（本地划词取词闭环已完成，`PASS WITH ACCEPTED RISKS`）
 目标平台：Windows 10/11 x64
 最后更新：2026-07-16
 
-本目录是 V1 的架构与阶段验收基线。Phase 1 已确认协议、进程隔离和 Windows Native 可行性；Phase 2 的文档冻结悬浮球、系统托盘、设置窗口、安全 IPC 和持久化边界，但清单保持未验收，不能据此声称实现已通过。
+本目录是 V1 的架构与阶段验收基线。Phase 1 已确认协议、进程隔离和 Windows Native 可行性；Phase 2 已完成桌面壳层并以 `PASS WITH ACCEPTED RISKS` 验收；Phase 3 已完成 Native 划词、UIA/OCR 回退和 source-only 结果卡闭环，并以 `PASS WITH ACCEPTED RISKS` 完成本地验收。未执行的应用、硬件与远端 CI 矩阵保留在风险登记中，不能描述为已经执行。
 
 ## 文档
 
@@ -21,9 +21,15 @@
 - [Phase 2 产品规格](phase2/product-spec.md)
 - [Phase 2 风险登记](phase2/risk-register.md)
 - [Phase 2 验收清单](phase2/acceptance-checklist.md)
+- [Phase 2 验证报告](phase2/validation-report.md)
+- [Phase 3 产品规格](phase3/product-spec.md)
+- [Phase 3 风险登记](phase3/risk-register.md)
+- [Phase 3 验收清单](phase3/acceptance-checklist.md)
+- [Phase 3 验证报告](phase3/validation-report.md)
+- [Phase 3 OCR 运行时与供应链记录](phase3/ocr-runtime.md)
 
 ## 约定
 
 文档中的“必须”“禁止”是验收要求；“应”是默认实现要求，如偏离必须新增 ADR；“可以”表示可选实现。
 
-Phase 2 只交付桌面壳层。真实划词、全局 Hook 启动、翻译卡片、翻译服务、OCR runtime/model、正式历史/收藏 UI、安装签名与自动更新仍不在本阶段。Phase 2 结论以未跳过关键项的自动门禁、Windows 实机证据和验收签字为准。
+Phase 3 只交付本地取词与原文结果卡。在线翻译 Provider、历史/收藏、凭据、安装签名与自动更新仍不在本阶段。Phase 3 结论以未跳过关键项的自动门禁、真实 UIA/OCR、兼容矩阵、多屏/DPI 实机证据和验收签字为准。

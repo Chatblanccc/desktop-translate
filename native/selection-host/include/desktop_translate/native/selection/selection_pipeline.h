@@ -51,6 +51,9 @@ class SelectionPipeline {
   [[nodiscard]] bool Start();
   void Stop() noexcept;
   [[nodiscard]] bool SetConfig(SelectionPipelineConfig config) noexcept;
+  [[nodiscard]] bool running() const noexcept {
+    return running_.load(std::memory_order_acquire);
+  }
 
  private:
   void ThreadMain() noexcept;

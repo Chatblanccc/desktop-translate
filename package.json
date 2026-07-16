@@ -1,6 +1,6 @@
 {
   "name": "desktop-translate",
-  "version": "0.2.0-phase2",
+  "version": "0.3.0-phase3",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.32.1",
@@ -27,6 +27,9 @@
     "phase2:smoke": "pnpm --filter @desktop-translate/desktop phase2:smoke",
     "phase2:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/phase2-verify.ps1",
     "start:phase2": "pnpm --filter @desktop-translate/desktop start:phase2",
+    "phase3:smoke": "pnpm --filter @desktop-translate/desktop phase3:smoke",
+    "phase3:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/phase3-verify.ps1",
+    "start:phase3": "pnpm --filter @desktop-translate/desktop start:phase3",
     "native:configure": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/native-phase1.ps1 -Action Configure",
     "native:build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/native-phase1.ps1 -Action Build",
     "native:test": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/native-phase1.ps1 -Action Test"

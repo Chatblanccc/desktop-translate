@@ -1,17 +1,17 @@
 import type { JSX, MouseEvent } from 'react';
 import {
   type BallRendererApi,
-  type NativeUiStatus,
+  type SelectionLifecycle,
   useDocumentTheme,
   useUiShellSnapshot
 } from '../shared/shell-api.js';
 
-const STATUS_LABELS: Readonly<Record<NativeUiStatus, string>> = {
-  unavailable: '原生服务未连接',
-  starting: '原生服务正在连接',
-  ready: '原生服务可用',
-  degraded: '部分能力暂不可用',
-  faulted: '原生服务连接故障'
+const STATUS_LABELS: Readonly<Record<SelectionLifecycle, string>> = {
+  disabled: '划词取词已暂停',
+  starting: '划词取词正在启动',
+  listening: '划词取词监听中',
+  degraded: '划词取词监听中，部分能力暂不可用',
+  faulted: '划词取词故障'
 };
 
 export interface BallAppProps {
@@ -20,8 +20,8 @@ export interface BallAppProps {
 
 export function BallApp({ api }: BallAppProps): JSX.Element {
   const { snapshot } = useUiShellSnapshot(api);
-  const nativeStatus = snapshot.native.status;
-  const statusLabel = STATUS_LABELS[nativeStatus];
+  const selectionStatus = snapshot.selection.lifecycle;
+  const statusLabel = STATUS_LABELS[selectionStatus];
 
   useDocumentTheme(snapshot.theme);
 
@@ -35,7 +35,7 @@ export function BallApp({ api }: BallAppProps): JSX.Element {
   };
 
   return (
-    <div className="ball-frame" data-native-status={nativeStatus}>
+    <div className="ball-frame" data-selection-status={selectionStatus}>
       <button
         className="ball-button"
         type="button"

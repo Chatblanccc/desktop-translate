@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { NativeHostClient } from './native-host-client.js';
+import type { HostErrorEvent, SelectionResultEvent } from '@desktop-translate/contracts/native-ipc';
 
 export interface NativeHostSupervisorOptions {
   executablePath: string;
@@ -127,7 +128,7 @@ export class NativeHostSupervisor extends EventEmitter {
         throw new Error('Native host was spawned without a process identifier');
       }
       const ready = await client.request('hello', {
-        desktopVersion: this.options.desktopVersion ?? '0.2.0-phase2',
+        desktopVersion: this.options.desktopVersion ?? '0.3.0-phase3',
         supportedVersions: [1],
         sessionNonce: nonce,
         requestedCapabilities: [
@@ -147,12 +148,19 @@ export class NativeHostSupervisor extends EventEmitter {
         throw new Error('Native host exited before its ready handshake completed');
       }
       this.readyChildren.add(child);
+      client.on('selection/result', (event: SelectionResultEvent) => {
+        if (this.client === client && this.child === child) this.emit('selection', event.payload);
+      });
+      client.on('host/error', (event: HostErrorEvent) => {
+        if (this.client === client && this.child === child) this.emit('hostError', event.payload);
+      });
       client.once('disconnect', (error: Error) => this.handleDisconnect(child, client, error));
       this.scheduleHealthCheck(child, client);
       this.stableRunTimer = setTimeout(() => {
         if (this.child === child && !this.stopping) this.restartCount = 0;
       }, this.options.stableRunMs ?? 30_000).unref();
       this.emit('ready', ready);
+      this.emit('clientReady', client, ready);
       return client;
     } catch (error) {
       this.expectedExits.add(child);

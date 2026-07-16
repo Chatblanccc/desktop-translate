@@ -16,12 +16,16 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
   readonly setBallVisible: ReturnType<typeof vi.fn>;
   readonly setEdgeSnap: ReturnType<typeof vi.fn>;
   readonly setTheme: ReturnType<typeof vi.fn>;
+  readonly setSelectionEnabled: ReturnType<typeof vi.fn>;
+  readonly setOcrActivation: ReturnType<typeof vi.fn>;
   readonly resetBallPosition: ReturnType<typeof vi.fn>;
   readonly unsubscribe: ReturnType<typeof vi.fn>;
 } {
   const setBallVisible = vi.fn().mockResolvedValue(undefined);
   const setEdgeSnap = vi.fn().mockResolvedValue(undefined);
   const setTheme = vi.fn().mockResolvedValue(undefined);
+  const setSelectionEnabled = vi.fn().mockResolvedValue(undefined);
+  const setOcrActivation = vi.fn().mockResolvedValue(undefined);
   const resetBallPosition = vi.fn().mockResolvedValue(undefined);
   const unsubscribe = vi.fn();
 
@@ -32,11 +36,15 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
       setBallVisible,
       setEdgeSnap,
       setTheme,
+      setSelectionEnabled,
+      setOcrActivation,
       resetBallPosition
     },
     setBallVisible,
     setEdgeSnap,
     setTheme,
+    setSelectionEnabled,
+    setOcrActivation,
     resetBallPosition,
     unsubscribe
   };
@@ -91,7 +99,38 @@ describe('SettingsApp', () => {
       expect(screen.getByText('原生服务：部分可用')).toBeTruthy();
     });
     expect(screen.getByText('OCR 未配置')).toBeTruthy();
-    expect(screen.getByText(/0\.2\.0-phase2/)).toBeTruthy();
+    expect(screen.getByText(/0\.3\.0-phase3/)).toBeTruthy();
+  });
+
+  it('persists Phase 3 selection and OCR activation controls', async () => {
+    const { api, setSelectionEnabled, setOcrActivation } = createSettingsApi({
+      ...DEFAULT_UI_SHELL_SNAPSHOT,
+      native: { status: 'ready', degradedCapabilities: [] },
+      selection: { enabled: true, lifecycle: 'listening', ocrActivation: 'fallback' }
+    });
+    render(<SettingsApp api={api} />);
+
+    const selectionToggle = await screen.findByRole('checkbox', { name: /启用划词取词/ });
+    await waitFor(() => expect((selectionToggle as HTMLInputElement).disabled).toBe(false));
+    fireEvent.click(selectionToggle);
+    await waitFor(() => expect(setSelectionEnabled).toHaveBeenCalledWith(false));
+
+    fireEvent.click(screen.getByRole('radio', { name: '仅 Alt + 拖动' }));
+    await waitFor(() => expect(setOcrActivation).toHaveBeenCalledWith('alt-drag'));
+    expect(screen.getByText(/取词状态：监听中/)).toBeTruthy();
+  });
+
+  it('allows selection to be paused while the native host is unavailable', async () => {
+    const { api, setSelectionEnabled } = createSettingsApi({
+      ...DEFAULT_UI_SHELL_SNAPSHOT,
+      native: { status: 'unavailable', degradedCapabilities: [] },
+      selection: { enabled: true, lifecycle: 'faulted', ocrActivation: 'fallback' }
+    });
+    render(<SettingsApp api={api} />);
+    const selectionToggle = await screen.findByRole('checkbox', { name: /启用划词取词/ });
+    await waitFor(() => expect((selectionToggle as HTMLInputElement).disabled).toBe(false));
+    fireEvent.click(selectionToggle);
+    await waitFor(() => expect(setSelectionEnabled).toHaveBeenCalledWith(false));
   });
 
   it('shows a safe message when the initial snapshot cannot be loaded', async () => {
