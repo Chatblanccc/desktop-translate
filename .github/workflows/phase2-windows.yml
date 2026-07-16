@@ -1,0 +1,88 @@
+name: Phase 2 Windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2-windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v7.0.0
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v6.0.9
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: pnpm
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check the complete change range
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $allZero = $env:BASE_SHA -match '^0+$'
+          if ($env:EVENT_NAME -eq 'pull_request') {
+            git diff --check "$env:BASE_SHA...$env:HEAD_SHA"
+          } elseif ($env:BASE_SHA -and -not $allZero) {
+            git diff --check "$env:BASE_SHA..$env:HEAD_SHA"
+          } else {
+            git diff-tree --check --no-commit-id --root -r -m $env:HEAD_SHA
+          }
+          if ($LASTEXITCODE -ne 0) {
+            throw "git diff whitespace check failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Verify Phase 2
+        run: pnpm phase2:verify
+
+      - name: Reject tracked-file mutations from verification
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git diff --check
+          if ($LASTEXITCODE -ne 0) {
+            throw "post-verification whitespace check failed with exit code $LASTEXITCODE"
+          }
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) {
+            throw "verification modified tracked files"
+          }
+
+      - name: Upload Phase 2 E2E artifacts
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: phase2-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            artifacts/phase2/**
+            test-results/**
+            playwright-report/**
+            apps/desktop/test-results/**
+            apps/desktop/playwright-report/**

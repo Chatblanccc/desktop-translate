@@ -46,6 +46,28 @@ bool HasNonWhitespace(std::string_view text) {
   });
 }
 
+}  // namespace
+
+bool IsMaskedPasswordRepresentation(std::wstring_view text) noexcept {
+  if (text.empty()) return false;
+  bool found_mask = false;
+  for (const wchar_t character : text) {
+    if (character == L' ' || character == L'\t' || character == L'\r' ||
+        character == L'\n') {
+      continue;
+    }
+    if (character == L'*' || character == L'\u2022' || character == L'\u25CF' ||
+        character == L'\u25E6' || character == L'\u25A0') {
+      found_mask = true;
+      continue;
+    }
+    return false;
+  }
+  return found_mask;
+}
+
+namespace {
+
 struct PatternLookup {
   ErrorCode error{ErrorCode::kUiaUnavailable};
   ComPtr<IUIAutomationTextPattern> pattern;
@@ -68,6 +90,7 @@ PatternLookup FindTextPattern(IUIAutomation* automation, IUIAutomationElement* s
   automation->get_ControlViewWalker(&walker);
 
   ComPtr<IUIAutomationElement> current(start);
+  ComPtr<IUIAutomationTextPattern> first_pattern;
   for (int depth = 0; current && depth < 12; ++depth) {
     if (CancelledOrExpired(stop_requested, deadline)) {
       return {ErrorCode::kUiaTimeout, {}};
@@ -80,12 +103,18 @@ PatternLookup FindTextPattern(IUIAutomation* automation, IUIAutomationElement* s
       return {ErrorCode::kUiaTimeout, {}};
     }
 
-    ComPtr<IUnknown> pattern_unknown;
-    if (SUCCEEDED(current->GetCurrentPattern(UIA_TextPatternId, &pattern_unknown)) &&
-        pattern_unknown != nullptr) {
-      ComPtr<IUIAutomationTextPattern> pattern;
-      if (SUCCEEDED(pattern_unknown.As(&pattern)) && pattern != nullptr) {
-        return {ErrorCode::kOk, std::move(pattern)};
+    // Keep the nearest TextPattern, but do not return until the ancestor chain
+    // has been checked. Chromium can expose a non-password text descendant
+    // inside an IsPassword=true edit control; returning early would publish
+    // masked bullets instead of enforcing the password boundary.
+    if (!first_pattern) {
+      ComPtr<IUnknown> pattern_unknown;
+      if (SUCCEEDED(current->GetCurrentPattern(UIA_TextPatternId, &pattern_unknown)) &&
+          pattern_unknown != nullptr) {
+        ComPtr<IUIAutomationTextPattern> pattern;
+        if (SUCCEEDED(pattern_unknown.As(&pattern)) && pattern != nullptr) {
+          first_pattern = std::move(pattern);
+        }
       }
     }
     if (CancelledOrExpired(stop_requested, deadline)) {
@@ -97,6 +126,7 @@ PatternLookup FindTextPattern(IUIAutomation* automation, IUIAutomationElement* s
     if (FAILED(walker->GetParentElement(current.Get(), &parent)) || !parent) break;
     current = std::move(parent);
   }
+  if (first_pattern) return {ErrorCode::kOk, std::move(first_pattern)};
   return {ErrorCode::kUiaUnavailable, {}};
 }
 
@@ -197,6 +227,12 @@ SelectionResult ReadSelection(IUIAutomation* automation, PhysicalPoint point,
     BSTR text = nullptr;
     const auto text_hr = range->GetText(8192, &text);
     if (SUCCEEDED(text_hr) && text != nullptr) {
+      if (IsMaskedPasswordRepresentation(
+              std::wstring_view(text, static_cast<std::size_t>(SysStringLen(text))))) {
+        SysFreeString(text);
+        return {ErrorCode::kUiaPasswordField, {},
+                "masked password text is never read or captured"};
+      }
       const auto text_utf8 = Utf16ToUtf8(text, static_cast<int>(SysStringLen(text)));
       if (HasNonWhitespace(text_utf8)) {
         if (!selection.text_utf8.empty()) selection.text_utf8.push_back('\n');

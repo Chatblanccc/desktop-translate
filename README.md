@@ -1,60 +1,68 @@
 # Desktop Translate
 
-Windows 桌面划词翻译助手。当前仓库完成 **Phase 1 工程基线**：进程边界、跨语言契约、Native Host 可行性实现、翻译与存储抽象，以及可重复验收脚本。悬浮球、翻译卡片和设置页尚未开始，需在本阶段审核通过后进入 Phase 2。
+Windows 桌面划词助手。当前版本为 **`0.3.0-phase3` 内部开发预览**：在 Phase 2
+安全桌面壳层基础上，接入真实全局鼠标 Hook、UI Automation 优先取词、本机 OCR 回退，
+并在选区附近展示只含原文的结果卡。
 
 ## 当前能力边界
 
-- Electron Main 监督独立的 Windows x64 `selection-host.exe`，原生崩溃不直接带崩主进程。
-- 私有 Named Pipe 使用 4-byte little-endian 长度前缀和 Native IPC v1 JSON 契约。
-- Native Host 已建立 `WH_MOUSE_LL`、UI Automation、DXGI 截屏和可替换 OCR adapter 的工程边界。
-- 不读取剪贴板、不模拟 `Ctrl+C`、不向目标进程注入代码，截图像素不跨 Pipe、不落盘。
-- 翻译 Provider、应用状态机、SQLite schema/repository 已抽象；Phase 1 不接入正式在线翻译服务或 OCR 模型。
+- 启动后创建 56 DIP 悬浮球和系统 Tray；设置窗口关闭后应用继续常驻。
+- 划词监听可在 Settings/Tray 即时启停并持久化，Host 重连后恢复最新配置。
+- Native Host 优先读取 UIA 真选区；失败时按 `fallback` 或 `alt-drag` 策略使用
+  Windows 本机离线 OCR。
+- OCR 截图仅存在 Native Host 内存；不跨 Named Pipe、不上传、不落盘。
+- 原文结果卡使用独立、沙箱化 Renderer/Preload，单例替换且不抢目标应用焦点。
+- 密码元素、安全桌面、提权目标、排除进程、受保护内容与跨屏 OCR 在捕获前拒绝。
+- Ball、Settings、Card 均无 Node/Electron 原始能力；设置通过 Main-only `node:sqlite` 持久化。
 
-完整设计从 [文档索引](docs/README.md) 开始，协议以 [JSON Schema](protocol/native-ipc.schema.json) 为字段形状的单一事实来源。
+Phase 3 不包含翻译 Provider、译文、历史收藏、凭据、云 OCR、安装器、签名、自动更新或
+正式发布。完整范围从[文档索引](docs/README.md)开始，协议以
+[JSON Schema](protocol/native-ipc.schema.json)为单一事实来源。
 
 ## 环境
 
-- Windows 10/11 x64
+- Windows 10/11 x64（主要验收平台为 Windows 11）
 - Node.js `22.23.1`（见 `.node-version`）
 - pnpm `10.32.1`
 - CMake `>=3.24`
-- 正式工具链：Visual Studio 2022 Build Tools（Desktop development with C++ / x64）和 Windows 10/11 SDK
+- Visual Studio 2022 Build Tools x64 C++，或仓库验证过的 portable llvm-mingw
+- 已安装所需语言的 Windows OCR language pack
 
-本地验收脚本也可检测忽略目录 `.tools/llvm-mingw-*-ucrt-x86_64` 中的便携 llvm-mingw；它只用于无管理员权限工作站的开发验证，正式发布仍以 MSVC/Windows SDK CI 为准。
-
-## 验收命令
+## 运行与验收
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm phase1:verify
+pnpm start:phase3
 ```
 
-该命令依次执行 TypeScript 类型检查、契约与桌面端测试、Electron Main/Preload 构建、C++ 配置/构建/测试，以及真实 `hello → ready → health → shutdown` Named Pipe smoke test。Phase 1 未捆绑 OCR runtime，因此健康结果允许且应明确显示 `degradedCapabilities: ["ocr"]`。
-
-也可以分步执行：
+完整 Phase 3 本地门禁：
 
 ```powershell
-pnpm typecheck
-pnpm test
-pnpm build
+pnpm phase3:verify
+```
+
+门禁包含 lint、TypeScript、全部单元/组件/契约/集成测试、覆盖率、生产构建、Native
+配置/构建/测试、Phase 1 Named Pipe 回归、Phase 2 Shell 回归、真实 Host 启停和 Electron
+E2E。关键步骤也可独立运行：
+
+```powershell
 pnpm native:configure
 pnpm native:build
 pnpm native:test
-pnpm phase1:smoke
+pnpm phase3:smoke
+pnpm test:e2e
 ```
 
 ## 目录
 
 ```text
-apps/desktop/       Electron Main、Preload 与 Native Host supervisor
-native/             Windows C++ Host、探针和核心测试
-packages/contracts/ Native IPC 与翻译领域契约
+apps/desktop/        Electron Main、三套角色化 Preload/Renderer 与 E2E
+native/              Windows C++ Host、Windows OCR、探针和 Native 测试
+packages/contracts/  Native IPC、UI Shell、结果卡与领域契约
 packages/application/纯应用状态机
-packages/translation/翻译 Provider 抽象
-packages/storage/   SQLite migration 与 repository 接口
-protocol/           Native IPC v1 canonical JSON Schema
-docs/               架构、ADR、安全、兼容性和风险文档
-tooling/            Phase 1 构建与验收脚本
+packages/translation/后续阶段 Provider 抽象（Phase 3 未调用）
+packages/storage/    SQLite migration 与 repository
+protocol/            Native IPC v1 canonical JSON Schema
+docs/                架构、安全、兼容性、风险、规格与验收文档
+tooling/             Native 工具链准备和 Phase 1/2/3 验收脚本
 ```
-
-Phase 2 前不得在本分支加入悬浮球、翻译卡片、设置页或正式翻译 Provider 实现。

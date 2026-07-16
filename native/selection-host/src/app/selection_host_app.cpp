@@ -21,12 +21,13 @@
 #include "desktop_translate/native/core/envelope.h"
 #include "desktop_translate/native/core/security.h"
 #include "desktop_translate/native/core/utf8.h"
+#include "desktop_translate/native/ocr/windows_ocr_adapter.h"
 #include "desktop_translate/native/ocr/paddle_ocr_adapter.h"
 
 namespace desktop_translate::native {
 namespace {
 
-constexpr std::string_view kHostVersion = "0.1.0";
+constexpr std::string_view kHostVersion = "0.3.0-phase3";
 
 std::string UtcTimestamp() {
   SYSTEMTIME time{};
@@ -314,7 +315,7 @@ bool ValidateRequestedCapabilities(std::string_view payload) {
 SelectionHostApp::SelectionHostApp(SelectionHostOptions options)
     : options_(std::move(options)),
       pipe_server_(options_.pipe_name, options_.parent_pid),
-      ocr_engine_(CreatePaddleOcrAdapter()) {
+      ocr_engine_(CreateWindowsOcrAdapter()) {
   pipeline_ = std::make_unique<SelectionPipeline>(
       mouse_hook_, uia_worker_, capture_, *ocr_engine_,
       [this](SelectionPipelineResult result) { HandlePipelineResult(std::move(result)); });
@@ -412,8 +413,10 @@ bool SelectionHostApp::HandleRequest(const Envelope& envelope) {
       return true;
     }
     const auto host_state = state_.state();
-    const bool listening = host_state == HostState::kRunning;
-    const bool degraded = !uia_worker_.available() || !ocr_engine_->available();
+    const bool listening = host_state == HostState::kRunning && mouse_hook_.installed() &&
+                           pipeline_ && pipeline_->running();
+    const bool degraded = !uia_worker_.available() || !ocr_engine_->available() ||
+                          (host_state == HostState::kRunning && !listening);
     const std::string status = host_state == HostState::kShuttingDown
                                    ? "stopping"
                                    : (degraded ? "degraded" : "ready");
@@ -520,9 +523,12 @@ void SelectionHostApp::HandlePipelineResult(SelectionPipelineResult result) noex
     std::string scope = "host";
     if (error == ErrorCode::kUiaUnavailable || error == ErrorCode::kUiaNoSelection ||
         error == ErrorCode::kUiaTimeout || error == ErrorCode::kUiaPasswordField) scope = "uia";
-    else if (error == ErrorCode::kCaptureUnavailable || error == ErrorCode::kCaptureTimeout) {
+    else if (error == ErrorCode::kCaptureUnavailable || error == ErrorCode::kCaptureTimeout ||
+             error == ErrorCode::kCaptureAccessLost || error == ErrorCode::kCaptureProtected ||
+             error == ErrorCode::kCrossMonitorUnsupported) {
       scope = "capture";
-    } else if (error == ErrorCode::kOcrUnavailable) {
+    } else if (error == ErrorCode::kOcrUnavailable || error == ErrorCode::kOcrTimeout ||
+               error == ErrorCode::kOcrNoText || error == ErrorCode::kOcrLowConfidence) {
       scope = "ocr";
     }
     SendError(error, std::move(scope),
@@ -610,6 +616,9 @@ std::string SelectionHostApp::DegradedCapabilitiesJson() const {
   std::vector<std::string> capabilities;
   if (!uia_worker_.available()) capabilities.emplace_back("uia-selection");
   if (!ocr_engine_->available()) capabilities.emplace_back("ocr");
+  if (state_.state() == HostState::kRunning && !mouse_hook_.installed()) {
+    capabilities.emplace_back("mouse-hook");
+  }
   return StringArrayJson(capabilities);
 }
 

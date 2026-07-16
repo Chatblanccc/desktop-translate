@@ -1,41 +1,77 @@
+import { resolve } from 'node:path';
 import { app } from 'electron';
-import { NativeHostSupervisor } from './native-host/native-host-supervisor.js';
+import { ShellLifecycle } from './shell-lifecycle.js';
+import { ShellController, type Phase2DebugState } from './ui-shell/shell-controller.js';
 
-let nativeHost: NativeHostSupervisor | undefined;
+const testUserData = process.env.DESKTOP_TRANSLATE_USER_DATA_DIR;
+if (!app.isPackaged && testUserData) app.setPath('userData', resolve(testUserData));
+
+const lifecycle = new ShellLifecycle<ShellController>({
+  createShell: (requestQuit) => new ShellController({ requestQuit }),
+  onShellStarted: installTestApi,
+  onInitializationFailure: () => {
+    console.error('[phase2] Desktop shell failed to initialize.');
+    app.quit();
+  },
+  onCleanupFailure: () => console.error('[phase2] Desktop shell cleanup failed.'),
+  finishShutdown: () => {
+    if (process.env.DESKTOP_TRANSLATE_E2E === '1') {
+      // Playwright keeps a main-process inspector attached; terminate the
+      // already-clean process through the OS after lifecycle assertions.
+      process.kill(process.pid, 'SIGTERM');
+      return;
+    }
+    app.exit(0);
+  }
+});
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    // Phase 2 will focus or reveal the settings window here.
+  app.on('second-instance', () => lifecycle.handleSecondInstance());
+
+  app.on('window-all-closed', () => {
+    // Phase 2 is tray-resident. Only the explicit Tray command exits the app.
   });
 
-  void app
-    .whenReady()
-    .then(async () => {
-      const executablePath = process.env.SELECTION_HOST_PATH;
-      if (!executablePath) {
-        console.info('[phase1] Native host path is not configured; UI remains intentionally absent.');
-        return;
-      }
+  void lifecycle.startWhenReady(app.whenReady());
+  app.on('before-quit', (event) => lifecycle.handleBeforeQuit(event));
+}
 
-      nativeHost = new NativeHostSupervisor({ executablePath });
-      nativeHost.on('fatal', () => console.error('[native-host:fatal] Host restart budget exhausted.'));
-      nativeHost.on('stderr', () => console.error('[native-host] Host reported a diagnostic error.'));
-      await nativeHost.start();
-      console.info('[phase1] Native host handshake completed.');
-    })
-    .catch(() => {
-      console.error('[phase1] Native host failed to start.');
-      app.quit();
-    });
+interface Phase2TestApi {
+  getState(): Phase2DebugState;
+  openSettings(): void;
+  closeSettings(): void;
+  setBallVisible(value: boolean): Promise<void>;
+  setEdgeSnap(value: boolean): Promise<void>;
+  setTheme(value: 'system' | 'light' | 'dark'): Promise<void>;
+  resetBallPosition(): Promise<void>;
+  moveBall(x: number, y: number): Promise<void>;
+  quit(): void;
+}
 
-  app.on('before-quit', (event) => {
-    if (!nativeHost) return;
-    event.preventDefault();
-    const current = nativeHost;
-    nativeHost = undefined;
-    void current.stop().finally(() => app.exit(0));
+function installTestApi(controller: ShellController): void {
+  if (process.env.DESKTOP_TRANSLATE_E2E !== '1' || app.isPackaged) return;
+  const testApi: Phase2TestApi = Object.freeze({
+    getState: () => controller.getDebugState(),
+    openSettings: () => controller.openSettings(),
+    closeSettings: () => controller.closeSettingsForTest(),
+    setBallVisible: (value: boolean) => controller.setBallVisible(value),
+    setEdgeSnap: (value: boolean) => controller.setEdgeSnap(value),
+    setTheme: (value: 'system' | 'light' | 'dark') => controller.setTheme(value),
+    resetBallPosition: () => controller.resetBallPosition(),
+    moveBall: (x: number, y: number) => controller.moveBallForTest(x, y),
+    quit: lifecycle.requestShutdown
   });
+  Object.defineProperty(globalThis, '__desktopTranslateTestApi', {
+    value: testApi,
+    enumerable: false,
+    configurable: true
+  });
+}
+
+declare global {
+  // Main-process-only E2E hook. It is never exposed through Preload or Renderer.
+  var __desktopTranslateTestApi: Phase2TestApi | undefined;
 }

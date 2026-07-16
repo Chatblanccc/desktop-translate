@@ -27,6 +27,32 @@ describe('native frame codec', () => {
     await expect(decode([chunk])).resolves.toEqual([{ id: 1 }, { id: 2 }]);
   });
 
+  it('accepts empty containers, escaped strings, arrays, and every JSON scalar form', async () => {
+    const value = {
+      emptyObject: {},
+      emptyArray: [],
+      values: [true, false, null, -1, 1.5, 1e2],
+      text: 'escaped\\value'
+    };
+    await expect(decode([encodeFrame(value)])).resolves.toEqual([value]);
+  });
+
+  it('rejects zero and oversized incoming frame lengths', async () => {
+    const zero = Buffer.alloc(4);
+    const oversized = Buffer.alloc(4);
+    oversized.writeUInt32LE(MAX_NATIVE_FRAME_BYTES + 1, 0);
+    await expect(decode([zero])).rejects.toThrow(/frame length/u);
+    await expect(decode([oversized])).rejects.toThrow(/frame length/u);
+  });
+
+  it('rejects JSON documents with too many nodes', async () => {
+    const body = Buffer.from(`[${'0,'.repeat(65_536)}0]`, 'utf8');
+    const frame = Buffer.alloc(4 + body.length);
+    frame.writeUInt32LE(body.length, 0);
+    body.copy(frame, 4);
+    await expect(decode([frame])).rejects.toThrow(/too many nodes/u);
+  });
+
   it('rejects oversized outgoing frames', () => {
     expect(() => encodeFrame({ value: 'x'.repeat(MAX_NATIVE_FRAME_BYTES) })).toThrow(RangeError);
   });

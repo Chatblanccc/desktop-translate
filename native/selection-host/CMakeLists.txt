@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(desktop_translate_selection_host VERSION 0.1.0 LANGUAGES CXX)
+project(desktop_translate_selection_host VERSION 0.3.0 LANGUAGES CXX)
 
 option(DT_NATIVE_BUILD_TESTS "Build native core tests" ON)
 option(DT_NATIVE_ENABLE_PADDLE_OCR "Enable a linked PaddleOCR runtime adapter" OFF)
+option(DT_NATIVE_ENABLE_WINDOWS_OCR "Enable the offline Windows.Media.Ocr adapter" OFF)
+set(DT_CPPWINRT_INCLUDE_DIR "" CACHE PATH "Generated C++/WinRT projection include directory")
 
 add_library(dt_native_core STATIC
   src/core/envelope.cpp
@@ -34,6 +36,7 @@ if(WIN32)
     src/input_hook/mouse_hook.cpp
     src/ipc/named_pipe_server.cpp
     src/ocr/paddle_ocr_adapter.cpp
+    src/ocr/windows_ocr_adapter.cpp
     src/selection/selection_pipeline.cpp
     src/uia/uia_worker.cpp
   )
@@ -47,10 +50,17 @@ if(WIN32)
     WINVER=0x0A00
     _WIN32_WINNT=0x0A00
     DT_NATIVE_ENABLE_PADDLE_OCR=$<BOOL:${DT_NATIVE_ENABLE_PADDLE_OCR}>
+    DT_NATIVE_ENABLE_WINDOWS_OCR=$<BOOL:${DT_NATIVE_ENABLE_WINDOWS_OCR}>
   )
+  if(DT_NATIVE_ENABLE_WINDOWS_OCR)
+    if(NOT EXISTS "${DT_CPPWINRT_INCLUDE_DIR}/winrt/Windows.Media.Ocr.h")
+      message(FATAL_ERROR "DT_NATIVE_ENABLE_WINDOWS_OCR requires generated C++/WinRT headers")
+    endif()
+    target_include_directories(dt_selection_host_windows PRIVATE "${DT_CPPWINRT_INCLUDE_DIR}")
+  endif()
   target_link_libraries(dt_selection_host_windows
     PUBLIC dt_native_core
-    PRIVATE advapi32 d3d11 dxgi ole32 oleaut32 shcore user32
+    PRIVATE advapi32 d3d11 dxgi gdi32 ole32 oleaut32 shcore user32 windowsapp
   )
   if(MSVC)
     target_compile_options(dt_selection_host_windows PRIVATE /W4 /permissive- /EHsc /utf-8)
@@ -104,4 +114,16 @@ if(DT_NATIVE_BUILD_TESTS)
     endif()
   endif()
   add_test(NAME dt_native_core_tests COMMAND dt_native_core_tests)
+  if(WIN32)
+    add_executable(dt_native_windows_tests tests/windows_tests.cpp)
+    target_link_libraries(dt_native_windows_tests PRIVATE dt_selection_host_windows)
+    target_compile_features(dt_native_windows_tests PRIVATE cxx_std_20)
+    if(MSVC)
+      target_compile_options(dt_native_windows_tests PRIVATE /W4 /permissive- /EHsc /utf-8)
+    elseif(MINGW)
+      target_compile_options(dt_native_windows_tests PRIVATE -Wall -Wextra -Wpedantic)
+      target_link_options(dt_native_windows_tests PRIVATE -static)
+    endif()
+    add_test(NAME dt_native_windows_tests COMMAND dt_native_windows_tests)
+  endif()
 endif()

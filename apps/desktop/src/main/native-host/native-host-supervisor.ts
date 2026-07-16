@@ -2,9 +2,11 @@ import { randomBytes } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { NativeHostClient } from './native-host-client.js';
+import type { HostErrorEvent, SelectionResultEvent } from '@desktop-translate/contracts/native-ipc';
 
 export interface NativeHostSupervisorOptions {
   executablePath: string;
+  desktopVersion?: string;
   /** Prefix arguments are used by the executable test harness; production leaves this empty. */
   executableArguments?: readonly string[];
   maxRestarts?: number;
@@ -16,11 +18,13 @@ export class NativeHostSupervisor extends EventEmitter {
   private child: ChildProcessWithoutNullStreams | undefined;
   private client: NativeHostClient | undefined;
   private readonly expectedExits = new WeakSet<ChildProcessWithoutNullStreams>();
+  private readonly readyChildren = new WeakSet<ChildProcessWithoutNullStreams>();
   private restartTimer: NodeJS.Timeout | undefined;
   private healthTimer: NodeJS.Timeout | undefined;
   private stableRunTimer: NodeJS.Timeout | undefined;
   private active = false;
   private stopping = false;
+  private stopPromise: Promise<void> | undefined;
   private restartCount = 0;
 
   public constructor(private readonly options: NativeHostSupervisorOptions) {
@@ -44,7 +48,12 @@ export class NativeHostSupervisor extends EventEmitter {
     }
   }
 
-  public async stop(): Promise<void> {
+  public stop(): Promise<void> {
+    this.stopPromise ??= this.performStop();
+    return this.stopPromise;
+  }
+
+  private async performStop(): Promise<void> {
     this.active = false;
     this.stopping = true;
     if (this.restartTimer) {
@@ -67,18 +76,16 @@ export class NativeHostSupervisor extends EventEmitter {
 
     const child = this.child;
     this.client = undefined;
-    this.child = undefined;
     if (child && child.exitCode === null) {
       this.expectedExits.add(child);
-      const exited = new Promise<boolean>((resolve) => {
-        const timeout = setTimeout(() => resolve(false), 1_000);
-        child.once('exit', () => {
-          clearTimeout(timeout);
-          resolve(true);
-        });
-      });
-      if (!(await exited) && child.exitCode === null) child.kill();
+      if (!(await waitForChildExit(child, 1_000)) && child.exitCode === null) {
+        child.kill();
+        if (!(await waitForChildExit(child, 1_000)) && child.exitCode === null) {
+          throw new Error('Native host did not exit after forced termination');
+        }
+      }
     }
+    if (this.child === child) this.child = undefined;
   }
 
   private async launch(): Promise<NativeHostClient> {
@@ -121,7 +128,7 @@ export class NativeHostSupervisor extends EventEmitter {
         throw new Error('Native host was spawned without a process identifier');
       }
       const ready = await client.request('hello', {
-        desktopVersion: '0.1.0-phase1',
+        desktopVersion: this.options.desktopVersion ?? '0.3.0-phase3',
         supportedVersions: [1],
         sessionNonce: nonce,
         requestedCapabilities: [
@@ -133,21 +140,48 @@ export class NativeHostSupervisor extends EventEmitter {
         ]
       });
       validateReadyHandshake(ready.payload, nonce, child.pid);
+      if (
+        this.child !== child ||
+        child.exitCode !== null ||
+        child.signalCode !== null
+      ) {
+        throw new Error('Native host exited before its ready handshake completed');
+      }
+      this.readyChildren.add(child);
+      client.on('selection/result', (event: SelectionResultEvent) => {
+        if (this.client === client && this.child === child) this.emit('selection', event.payload);
+      });
+      client.on('host/error', (event: HostErrorEvent) => {
+        if (this.client === client && this.child === child) this.emit('hostError', event.payload);
+      });
       client.once('disconnect', (error: Error) => this.handleDisconnect(child, client, error));
       this.scheduleHealthCheck(child, client);
       this.stableRunTimer = setTimeout(() => {
         if (this.child === child && !this.stopping) this.restartCount = 0;
       }, this.options.stableRunMs ?? 30_000).unref();
       this.emit('ready', ready);
+      this.emit('clientReady', client, ready);
       return client;
     } catch (error) {
       this.expectedExits.add(child);
-      if (this.client === client) this.client = undefined;
-      if (this.child === child) this.child = undefined;
       await client.close();
       child.removeListener('error', onSpawnError);
       child.on('error', (spawnError) => this.emit('spawnError', spawnError));
-      if (child.pid !== undefined && child.exitCode === null) child.kill();
+      if (
+        child.pid !== undefined &&
+        child.exitCode === null &&
+        child.signalCode === null
+      ) {
+        child.kill();
+        if (!(await waitForChildExit(child, 1_000))) {
+          throw new AggregateError(
+            [error],
+            'Native host launch failed and the child did not exit after forced termination'
+          );
+        }
+      }
+      if (this.client === client) this.client = undefined;
+      if (this.child === child) this.child = undefined;
       throw error;
     }
   }
@@ -172,13 +206,14 @@ export class NativeHostSupervisor extends EventEmitter {
     code: number | null,
     signal: NodeJS.Signals | null
   ): void {
+    const wasReady = this.readyChildren.has(child);
     if (this.child === child) {
       this.clearLivenessTimers();
       this.child = undefined;
       this.client = undefined;
     }
     this.emit('exit', { code, signal });
-    if (!this.active || this.stopping || this.expectedExits.has(child)) return;
+    if (!wasReady || !this.active || this.stopping || this.expectedExits.has(child)) return;
 
     const maxRestarts = this.options.maxRestarts ?? 3;
     if (this.restartCount >= maxRestarts) {
@@ -189,6 +224,7 @@ export class NativeHostSupervisor extends EventEmitter {
 
     const delay = 250 * 2 ** this.restartCount;
     this.restartCount += 1;
+    this.emit('restarting', { delay, attempt: this.restartCount });
     this.restartTimer = setTimeout(() => {
       this.restartTimer = undefined;
       if (!this.active || this.stopping) return;
@@ -218,7 +254,10 @@ export class NativeHostSupervisor extends EventEmitter {
       if (this.stopping || this.child !== child || this.client !== client) return;
       void client
         .request('health', {})
-        .then(() => this.scheduleHealthCheck(child, client))
+        .then((health) => {
+          this.emit('health', health);
+          this.scheduleHealthCheck(child, client);
+        })
         .catch((error: unknown) =>
           this.handleDisconnect(
             child,
@@ -235,6 +274,24 @@ export class NativeHostSupervisor extends EventEmitter {
     this.healthTimer = undefined;
     this.stableRunTimer = undefined;
   }
+}
+
+async function waitForChildExit(
+  child: ChildProcessWithoutNullStreams,
+  timeoutMs: number
+): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return true;
+  return new Promise<boolean>((resolve) => {
+    const onExit = (): void => {
+      clearTimeout(timeout);
+      resolve(true);
+    };
+    const timeout = setTimeout(() => {
+      child.removeListener('exit', onExit);
+      resolve(child.exitCode !== null || child.signalCode !== null);
+    }, timeoutMs);
+    child.once('exit', onExit);
+  });
 }
 
 export function buildNativePipeName(mainPid: number, nonce: string): string {

@@ -1,0 +1,40 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn",
+    "oxc",
+    "react",
+    "vitest",
+    "jsx-a11y",
+    "node"
+  ],
+  "categories": {
+    "correctness": "error"
+  },
+  "ignorePatterns": [
+    "**/.vite/**",
+    "**/artifacts/**",
+    "**/coverage/**",
+    "**/node_modules/**",
+    "**/out/**",
+    "**/playwright-report/**",
+    "**/test-results/**",
+    ".tools/**"
+  ],
+  "rules": {
+    "eslint/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_"
+      }
+    ],
+    "eslint/no-await-in-loop": "off",
+    "eslint/no-control-regex": "off",
+    "eslint/no-underscore-dangle": "off",
+    "react/react-in-jsx-scope": "off",
+    "vitest/require-mock-type-parameters": "off",
+    "vitest/require-to-throw-message": "off"
+  }
+}

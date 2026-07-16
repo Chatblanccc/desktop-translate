@@ -1,8 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": ["node", "electron"],
+    "types": ["node", "electron", "vite/client"],
+    "jsx": "react-jsx",
     "rootDir": "."
   },
-  "include": ["src/**/*.ts", "vite.*.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "e2e/**/*.ts", "vite.*.config.ts", "vitest.config.ts", "playwright.config.ts"]
 }

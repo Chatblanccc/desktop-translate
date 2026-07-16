@@ -43,6 +43,9 @@ class MouseHook {
   [[nodiscard]] std::uint64_t latest_generation() const noexcept {
     return latest_generation_.load(std::memory_order_acquire);
   }
+  [[nodiscard]] bool installed() const noexcept {
+    return installed_.load(std::memory_order_acquire);
+  }
 
  private:
   static LRESULT CALLBACK HookProcedure(int code, WPARAM message, LPARAM data) noexcept;
@@ -57,6 +60,7 @@ class MouseHook {
   std::thread thread_;
   std::atomic<DWORD> thread_id_{0};
   std::atomic<bool> running_{false};
+  std::atomic<bool> installed_{false};
 };
 
 }  // namespace desktop_translate::native

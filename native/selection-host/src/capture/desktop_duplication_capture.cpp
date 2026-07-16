@@ -63,6 +63,67 @@ bool FindOutputForMonitor(HMONITOR monitor, OutputMatch& match) {
   return false;
 }
 
+CaptureResult CaptureWithGdi(PhysicalRect roi, std::string reason) {
+  const auto screen = GetDC(nullptr);
+  if (screen == nullptr) return Failure(ErrorCode::kCaptureUnavailable, "desktop DC unavailable");
+  const auto memory = CreateCompatibleDC(screen);
+  BITMAPINFO info{};
+  info.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+  info.bmiHeader.biWidth = roi.width;
+  info.bmiHeader.biHeight = -roi.height;
+  info.bmiHeader.biPlanes = 1;
+  info.bmiHeader.biBitCount = 32;
+  info.bmiHeader.biCompression = BI_RGB;
+  void* pixels = nullptr;
+  const auto dib = CreateDIBSection(screen, &info, DIB_RGB_COLORS, &pixels, nullptr, 0U);
+  if (memory == nullptr || dib == nullptr || pixels == nullptr) {
+    if (dib != nullptr) DeleteObject(dib);
+    if (memory != nullptr) DeleteDC(memory);
+    ReleaseDC(nullptr, screen);
+    return Failure(ErrorCode::kCaptureUnavailable, "GDI capture allocation failed");
+  }
+  const auto previous = SelectObject(memory, dib);
+  const bool copied = BitBlt(memory, 0, 0, roi.width, roi.height, screen, roi.x, roi.y,
+                             SRCCOPY | CAPTUREBLT) == TRUE;
+  GdiFlush();
+
+  CapturedBitmap bitmap;
+  if (copied) {
+    bitmap.desktop_bounds = roi;
+    bitmap.width = static_cast<std::uint32_t>(roi.width);
+    bitmap.height = static_cast<std::uint32_t>(roi.height);
+    bitmap.stride = bitmap.width * 4U;
+    const auto size = static_cast<std::size_t>(bitmap.stride) * bitmap.height;
+    bitmap.pixels.assign(static_cast<std::uint8_t*>(pixels),
+                         static_cast<std::uint8_t*>(pixels) + size);
+  }
+  SelectObject(memory, previous);
+  DeleteObject(dib);
+  DeleteDC(memory);
+  ReleaseDC(nullptr, screen);
+  if (!copied) return Failure(ErrorCode::kCaptureUnavailable, "GDI BitBlt failed");
+  return {ErrorCode::kOk, std::move(bitmap), std::move(reason)};
+}
+
+bool IsCompletelyBlack(const CapturedBitmap& bitmap) {
+  for (std::size_t index = 0; index + 3U < bitmap.pixels.size(); index += 4U) {
+    if (bitmap.pixels[index] != 0U || bitmap.pixels[index + 1U] != 0U ||
+        bitmap.pixels[index + 2U] != 0U) {
+      return false;
+    }
+  }
+  return true;
+}
+
+CaptureResult CaptureWithGdiChecked(PhysicalRect roi, std::string reason) {
+  auto result = CaptureWithGdi(roi, std::move(reason));
+  if (result.ok() && IsCompletelyBlack(result.bitmap)) {
+    return Failure(ErrorCode::kCaptureProtected,
+                   "capture returned no visible pixels (protected or blank surface)");
+  }
+  return result;
+}
+
 PhysicalRect OutputBounds(const DXGI_OUTPUT_DESC& description) {
   const auto& rect = description.DesktopCoordinates;
   return {rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top};
@@ -87,8 +148,11 @@ CaptureResult DesktopDuplicationCapture::CaptureRoi(PhysicalRect roi,
   }
   if (match.description.Rotation != DXGI_MODE_ROTATION_IDENTITY &&
       match.description.Rotation != DXGI_MODE_ROTATION_UNSPECIFIED) {
-    return Failure(ErrorCode::kCaptureUnavailable,
-                   "rotated outputs are not supported by the Phase-1 probe");
+    const auto rotated_roi = IntersectRects(roi, OutputBounds(match.description));
+    if (rotated_roi.IsEmpty()) {
+      return Failure(ErrorCode::kInvalidArgument, "capture ROI does not intersect rotated output");
+    }
+    return CaptureWithGdiChecked(rotated_roi, "GDI fallback used for rotated output");
   }
 
   const auto clipped = IntersectRects(roi, OutputBounds(match.description));
@@ -110,7 +174,8 @@ CaptureResult DesktopDuplicationCapture::CaptureRoi(PhysicalRect roi,
   ComPtr<IDXGIOutputDuplication> duplication;
   const auto duplicate_hr = match.output->DuplicateOutput(device.Get(), &duplication);
   if (FAILED(duplicate_hr)) {
-    return Failure(ErrorCode::kCaptureUnavailable,
+    return Failure(duplicate_hr == E_ACCESSDENIED ? ErrorCode::kCaptureProtected
+                                                  : ErrorCode::kCaptureUnavailable,
                    duplicate_hr == DXGI_ERROR_NOT_CURRENTLY_AVAILABLE
                        ? "desktop duplication session limit reached"
                        : "DuplicateOutput failed (secure desktop or unsupported adapter)");
@@ -123,7 +188,8 @@ CaptureResult DesktopDuplicationCapture::CaptureRoi(PhysicalRect roi,
     return Failure(ErrorCode::kCaptureTimeout, "AcquireNextFrame timed out");
   }
   if (FAILED(acquire_hr)) {
-    return Failure(ErrorCode::kCaptureUnavailable,
+    return Failure(acquire_hr == DXGI_ERROR_ACCESS_LOST ? ErrorCode::kCaptureAccessLost
+                                                        : ErrorCode::kCaptureUnavailable,
                    acquire_hr == DXGI_ERROR_ACCESS_LOST ? "desktop duplication access was lost"
                                                         : "AcquireNextFrame failed");
   }
@@ -194,6 +260,9 @@ CaptureResult DesktopDuplicationCapture::CaptureRoi(PhysicalRect roi,
     std::memcpy(destination_row, source_row, bitmap.stride);
   }
   context->Unmap(staging.Get(), 0U);
+  if (IsCompletelyBlack(bitmap)) {
+    return CaptureWithGdiChecked(clipped, "GDI fallback used after a black DXGI frame");
+  }
   return {ErrorCode::kOk, std::move(bitmap), {}};
 }
 
