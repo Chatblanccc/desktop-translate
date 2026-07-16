@@ -62,7 +62,11 @@ if(WIN32)
   target_compile_definitions(selection-host PRIVATE
     NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE WINVER=0x0A00 _WIN32_WINNT=0x0A00)
   set_target_properties(selection-host PROPERTIES OUTPUT_NAME "selection-host")
-  if(MINGW)
+  if(MSVC)
+    # The resource script already embeds the complete application manifest.
+    # Disable MSVC's second, generated ID=1 manifest to avoid CVT1100.
+    target_link_options(selection-host PRIVATE /MANIFEST:NO)
+  elseif(MINGW)
     # Produce a self-contained helper executable. Electron must be able to
     # launch the packaged host without inheriting an llvm-mingw toolchain PATH.
     target_link_options(selection-host PRIVATE -municode -static)
@@ -74,7 +78,9 @@ if(WIN32)
   target_compile_definitions(selection-host-probe PRIVATE
     NOMINMAX WIN32_LEAN_AND_MEAN UNICODE _UNICODE WINVER=0x0A00 _WIN32_WINNT=0x0A00)
   set_target_properties(selection-host-probe PROPERTIES OUTPUT_NAME "selection-host-probe")
-  if(MINGW)
+  if(MSVC)
+    target_link_options(selection-host-probe PRIVATE /MANIFEST:NO)
+  elseif(MINGW)
     target_link_options(selection-host-probe PRIVATE -municode -static)
   endif()
 else()
