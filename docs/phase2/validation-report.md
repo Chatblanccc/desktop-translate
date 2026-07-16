@@ -3,11 +3,11 @@
 - 验证日期：2026-07-16
 - 版本：`0.2.0-phase2`
 - 发布口径：内部开发预览
-- 当前结论：`LOCAL PASS / CI PENDING`
-- Commit SHA：`[LOCAL_COMMIT_SHA]`
-- Windows CI：`[WINDOWS_CI_RUN_URL]`
+- 当前结论：`PASS WITH ACCEPTED RISKS`
+- 代码基线：`0372b54a7a11df5339568ef588f07018fd6ef89e`
+- Windows CI：[Phase 2 run 29493975306](https://github.com/Chatblanccc/desktop-translate/actions/runs/29493975306)
 
-> `LOCAL PASS` 只表示最新一次本地自动门禁和下列已完成的 Windows 11 实机项目通过。Windows CI 尚未执行或尚未记录，因此本报告不提前声明 Phase 2 最终 `PASS`。
+> 本阶段代码、自动门禁、真实 Windows CI 和核心实机流程均通过。唯一接受风险是当前桌面自动化驱动无法生成 Windows 原生窗口拖动，缺少独立物理拖动录像；详见 P2-R-017。
 
 ## 1. 验证环境
 
@@ -121,29 +121,28 @@ E2E 对生产 Renderer 执行了无 Host、Native 降级、第二实例、设置
 - `artifacts/phase2/manual/01-ball-default.png`：默认悬浮球；
 - `artifacts/phase2/manual/02-settings-unavailable.png`：无 Host 的 Settings；
 - `artifacts/phase2/manual/03-settings-dark.png`：深色主题；
-- `artifacts/phase2/manual/04-ball-context-menu.png`：Ball 原生上下文菜单；
 - `artifacts/phase2/manual/05-real-host-degraded.png`：真实 Host 的 OCR 降级状态。
 
 ## 5. 真实鼠标拖动证据说明
 
-Windows 桌面自动化已尝试向 Ball 外圈发送真实鼠标拖动，但 Codex 与被验应用共享桌面且 Codex 窗口覆盖在 Ball 上方，Windows 命中测试将指针事件交给 Codex，而不是透明置顶 Ball。因此本轮没有把这次尝试记作“真实指针拖动通过”，也没有把它记作产品缺陷。
+Windows 桌面自动化多次向 Ball 外圈发送系统鼠标拖动。为排除 Codex 同屏遮挡，验收期间还临时把未提交的测试实例提升到更高窗口层级；点击可正常命中 Ball，但 drag 仍不能移动窗口。对同层级的标准 Settings 标题栏执行相同拖动也不能移动窗口，证明该结果是当前自动化驱动无法生成 Windows 原生窗口拖动，而不是 Ball 特有失败。临时测试覆盖未进入提交，最终生产构建已从干净代码基线重建。
 
-这是验收工具与同屏遮挡限制，依据如下：
+这是验收工具限制，依据如下：
 
 - Ball 的点击、右键、Enter、Space、显示/隐藏和菜单交互在实机上均可操作；
 - 外圈 drag / 中央 no-drag 的结构和 Main 输入路径有自动化覆盖；
 - 左右边缘吸附、工作区 clamp、位置持久化、负坐标、显示器增删、DPI 与任务栏四边场景均有自动化几何覆盖；
 - 未观察到应用崩溃、窗口穿屏或状态损坏等产品故障信号。
 
-若后续需要独立的“物理鼠标手势”签字证据，应在不被 Codex 覆盖的独立桌面会话或人工前台操作中补录；该证据缺口不得被描述为已经完成的物理拖动验收。
+该证据缺口作为低风险 P2-R-017 接受，复审日期为 2026-08-15。它不得被描述为已经完成的物理拖动验收；后续应在独立桌面会话补录左右拖动。
 
-## 6. 当前待完成项
+## 6. 远端 CI 与签字
 
-1. 将实际 Phase 2 commit 写入 `[LOCAL_COMMIT_SHA]`。
-2. 在 GitHub Windows runner 上使用 frozen lockfile 执行 `pnpm phase2:verify`。
-3. 记录真实 CI run URL、最终测试数量、构建结果和 artifacts 状态，替换 `[WINDOWS_CI_RUN_URL]`。
-4. 确认 CI 未修改 tracked files，且没有 skipped 的关键测试或 P0/P1 缺陷。
-5. 完成验收清单和风险登记签字后，才可把阶段结论改为最终 `PASS`。
+- [Phase 2 Windows run 29493975306](https://github.com/Chatblanccc/desktop-translate/actions/runs/29493975306)：frozen install、完整 diff、`phase2:verify`、tracked mutation 检查和 artifact 上传全部成功。
+- [Phase 1 Windows run 29493975265](https://github.com/Chatblanccc/desktop-translate/actions/runs/29493975265)：完整回归成功。
+- E2E artifact：`phase2-e2e-29493975306-1`，大小 227,116 bytes，保留至 2026-07-30。
+- 最终审计：无 P0/P1/P2 代码缺陷；唯一剩余项为 P2-R-017 低风险验收工具限制。
+- 验收清单与风险登记已于 2026-07-16 签字。
 
 ## 7. 范围外与已知限制
 
@@ -151,5 +150,5 @@ Windows 桌面自动化已尝试向 Ball 外圈发送真实鼠标拖动，但 Co
 - 不包含翻译卡、Provider、历史、收藏、OCR runtime/model、截图或真实选区消费。
 - 不安装全局 Hook，不发起翻译网络请求。
 - 本轮物理实机为单屏 100% DPI；多屏、负坐标、150%/200% DPI、任务栏换边和热插拔只完成自动化 fixture 覆盖。
-- Windows CI 仍为 `PENDING`；在 CI 证据和签字完成前，Phase 2 不能宣称完整验收通过。
+- P2-R-017 仅为物理拖动录像证据缺口，不扩大产品权限或运行能力；正式结论为 `PASS WITH ACCEPTED RISKS`。
 - 关闭边缘吸附后的自由横向位置只在当前会话保留；跨重启按锁定的 `displayId + edge + verticalRatio` 逻辑锚点恢复到最近边缘。精确自由 x 持久化不在已冻结的 Phase 2 契约和四个设置键之内。
