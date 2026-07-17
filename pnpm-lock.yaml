@@ -38,12 +38,18 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@desktop-translate/application':
+        specifier: workspace:*
+        version: link:../../packages/application
       '@desktop-translate/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
       '@desktop-translate/storage':
         specifier: workspace:*
         version: link:../../packages/storage
+      '@desktop-translate/translation':
+        specifier: workspace:*
+        version: link:../../packages/translation
       react:
         specifier: ^19.2.7
         version: 19.2.7

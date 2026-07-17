@@ -39,18 +39,26 @@ describe('role-isolated preload entrypoints', () => {
     const [namespace, api] = electron.exposeInMainWorld.mock.calls[0] ?? [];
     expect(namespace).toBe('desktopTranslateSettings');
     expect(Object.keys(api as object).sort()).toEqual([
+      'deleteBaiduCredentials',
       'getSnapshot',
       'onSnapshotChanged',
+      'openProviderPrivacyPolicy',
+      'openProviderServiceTerms',
       'resetBallPosition',
+      'saveBaiduCredentials',
       'setBallVisible',
       'setEdgeSnap',
       'setOcrActivation',
       'setSelectionEnabled',
-      'setTheme'
+      'setTheme',
+      'setTranslationEnabled',
+      'setTranslationSourceLanguage',
+      'setTranslationTargetLanguage',
+      'testTranslationProvider'
     ]);
   });
 
-  it('exposes only the source card API under the Card namespace', async () => {
+  it('exposes only the translation card API under the Card namespace', async () => {
     await import('./card.js');
     expect(electron.exposeInMainWorld).toHaveBeenCalledOnce();
     const [namespace, api] = electron.exposeInMainWorld.mock.calls[0] ?? [];
@@ -58,7 +66,8 @@ describe('role-isolated preload entrypoints', () => {
     expect(Object.keys(api as object).sort()).toEqual([
       'dismiss',
       'getCurrent',
-      'onChanged'
+      'onChanged',
+      'retry'
     ]);
   });
 });

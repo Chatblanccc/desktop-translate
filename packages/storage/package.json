@@ -1,11 +1,12 @@
 {
   "name": "@desktop-translate/storage",
-  "version": "0.3.0-phase3",
+  "version": "0.4.0-phase4",
   "private": true,
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "tsx --test ../../tests/storage/*.test.ts"
+    "test": "tsx --test ../../tests/storage/*.test.ts",
+    "test:coverage": "node --import tsx --test --experimental-sqlite --experimental-test-coverage --test-coverage-include=src/**/*.ts --test-coverage-lines=80 --test-coverage-functions=80 --test-coverage-branches=75 ../../tests/storage/*.test.ts"
   },
   "exports": "./src/index.ts"
 }

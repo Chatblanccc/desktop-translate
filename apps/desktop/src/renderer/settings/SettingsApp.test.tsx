@@ -18,6 +18,14 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
   readonly setTheme: ReturnType<typeof vi.fn>;
   readonly setSelectionEnabled: ReturnType<typeof vi.fn>;
   readonly setOcrActivation: ReturnType<typeof vi.fn>;
+  readonly setTranslationEnabled: ReturnType<typeof vi.fn>;
+  readonly setTranslationSourceLanguage: ReturnType<typeof vi.fn>;
+  readonly setTranslationTargetLanguage: ReturnType<typeof vi.fn>;
+  readonly saveBaiduCredentials: ReturnType<typeof vi.fn>;
+  readonly deleteBaiduCredentials: ReturnType<typeof vi.fn>;
+  readonly testTranslationProvider: ReturnType<typeof vi.fn>;
+  readonly openProviderPrivacyPolicy: ReturnType<typeof vi.fn>;
+  readonly openProviderServiceTerms: ReturnType<typeof vi.fn>;
   readonly resetBallPosition: ReturnType<typeof vi.fn>;
   readonly unsubscribe: ReturnType<typeof vi.fn>;
 } {
@@ -26,6 +34,14 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
   const setTheme = vi.fn().mockResolvedValue(undefined);
   const setSelectionEnabled = vi.fn().mockResolvedValue(undefined);
   const setOcrActivation = vi.fn().mockResolvedValue(undefined);
+  const setTranslationEnabled = vi.fn().mockResolvedValue(undefined);
+  const setTranslationSourceLanguage = vi.fn().mockResolvedValue(undefined);
+  const setTranslationTargetLanguage = vi.fn().mockResolvedValue(undefined);
+  const saveBaiduCredentials = vi.fn().mockResolvedValue(undefined);
+  const deleteBaiduCredentials = vi.fn().mockResolvedValue(undefined);
+  const testTranslationProvider = vi.fn().mockResolvedValue({ ok: true });
+  const openProviderPrivacyPolicy = vi.fn().mockResolvedValue(undefined);
+  const openProviderServiceTerms = vi.fn().mockResolvedValue(undefined);
   const resetBallPosition = vi.fn().mockResolvedValue(undefined);
   const unsubscribe = vi.fn();
 
@@ -38,6 +54,14 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
       setTheme,
       setSelectionEnabled,
       setOcrActivation,
+      setTranslationEnabled,
+      setTranslationSourceLanguage,
+      setTranslationTargetLanguage,
+      saveBaiduCredentials,
+      deleteBaiduCredentials,
+      testTranslationProvider,
+      openProviderPrivacyPolicy,
+      openProviderServiceTerms,
       resetBallPosition
     },
     setBallVisible,
@@ -45,6 +69,14 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
     setTheme,
     setSelectionEnabled,
     setOcrActivation,
+    setTranslationEnabled,
+    setTranslationSourceLanguage,
+    setTranslationTargetLanguage,
+    saveBaiduCredentials,
+    deleteBaiduCredentials,
+    testTranslationProvider,
+    openProviderPrivacyPolicy,
+    openProviderServiceTerms,
     resetBallPosition,
     unsubscribe
   };
@@ -99,7 +131,7 @@ describe('SettingsApp', () => {
       expect(screen.getByText('原生服务：部分可用')).toBeTruthy();
     });
     expect(screen.getByText('OCR 未配置')).toBeTruthy();
-    expect(screen.getByText(/0\.3\.0-phase3/)).toBeTruthy();
+    expect(screen.getByText(/0\.4\.0-phase4/)).toBeTruthy();
   });
 
   it('persists Phase 3 selection and OCR activation controls', async () => {
@@ -131,6 +163,127 @@ describe('SettingsApp', () => {
     await waitFor(() => expect((selectionToggle as HTMLInputElement).disabled).toBe(false));
     fireEvent.click(selectionToggle);
     await waitFor(() => expect(setSelectionEnabled).toHaveBeenCalledWith(false));
+  });
+
+  it('requires consent before saving credentials and enables configured translation', async () => {
+    const {
+      api,
+      saveBaiduCredentials,
+      setTranslationEnabled,
+      setTranslationSourceLanguage,
+      setTranslationTargetLanguage,
+      openProviderPrivacyPolicy,
+      openProviderServiceTerms
+    } = createSettingsApi({
+      ...DEFAULT_UI_SHELL_SNAPSHOT,
+      translation: {
+        enabled: false,
+        providerId: 'baidu',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        credentialStatus: 'configured',
+        consentVersion: 1
+      }
+    });
+    render(<SettingsApp api={api} />);
+    const enabled = await screen.findByRole('checkbox', { name: /启用百度在线翻译/u });
+    await waitFor(() => expect((enabled as HTMLInputElement).disabled).toBe(false));
+    fireEvent.click(enabled);
+    await waitFor(() => expect(setTranslationEnabled).toHaveBeenCalledWith(true));
+
+    fireEvent.change(screen.getByRole('combobox', { name: /目标语言/u }), {
+      target: { value: 'en' }
+    });
+    await waitFor(() => expect(setTranslationTargetLanguage).toHaveBeenCalledWith('en'));
+
+    fireEvent.change(screen.getByRole('combobox', { name: /源语言/u }), {
+      target: { value: 'ja' }
+    });
+    await waitFor(() => expect(setTranslationSourceLanguage).toHaveBeenCalledWith('ja'));
+
+    fireEvent.change(screen.getByLabelText('APP ID'), { target: { value: 'app-id' } });
+    fireEvent.change(screen.getByLabelText('密钥'), { target: { value: 'secret-key' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /我已了解/u }));
+    fireEvent.click(screen.getByRole('button', { name: '替换凭据' }));
+    await waitFor(() => expect(saveBaiduCredentials).toHaveBeenCalledWith(
+      'app-id', 'secret-key', 1
+    ));
+    expect((screen.getByLabelText('APP ID') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('密钥') as HTMLInputElement).value).toBe('');
+
+    const privacyButton = screen.getByRole('button', { name: '查看百度翻译隐私说明' });
+    await waitFor(() => expect((privacyButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(privacyButton);
+    await waitFor(() => expect(openProviderPrivacyPolicy).toHaveBeenCalledOnce());
+    const termsButton = screen.getByRole('button', {
+      name: '查看百度翻译开放平台服务条款'
+    });
+    await waitFor(() => expect((termsButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(termsButton);
+    await waitFor(() => expect(openProviderServiceTerms).toHaveBeenCalledOnce());
+  });
+
+  it('keeps the translation toggle optimistic while Main persists it and rolls back on failure', async () => {
+    const { api, setTranslationEnabled } = createSettingsApi({
+      ...DEFAULT_UI_SHELL_SNAPSHOT,
+      translation: {
+        enabled: false,
+        providerId: 'baidu',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        credentialStatus: 'configured',
+        consentVersion: 1
+      }
+    });
+    let rejectAction: ((reason?: unknown) => void) | undefined;
+    setTranslationEnabled.mockImplementation(() => new Promise<void>((_resolve, reject) => {
+      rejectAction = reject;
+    }));
+    render(<SettingsApp api={api} />);
+
+    const enabled = await screen.findByRole('checkbox', { name: /启用百度在线翻译/u });
+    await waitFor(() => expect((enabled as HTMLInputElement).disabled).toBe(false));
+    fireEvent.click(enabled);
+
+    expect((enabled as HTMLInputElement).checked).toBe(true);
+    expect((enabled as HTMLInputElement).disabled).toBe(true);
+    rejectAction?.(new Error('persistence failed'));
+
+    await waitFor(() => {
+      expect((enabled as HTMLInputElement).checked).toBe(false);
+      expect((enabled as HTMLInputElement).disabled).toBe(false);
+    });
+    expect(screen.getByRole('alert').textContent).toMatch(/设置未能保存/u);
+  });
+
+  it('allows unavailable credentials to be deleted or replaced through the recovery path', async () => {
+    const { api, saveBaiduCredentials, deleteBaiduCredentials } = createSettingsApi({
+      ...DEFAULT_UI_SHELL_SNAPSHOT,
+      translation: {
+        enabled: false,
+        providerId: 'baidu',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        credentialStatus: 'unavailable',
+        consentVersion: 1
+      }
+    });
+    render(<SettingsApp api={api} />);
+
+    const appId = await screen.findByLabelText('APP ID');
+    await waitFor(() => expect((appId as HTMLInputElement).disabled).toBe(false));
+    fireEvent.change(appId, { target: { value: 'replacement-app' } });
+    fireEvent.change(screen.getByLabelText('密钥'), { target: { value: 'replacement-secret' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: /我已了解/u }));
+    fireEvent.click(screen.getByRole('button', { name: '保存凭据' }));
+    await waitFor(() => expect(saveBaiduCredentials).toHaveBeenCalledWith(
+      'replacement-app', 'replacement-secret', 1
+    ));
+
+    const deleteButton = screen.getByRole('button', { name: '删除凭据' });
+    await waitFor(() => expect((deleteButton as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(deleteButton);
+    await waitFor(() => expect(deleteBaiduCredentials).toHaveBeenCalledOnce());
   });
 
   it('shows a safe message when the initial snapshot cannot be loaded', async () => {

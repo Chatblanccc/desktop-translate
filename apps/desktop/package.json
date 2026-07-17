@@ -1,12 +1,14 @@
 {
   "name": "@desktop-translate/desktop",
-  "version": "0.3.0-phase3",
+  "version": "0.4.0-phase4",
   "private": true,
   "type": "module",
   "main": ".vite/build/main.js",
   "dependencies": {
+    "@desktop-translate/application": "workspace:*",
     "@desktop-translate/contracts": "workspace:*",
     "@desktop-translate/storage": "workspace:*",
+    "@desktop-translate/translation": "workspace:*",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
@@ -14,13 +16,15 @@
     "build": "vite build --config vite.main.config.ts && vite build --config vite.preload.config.ts --mode ball && vite build --config vite.preload.config.ts --mode settings && vite build --config vite.preload.config.ts --mode card && vite build --config vite.renderer.config.ts",
     "start:phase2": "pnpm build && electron .",
     "start:phase3": "pnpm build && electron .",
+    "start:phase4": "pnpm build && electron .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "pnpm build && playwright test",
     "phase1:smoke": "tsx src/main/phase1-smoke.ts",
     "phase2:smoke": "pnpm build && playwright test --grep @smoke",
-    "phase3:smoke": "tsx src/main/phase3-smoke.ts"
+    "phase3:smoke": "tsx src/main/phase3-smoke.ts",
+    "phase4:smoke": "tsx src/main/phase4-smoke.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

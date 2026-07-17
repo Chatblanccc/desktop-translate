@@ -2,7 +2,12 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
   ssr: {
-    noExternal: ['@desktop-translate/contracts', '@desktop-translate/storage']
+    noExternal: [
+      '@desktop-translate/application',
+      '@desktop-translate/contracts',
+      '@desktop-translate/storage',
+      '@desktop-translate/translation'
+    ]
   },
   build: {
     ssr: 'src/main/index.ts',

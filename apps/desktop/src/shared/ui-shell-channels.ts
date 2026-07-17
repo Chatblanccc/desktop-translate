@@ -8,5 +8,13 @@ export const UI_SHELL_CHANNELS = Object.freeze({
   setTheme: 'ui-shell:set-theme',
   setSelectionEnabled: 'ui-shell:set-selection-enabled',
   setOcrActivation: 'ui-shell:set-ocr-activation',
+  setTranslationEnabled: 'ui-shell:set-translation-enabled',
+  setTranslationSourceLanguage: 'ui-shell:set-translation-source-language',
+  setTranslationTargetLanguage: 'ui-shell:set-translation-target-language',
+  saveBaiduCredentials: 'ui-shell:save-baidu-credentials',
+  deleteBaiduCredentials: 'ui-shell:delete-baidu-credentials',
+  testTranslationProvider: 'ui-shell:test-translation-provider',
+  openProviderPrivacyPolicy: 'ui-shell:open-provider-privacy-policy',
+  openProviderServiceTerms: 'ui-shell:open-provider-service-terms',
   resetBallPosition: 'ui-shell:reset-ball-position'
 } as const);

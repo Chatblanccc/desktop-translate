@@ -22,8 +22,21 @@ export interface SettingsRendererBridge {
   setTheme(theme: ThemeMode): Promise<void>;
   setSelectionEnabled(enabled: boolean): Promise<void>;
   setOcrActivation(activation: OcrActivation): Promise<void>;
+  setTranslationEnabled(enabled: boolean): Promise<void>;
+  setTranslationSourceLanguage(language: string): Promise<void>;
+  setTranslationTargetLanguage(language: string): Promise<void>;
+  saveBaiduCredentials(appId: string, secretKey: string, consentVersion: number): Promise<void>;
+  deleteBaiduCredentials(): Promise<void>;
+  testTranslationProvider(): Promise<TranslationProviderTestResult>;
+  openProviderPrivacyPolicy(): Promise<void>;
+  openProviderServiceTerms(): Promise<void>;
   resetBallPosition(): Promise<void>;
   onSnapshotChanged(listener: SnapshotChangedListener): () => void;
+}
+
+export interface TranslationProviderTestResult {
+  readonly ok: boolean;
+  readonly code?: string;
 }
 
 export interface IpcRendererBridgePort {
@@ -47,6 +60,15 @@ async function invokeVoid(
     ? await ipc.invoke(channel)
     : await ipc.invoke(channel, payload);
   if (result !== undefined) throw new Error('Main returned an unexpected UI shell response');
+}
+
+function isTranslationProviderTestResult(value: unknown): value is TranslationProviderTestResult {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (!Object.keys(record).every((key) => ['ok', 'code'].includes(key))) return false;
+  return typeof record.ok === 'boolean'
+    && (record.code === undefined
+      || (typeof record.code === 'string' && /^[a-z][a-z0-9-]{0,63}$/u.test(record.code)));
 }
 
 function subscribe(
@@ -82,6 +104,31 @@ export function createSettingsRendererBridge(ipc: IpcRendererBridgePort): Settin
       invokeVoid(ipc, UI_SHELL_CHANNELS.setSelectionEnabled, { value }),
     setOcrActivation: (value: OcrActivation) =>
       invokeVoid(ipc, UI_SHELL_CHANNELS.setOcrActivation, { value }),
+    setTranslationEnabled: (value: boolean) =>
+      invokeVoid(ipc, UI_SHELL_CHANNELS.setTranslationEnabled, { value }),
+    setTranslationSourceLanguage: (value: string) =>
+      invokeVoid(ipc, UI_SHELL_CHANNELS.setTranslationSourceLanguage, { value }),
+    setTranslationTargetLanguage: (value: string) =>
+      invokeVoid(ipc, UI_SHELL_CHANNELS.setTranslationTargetLanguage, { value }),
+    saveBaiduCredentials: (appId: string, secretKey: string, consentVersion: number) =>
+      invokeVoid(ipc, UI_SHELL_CHANNELS.saveBaiduCredentials, {
+        appId,
+        secretKey,
+        consentVersion
+      }),
+    deleteBaiduCredentials: () =>
+      invokeVoid(ipc, UI_SHELL_CHANNELS.deleteBaiduCredentials),
+    async testTranslationProvider() {
+      const value = await ipc.invoke(UI_SHELL_CHANNELS.testTranslationProvider);
+      if (!isTranslationProviderTestResult(value)) {
+        throw new Error('Main returned an invalid provider test result');
+      }
+      return value;
+    },
+    openProviderPrivacyPolicy: () =>
+      invokeVoid(ipc, UI_SHELL_CHANNELS.openProviderPrivacyPolicy),
+    openProviderServiceTerms: () =>
+      invokeVoid(ipc, UI_SHELL_CHANNELS.openProviderServiceTerms),
     resetBallPosition: () => invokeVoid(ipc, UI_SHELL_CHANNELS.resetBallPosition),
     onSnapshotChanged: (listener: SnapshotChangedListener) => subscribe(ipc, listener)
   });

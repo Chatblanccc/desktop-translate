@@ -1,4 +1,6 @@
+export * from "./baidu.js";
 export * from "./provider.js";
+export * from "./registry.js";
 export type {
   DictionarySense,
   LanguageCode,

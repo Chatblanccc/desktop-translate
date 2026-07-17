@@ -5,10 +5,11 @@ import {
   type NativeUiStatus,
   type OcrActivation,
   type SelectionLifecycle,
+  type CredentialStatus,
   type ThemeMode,
   type UiShellSnapshot
 } from '@desktop-translate/contracts/ui-shell';
-import type { Phase3UiSettings } from '@desktop-translate/storage';
+import type { Phase4UiSettings } from '@desktop-translate/storage';
 
 export class UiShellState extends EventEmitter {
   private snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT;
@@ -17,7 +18,10 @@ export class UiShellState extends EventEmitter {
     return structuredClone(this.snapshot);
   }
 
-  public initialize(settings: Phase3UiSettings): void {
+  public initialize(
+    settings: Phase4UiSettings,
+    credentialStatus: CredentialStatus = 'missing'
+  ): void {
     this.replace({
       ...this.snapshot,
       ball: settings.ball.anchor === undefined
@@ -32,6 +36,13 @@ export class UiShellState extends EventEmitter {
         enabled: settings.selection.enabled,
         lifecycle: settings.selection.enabled ? 'starting' : 'disabled',
         ocrActivation: settings.selection.ocrActivation
+      },
+      translation: {
+        ...settings.translation,
+        credentialStatus,
+        enabled: settings.translation.enabled
+          && credentialStatus === 'configured'
+          && settings.translation.consentVersion >= 1
       }
     });
   }
@@ -87,6 +98,45 @@ export class UiShellState extends EventEmitter {
     this.replace({
       ...this.snapshot,
       selection: { ...this.snapshot.selection, ocrActivation }
+    });
+  }
+
+  public setTranslationEnabled(enabled: boolean): void {
+    this.replace({
+      ...this.snapshot,
+      translation: { ...this.snapshot.translation, enabled }
+    });
+  }
+
+  public setTranslationTargetLanguage(targetLanguage: string): void {
+    this.replace({
+      ...this.snapshot,
+      translation: { ...this.snapshot.translation, targetLanguage }
+    });
+  }
+
+  public setTranslationSourceLanguage(sourceLanguage: string): void {
+    this.replace({
+      ...this.snapshot,
+      translation: { ...this.snapshot.translation, sourceLanguage }
+    });
+  }
+
+  public setTranslationCredentialStatus(credentialStatus: CredentialStatus): void {
+    this.replace({
+      ...this.snapshot,
+      translation: {
+        ...this.snapshot.translation,
+        credentialStatus,
+        enabled: credentialStatus === 'configured' && this.snapshot.translation.enabled
+      }
+    });
+  }
+
+  public setTranslationConsentVersion(consentVersion: number): void {
+    this.replace({
+      ...this.snapshot,
+      translation: { ...this.snapshot.translation, consentVersion }
     });
   }
 

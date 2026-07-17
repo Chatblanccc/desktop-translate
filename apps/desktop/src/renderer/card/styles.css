@@ -21,6 +21,27 @@ body,
   box-shadow: 0 12px 32px rgb(0 0 0 / 28%);
 }
 
+.card-content {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  padding: 10px 0;
+  overflow: auto;
+}
+
+.card-text-section {
+  min-height: 0;
+}
+
+.card-text-section h2 {
+  margin: 0 0 4px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .card-header {
   display: flex;
   align-items: flex-start;
@@ -67,11 +88,73 @@ body,
 }
 
 .card-text {
-  margin: 14px 0;
-  overflow: auto;
+  margin: 0;
   font-size: 15px;
   line-height: 1.55;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   user-select: text;
+}
+
+.translated-section {
+  padding-top: 9px;
+  border-top: 1px solid var(--color-border);
+}
+
+.translated-text {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.translation-state,
+.translation-error {
+  padding: 10px 12px;
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.translation-state {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-hover);
+}
+
+.translation-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--color-border-strong);
+  border-top-color: var(--color-accent);
+  border-radius: 50%;
+  animation: card-spin 700ms linear infinite;
+}
+
+.translation-error {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 9%, var(--color-surface-solid));
+  border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+}
+
+.translation-error p {
+  margin: 0;
+}
+
+.card-retry {
+  min-height: 30px;
+  padding: 4px 10px;
+  margin-top: 8px;
+  color: var(--color-text);
+  cursor: pointer;
+  background: var(--color-surface-solid);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 5px;
+}
+
+@keyframes card-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .translation-spinner { animation: none; }
 }

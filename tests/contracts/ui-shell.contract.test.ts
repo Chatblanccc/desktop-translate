@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   DEFAULT_UI_SHELL_SNAPSHOT,
   isBallAnchor,
+  isCredentialStatus,
   isNativeUiStatus,
   isOcrActivation,
   isSelectionLifecycle,
@@ -17,13 +18,21 @@ import {
   isUiShellSnapshot,
 } from "../../packages/contracts/src/ui-shell.ts";
 
-test("Phase 3 default snapshot is strict, safe, and deeply immutable", () => {
+test("Phase 4 default snapshot is strict, opt-in, safe, and deeply immutable", () => {
   assert.deepEqual(DEFAULT_UI_SHELL_SNAPSHOT, {
-    version: 2,
+    version: 3,
     ball: { visible: true, edgeSnap: true },
     theme: "system",
     native: { status: "unavailable", degradedCapabilities: [] },
     selection: { enabled: true, lifecycle: "starting", ocrActivation: "fallback" },
+    translation: {
+      enabled: false,
+      providerId: "baidu",
+      sourceLanguage: "auto",
+      targetLanguage: "zh-CN",
+      credentialStatus: "missing",
+      consentVersion: 0,
+    },
   });
   assert.equal(isUiShellSnapshot(DEFAULT_UI_SHELL_SNAPSHOT), true);
   assert.equal(Object.isFrozen(DEFAULT_UI_SHELL_SNAPSHOT), true);
@@ -31,6 +40,7 @@ test("Phase 3 default snapshot is strict, safe, and deeply immutable", () => {
   assert.equal(Object.isFrozen(DEFAULT_UI_SHELL_SNAPSHOT.native), true);
   assert.equal(Object.isFrozen(DEFAULT_UI_SHELL_SNAPSHOT.native.degradedCapabilities), true);
   assert.equal(Object.isFrozen(DEFAULT_UI_SHELL_SNAPSHOT.selection), true);
+  assert.equal(Object.isFrozen(DEFAULT_UI_SHELL_SNAPSHOT.translation), true);
 });
 
 test("theme and native status guards accept only the locked vocabulary", () => {
@@ -42,6 +52,9 @@ test("theme and native status guards accept only the locked vocabulary", () => {
     assert.equal(isSelectionLifecycle(lifecycle), true);
   }
   for (const activation of ["fallback", "alt-drag"]) assert.equal(isOcrActivation(activation), true);
+  for (const status of ["missing", "configured", "unavailable"]) {
+    assert.equal(isCredentialStatus(status), true);
+  }
   for (const invalid of ["auto", "high-contrast", "", null, 1]) assert.equal(isThemeMode(invalid), false);
   for (const invalid of ["stopping", "offline", "", null, 1]) assert.equal(isNativeUiStatus(invalid), false);
 });
@@ -64,7 +77,7 @@ test("ball anchors support edge ratios and reject unsafe or extra fields", () =>
 
 test("snapshot guard rejects unknown fields, malformed anchors, and duplicate capabilities", () => {
   const valid = {
-    version: 2,
+    version: 3,
     ball: {
       visible: false,
       edgeSnap: true,
@@ -73,6 +86,14 @@ test("snapshot guard rejects unknown fields, malformed anchors, and duplicate ca
     theme: "dark",
     native: { status: "degraded", degradedCapabilities: ["ocr"] },
     selection: { enabled: true, lifecycle: "degraded", ocrActivation: "fallback" },
+    translation: {
+      enabled: true,
+      providerId: "baidu",
+      sourceLanguage: "auto",
+      targetLanguage: "zh-CN",
+      credentialStatus: "configured",
+      consentVersion: 1,
+    },
   };
   assert.equal(isUiShellSnapshot(valid), true);
   assert.equal(isUiShellSnapshot({ ...valid, applicationVersion: "0.2.0-phase2" }), false);
@@ -83,6 +104,42 @@ test("snapshot guard rejects unknown fields, malformed anchors, and duplicate ca
   );
   assert.equal(
     isUiShellSnapshot({ ...valid, native: { ...valid.native, degradedCapabilities: ["OCR"] } }),
+    false,
+  );
+  assert.equal(
+    isUiShellSnapshot({ ...valid, translation: { ...valid.translation, apiKey: "secret" } }),
+    false,
+  );
+  assert.equal(
+    isUiShellSnapshot({ ...valid, translation: { ...valid.translation, providerId: "Baidu" } }),
+    false,
+  );
+  assert.equal(
+    isUiShellSnapshot({ ...valid, translation: { ...valid.translation, providerId: "fixture" } }),
+    false,
+  );
+  assert.equal(
+    isUiShellSnapshot({ ...valid, translation: { ...valid.translation, sourceLanguage: "english" } }),
+    false,
+  );
+  assert.equal(
+    isUiShellSnapshot({ ...valid, translation: { ...valid.translation, sourceLanguage: "eo" } }),
+    false,
+  );
+  assert.equal(
+    isUiShellSnapshot({ ...valid, translation: { ...valid.translation, targetLanguage: "auto" } }),
+    false,
+  );
+  assert.equal(
+    isUiShellSnapshot({ ...valid, translation: { ...valid.translation, targetLanguage: "eo" } }),
+    false,
+  );
+  assert.equal(
+    isUiShellSnapshot({ ...valid, translation: { ...valid.translation, credentialStatus: "verified" } }),
+    false,
+  );
+  assert.equal(
+    isUiShellSnapshot({ ...valid, translation: { ...valid.translation, consentVersion: -1 } }),
     false,
   );
 });

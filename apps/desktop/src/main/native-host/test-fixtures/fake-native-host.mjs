@@ -25,6 +25,7 @@ const server = net.createServer((socket) => {
   let buffered = Buffer.alloc(0);
   let listening = false;
   let eventSequence = 1;
+  let startCount = 0;
   const sendSelection = () => {
     const timestamp = new Date().toISOString();
     socket.write(encode({
@@ -36,11 +37,11 @@ const server = net.createServer((socket) => {
       payload: {
         selectionId: '123e4567-e89b-42d3-a456-426614174000',
         source: 'uia',
-        text: 'Phase 3 selection preview',
+        text: 'Phase 4 selection preview',
         ranges: [{
           start: 0,
           end: 25,
-          text: 'Phase 3 selection preview',
+          text: 'Phase 4 selection preview',
           physicalRects: [{ x: 640, y: 360, width: 260, height: 32 }]
         }],
         confidence: 1,
@@ -110,12 +111,16 @@ const server = net.createServer((socket) => {
         );
       } else if (request.method === 'start') {
         listening = true;
+        startCount += 1;
         socket.write(encode({
           ...base,
           method: 'start',
           payload: { ok: true, listening: true, effectiveConfig: request.payload }
         }));
-        if (mode === 'selection') setTimeout(sendSelection, 50);
+        if (
+          mode === 'selection'
+          || (mode === 'selection-on-restart' && startCount > 1)
+        ) setTimeout(sendSelection, 50);
       } else if (request.method === 'stop') {
         listening = false;
         socket.write(encode({

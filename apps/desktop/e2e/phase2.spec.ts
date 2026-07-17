@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
+import { DatabaseSync } from 'node:sqlite';
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
 const appPath = resolve(process.cwd());
@@ -28,6 +29,14 @@ interface DebugState {
       readonly lifecycle: string;
       readonly ocrActivation: string;
     };
+    readonly translation: {
+      readonly enabled: boolean;
+      readonly providerId: string;
+      readonly sourceLanguage: string;
+      readonly targetLanguage: string;
+      readonly credentialStatus: string;
+      readonly consentVersion: number;
+    };
   };
   readonly trayCreated: boolean;
   readonly ballCreated: boolean;
@@ -39,7 +48,13 @@ interface DebugState {
   readonly cardVisible: boolean;
 }
 
-function environment(userData: string, nativeMode?: string): Record<string, string> {
+type FetchMode = 'block' | 'baidu-success';
+
+function environment(
+  userData: string,
+  nativeMode?: string,
+  fetchMode?: FetchMode
+): Record<string, string> {
   const inherited = Object.fromEntries(
     Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)
   );
@@ -56,11 +71,64 @@ function environment(userData: string, nativeMode?: string): Record<string, stri
     env.DESKTOP_TRANSLATE_E2E_NATIVE_MODE = nativeMode;
     env.DESKTOP_TRANSLATE_E2E_NATIVE_TRACE = join(userData, 'native-methods.log');
   }
+  if (fetchMode) {
+    env.DESKTOP_TRANSLATE_E2E_FETCH_MODE = fetchMode;
+    env.DESKTOP_TRANSLATE_E2E_FETCH_TRACE = join(userData, 'main-fetches.log');
+  }
   return env;
 }
 
-async function launch(userData: string, nativeMode?: string): Promise<ElectronApplication> {
-  return electron.launch({ args: [appPath], env: environment(userData, nativeMode) });
+async function launch(
+  userData: string,
+  nativeMode?: string,
+  fetchMode?: FetchMode
+): Promise<ElectronApplication> {
+  return electron.launch({ args: [appPath], env: environment(userData, nativeMode, fetchMode) });
+}
+
+async function readJsonLines(path: string): Promise<readonly Record<string, unknown>[]> {
+  try {
+    const value = await readFile(path, 'utf8');
+    return value.trim() === ''
+      ? []
+      : value.trim().split(/\r?\n/u).map((line) => JSON.parse(line) as Record<string, unknown>);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+}
+
+async function expectEncryptedStorageDoesNotContain(
+  userData: string,
+  plaintext: string
+): Promise<void> {
+  const encodedValues = [Buffer.from(plaintext, 'utf8'), Buffer.from(plaintext, 'utf16le')];
+  for (const suffix of ['', '-wal', '-shm']) {
+    const path = join(userData, `desktop-translate.sqlite3${suffix}`);
+    let contents: Buffer;
+    try {
+      contents = await readFile(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
+    }
+    for (const encoded of encodedValues) expect(contents.includes(encoded)).toBe(false);
+  }
+}
+
+function corruptStoredBaiduCredentials(userData: string): void {
+  const database = new DatabaseSync(join(userData, 'desktop-translate.sqlite3'));
+  try {
+    const result = database.prepare(
+      'UPDATE secrets SET encrypted_value = ? WHERE key = ?'
+    ).run(
+      Buffer.from('phase4-corrupted-ciphertext', 'utf8'),
+      'translation.provider.baidu.credentials'
+    );
+    expect(Number(result.changes)).toBe(1);
+  } finally {
+    database.close();
+  }
 }
 
 async function quitApplication(application: ElectronApplication): Promise<void> {
@@ -298,7 +366,7 @@ test('Native selection event opens a sandboxed source-only card @smoke', async (
   const userData = await mkdtemp(join(tmpdir(), 'desktop-translate-selection-'));
   let application: ElectronApplication | undefined;
   try {
-    application = await launch(userData, 'selection');
+    application = await launch(userData, 'selection', 'block');
     const runningApplication = application;
     await waitForShell(runningApplication);
     await expect.poll(() => debugState(runningApplication)).toMatchObject({
@@ -309,8 +377,9 @@ test('Native selection event opens a sandboxed source-only card @smoke', async (
 
     const card = await findWindow(runningApplication, '桌面翻译识别结果');
     await expect(card.getByRole('heading', { name: '识别结果' })).toBeVisible();
-    await expect(card.getByText('Phase 3 selection preview')).toBeVisible();
+    await expect(card.getByText('Phase 4 selection preview')).toBeVisible();
     await expect(card.getByText('应用文字')).toBeVisible();
+    await expect(card.getByText('在线翻译未启用 · 原文预览')).toBeVisible();
     expect(await card.evaluate(() => typeof window.require)).toBe('undefined');
     expect(await card.evaluate(() => typeof window.process)).toBe('undefined');
     expect(await card.evaluate(() => {
@@ -327,11 +396,289 @@ test('Native selection event opens a sandboxed source-only card @smoke', async (
     })).toEqual({
       electron: 'undefined',
       ipcRenderer: 'undefined',
-      bridgeKeys: ['dismiss', 'getCurrent', 'onChanged']
+      bridgeKeys: ['dismiss', 'getCurrent', 'onChanged', 'retry']
     });
+
+    expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
 
     await card.getByRole('button', { name: '关闭识别结果' }).click();
     await expect.poll(() => debugState(runningApplication)).toMatchObject({ cardVisible: false });
+  } finally {
+    if (application !== undefined) {
+      await quitApplication(application).catch(() => application?.process().kill());
+    }
+    await removeUserData(userData);
+  }
+});
+
+test('Phase 4 translation is fail-closed until credentials and consent are saved', async () => {
+  const userData = await mkdtemp(join(tmpdir(), 'desktop-translate-phase4-settings-'));
+  let application: ElectronApplication | undefined;
+  try {
+    application = await launch(userData, undefined, 'block');
+    const runningApplication = application;
+    await waitForShell(runningApplication);
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({
+      snapshot: {
+        translation: {
+          enabled: false,
+          providerId: 'baidu',
+          targetLanguage: 'zh-CN',
+          credentialStatus: 'missing',
+          consentVersion: 0
+        }
+      }
+    });
+
+    await runningApplication.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
+    const settings = await findWindow(runningApplication, '桌面翻译设置');
+    const translationToggle = settings.getByRole('checkbox', { name: /启用百度在线翻译/u });
+    await expect(translationToggle).toBeDisabled();
+    await expect(settings.locator('.provider-status')).toContainText('未配置凭据');
+
+    await settings.getByLabel('APP ID', { exact: true }).fill('phase4-e2e-app');
+    await settings.getByLabel('密钥', { exact: true }).fill('phase4-e2e-secret');
+    await settings.getByRole('checkbox', { name: /我已了解/u }).check();
+    await settings.getByRole('button', { name: '保存凭据' }).click();
+
+    await expect(settings.locator('.provider-status')).toContainText('凭据已配置');
+    await expect(settings.locator('.provider-status')).toContainText('凭据已安全保存');
+    await expect(settings.getByLabel('APP ID', { exact: true })).toHaveValue('');
+    await expect(settings.getByLabel('密钥', { exact: true })).toHaveValue('');
+    expect(await settings.locator('body').innerText()).not.toContain('phase4-e2e-app');
+    expect(await settings.locator('body').innerText()).not.toContain('phase4-e2e-secret');
+    await expectEncryptedStorageDoesNotContain(userData, 'phase4-e2e-app');
+    await expectEncryptedStorageDoesNotContain(userData, 'phase4-e2e-secret');
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({
+      snapshot: {
+        translation: {
+          enabled: false,
+          credentialStatus: 'configured',
+          consentVersion: 1
+        }
+      }
+    });
+
+    await expect(translationToggle).toBeEnabled();
+    await translationToggle.check();
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({
+      snapshot: { translation: { enabled: true } }
+    });
+    expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
+
+    await settings.getByRole('button', { name: '删除凭据' }).click();
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({
+      snapshot: {
+        translation: {
+          enabled: false,
+          credentialStatus: 'missing',
+          consentVersion: 0
+        }
+      }
+    });
+    await expect(translationToggle).toBeDisabled();
+    expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
+  } finally {
+    if (application !== undefined) {
+      await quitApplication(application).catch(() => application?.process().kill());
+    }
+    await removeUserData(userData);
+  }
+});
+
+test('Phase 4 settings survive a full restart and credential deletion stays fail-closed', async () => {
+  const userData = await mkdtemp(join(tmpdir(), 'desktop-translate-phase4-restart-'));
+  let application: ElectronApplication | undefined;
+  try {
+    application = await launch(userData, undefined, 'block');
+    await waitForShell(application);
+    await application.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
+    const initialSettings = await findWindow(application, '桌面翻译设置');
+
+    await initialSettings.locator('#translation-source-language').selectOption('en');
+    await initialSettings.locator('#translation-target-language').selectOption('ja');
+    await initialSettings.getByLabel('APP ID', { exact: true }).fill('phase4-restart-app');
+    await initialSettings.getByLabel('密钥', { exact: true }).fill('phase4-restart-secret');
+    await initialSettings.getByRole('checkbox', { name: /我已了解/u }).check();
+    await initialSettings.getByRole('button', { name: '保存凭据' }).click();
+    const initialTranslationToggle = initialSettings.getByRole('checkbox', {
+      name: /启用百度在线翻译/u
+    });
+    await expect(initialTranslationToggle).toBeEnabled();
+    await initialTranslationToggle.check();
+    await expect.poll(() => debugState(application!)).toMatchObject({
+      snapshot: {
+        translation: {
+          enabled: true,
+          providerId: 'baidu',
+          sourceLanguage: 'en',
+          targetLanguage: 'ja',
+          credentialStatus: 'configured',
+          consentVersion: 1
+        }
+      }
+    });
+    await expectEncryptedStorageDoesNotContain(userData, 'phase4-restart-app');
+    await expectEncryptedStorageDoesNotContain(userData, 'phase4-restart-secret');
+    expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
+
+    await quitApplication(application);
+    application = await launch(userData, undefined, 'block');
+    await waitForShell(application);
+    await expect.poll(() => debugState(application!)).toMatchObject({
+      snapshot: {
+        translation: {
+          enabled: true,
+          providerId: 'baidu',
+          sourceLanguage: 'en',
+          targetLanguage: 'ja',
+          credentialStatus: 'configured',
+          consentVersion: 1
+        }
+      }
+    });
+    expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
+
+    await quitApplication(application);
+    corruptStoredBaiduCredentials(userData);
+    application = await launch(userData, undefined, 'block');
+    await waitForShell(application);
+    await expect.poll(() => debugState(application!)).toMatchObject({
+      snapshot: {
+        translation: {
+          enabled: false,
+          providerId: 'baidu',
+          sourceLanguage: 'en',
+          targetLanguage: 'ja',
+          credentialStatus: 'unavailable',
+          consentVersion: 1
+        }
+      }
+    });
+    expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
+
+    await application.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
+    const restartedSettings = await findWindow(application, '桌面翻译设置');
+    await expect(restartedSettings.locator('#translation-source-language')).toHaveValue('en');
+    await expect(restartedSettings.locator('#translation-target-language')).toHaveValue('ja');
+    const restartedTranslationToggle = restartedSettings.getByRole('checkbox', {
+      name: /启用百度在线翻译/u
+    });
+    await expect(restartedTranslationToggle).not.toBeChecked();
+    await expect(restartedTranslationToggle).toBeDisabled();
+    await expect(restartedSettings.locator('.provider-status')).toContainText('不可用');
+    const recoveryDeleteButton = restartedSettings.getByRole('button', { name: '删除凭据' });
+    await expect(recoveryDeleteButton).toBeEnabled();
+    await recoveryDeleteButton.click();
+    await expect.poll(() => debugState(application!)).toMatchObject({
+      snapshot: {
+        translation: {
+          enabled: false,
+          sourceLanguage: 'en',
+          targetLanguage: 'ja',
+          credentialStatus: 'missing',
+          consentVersion: 0
+        }
+      }
+    });
+    expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
+
+    await quitApplication(application);
+    application = await launch(userData, undefined, 'block');
+    await waitForShell(application);
+    await expect.poll(() => debugState(application!)).toMatchObject({
+      snapshot: {
+        translation: {
+          enabled: false,
+          providerId: 'baidu',
+          sourceLanguage: 'en',
+          targetLanguage: 'ja',
+          credentialStatus: 'missing',
+          consentVersion: 0
+        }
+      }
+    });
+    expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
+  } finally {
+    if (application !== undefined) {
+      await quitApplication(application).catch(() => application?.process().kill());
+    }
+    await removeUserData(userData);
+  }
+});
+
+test('Phase 4 runs the translated card chain through the allowlisted Main transport', async () => {
+  const userData = await mkdtemp(join(tmpdir(), 'desktop-translate-phase4-translation-'));
+  let application: ElectronApplication | undefined;
+  try {
+    application = await launch(userData, 'selection-on-restart', 'baidu-success');
+    const runningApplication = application;
+    await waitForShell(runningApplication);
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({
+      snapshot: { selection: { enabled: true, lifecycle: 'listening' } },
+      cardVisible: false
+    });
+
+    await runningApplication.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
+    const settings = await findWindow(runningApplication, '桌面翻译设置');
+    await settings.getByLabel('APP ID', { exact: true }).fill('phase4-e2e-app');
+    await settings.getByLabel('密钥', { exact: true }).fill('phase4-e2e-secret');
+    await settings.getByRole('checkbox', { name: /我已了解/u }).check();
+    await settings.getByRole('button', { name: '保存凭据' }).click();
+    await expect(settings.locator('.provider-status')).toContainText('凭据已配置');
+
+    await settings.getByRole('button', { name: '测试连接' }).click();
+    await expect(settings.locator('.provider-status')).toContainText('连接测试成功');
+    const translationToggle = settings.getByRole('checkbox', { name: /启用百度在线翻译/u });
+    await translationToggle.check();
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({
+      snapshot: { translation: { enabled: true } }
+    });
+
+    const selectionToggle = settings.getByRole('checkbox', { name: /启用划词取词/u });
+    await selectionToggle.uncheck();
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({
+      snapshot: { selection: { enabled: false, lifecycle: 'disabled' } }
+    });
+    await selectionToggle.check();
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({
+      snapshot: { selection: { enabled: true, lifecycle: 'listening' } },
+      cardCreated: true,
+      cardVisible: true
+    });
+
+    const card = await findWindow(runningApplication, '桌面翻译识别结果');
+    await expect(card.getByRole('heading', { name: '翻译结果' })).toBeVisible();
+    await expect(card.getByText('Phase 4 selection preview')).toBeVisible();
+    await expect(card.getByText('E2E translated (25)')).toBeVisible();
+    await expect(card.getByText('百度翻译')).toBeVisible();
+
+    const expectedTrace = [
+      expect.objectContaining({
+        kind: 'baidu-request',
+        method: 'POST',
+        sourceLanguage: 'en',
+        targetLanguage: 'zh',
+        queryBytes: 5,
+        appIdPresent: true,
+        signatureShapeValid: true
+      }),
+      expect.objectContaining({
+        kind: 'baidu-request',
+        method: 'POST',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh',
+        queryBytes: 25,
+        appIdPresent: true,
+        signatureShapeValid: true
+      })
+    ];
+    await expect.poll(() => readJsonLines(join(userData, 'main-fetches.log'))).toEqual(expectedTrace);
+    const traceText = JSON.stringify(await readJsonLines(join(userData, 'main-fetches.log')));
+    expect(traceText).not.toContain('phase4-e2e-app');
+    expect(traceText).not.toContain('phase4-e2e-secret');
+    expect(traceText).not.toContain('hello');
+    expect(traceText).not.toContain('Phase 4 selection preview');
   } finally {
     if (application !== undefined) {
       await quitApplication(application).catch(() => application?.process().kill());

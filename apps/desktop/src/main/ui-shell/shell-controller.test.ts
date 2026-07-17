@@ -5,6 +5,7 @@ import {
 } from '@desktop-translate/contracts/ui-shell';
 import type { HealthResponse } from '@desktop-translate/contracts/native-ipc';
 import type { SelectionResult } from '@desktop-translate/contracts/native-ipc';
+import type { BaiduTransportRequest } from '@desktop-translate/translation';
 
 type EventHandler = (...args: unknown[]) => void;
 
@@ -13,7 +14,7 @@ const mocks = vi.hoisted(() => {
   const app = {
     getPath: vi.fn(() => 'C:\\profile'),
     getAppPath: vi.fn(() => 'C:\\repo\\apps\\desktop'),
-    getVersion: vi.fn(() => '0.3.0-phase3'),
+    getVersion: vi.fn(() => '0.4.0-phase4'),
     get isPackaged(): boolean { return appState.isPackaged; }
   };
 
@@ -55,6 +56,22 @@ const mocks = vi.hoisted(() => {
     }
   };
   const nativeTheme = { themeSource: 'system' };
+  const credentialState: {
+    encryptionAvailable: boolean;
+    encrypted: Uint8Array | undefined;
+  } = {
+    encryptionAvailable: true,
+    encrypted: undefined
+  };
+  const safeStorage = {
+    isAsyncEncryptionAvailable: vi.fn(async () => credentialState.encryptionAvailable),
+    encryptStringAsync: vi.fn(async (value: string) => Buffer.from(value, 'utf8')),
+    decryptStringAsync: vi.fn(async (value: Buffer) => ({
+      result: value.toString('utf8'),
+      shouldReEncrypt: false
+    }))
+  };
+  const shell = { openExternal: vi.fn(async (_url: string) => undefined) };
   const ipcMain = { role: 'ipc-main' };
 
   class FakeDatabaseSync {
@@ -71,13 +88,27 @@ const mocks = vi.hoisted(() => {
       ball: { visible: boolean; edgeSnap: boolean; anchor?: BallAnchor };
       theme: 'system' | 'light' | 'dark';
       selection: { enabled: boolean; ocrActivation: 'fallback' | 'alt-drag' };
+      translation: {
+        enabled: boolean;
+        providerId: string;
+        sourceLanguage: string | 'auto';
+        targetLanguage: string;
+        consentVersion: number;
+      };
     };
     rejectAnchor: boolean;
   } = {
     loadResult: {
       ball: { visible: true, edgeSnap: true },
       theme: 'system',
-      selection: { enabled: true, ocrActivation: 'fallback' }
+      selection: { enabled: true, ocrActivation: 'fallback' },
+      translation: {
+        enabled: false,
+        providerId: 'baidu',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        consentVersion: 0
+      }
     },
     rejectAnchor: false
   };
@@ -89,6 +120,11 @@ const mocks = vi.hoisted(() => {
     public readonly setTheme = vi.fn(async (_value: string) => undefined);
     public readonly setSelectionEnabled = vi.fn(async (_value: boolean) => undefined);
     public readonly setOcrActivation = vi.fn(async (_value: string) => undefined);
+    public readonly setTranslationEnabled = vi.fn(async (_value: boolean) => undefined);
+    public readonly setTranslationSourceLanguage = vi.fn(async (_value: string) => undefined);
+    public readonly setTranslationTargetLanguage = vi.fn(async (_value: string) => undefined);
+    public readonly setTranslationConsentVersion = vi.fn(async (_value: number) => undefined);
+    public readonly resetTranslationConsent = vi.fn(async () => undefined);
     public readonly setBallAnchor = vi.fn(async (_value: BallAnchor) => {
       if (settingsState.rejectAnchor) throw new Error('anchor write failed');
     });
@@ -97,6 +133,41 @@ const mocks = vi.hoisted(() => {
       public readonly options: { readonly onInvalidSetting?: (key: string) => void }
     ) {
       FakeSettingsRepository.instances.push(this);
+    }
+  }
+
+  class FakeSecretsRepository {
+    public static readonly instances: FakeSecretsRepository[] = [];
+    public readonly getEncrypted = vi.fn(async (_key: string) => credentialState.encrypted);
+    public readonly setEncrypted = vi.fn(async (
+      _key: string,
+      value: Uint8Array,
+      _updatedAt: string
+    ) => {
+      credentialState.encrypted = Uint8Array.from(value);
+    });
+    public readonly replaceEncryptedIfCurrent = vi.fn(async (
+      _key: string,
+      expectedValue: Uint8Array,
+      replacementValue: Uint8Array,
+      _updatedAt: string
+    ) => {
+      if (
+        credentialState.encrypted === undefined ||
+        !Buffer.from(credentialState.encrypted).equals(Buffer.from(expectedValue))
+      ) {
+        return false;
+      }
+      credentialState.encrypted = Uint8Array.from(replacementValue);
+      return true;
+    });
+    public readonly delete = vi.fn(async (_key: string) => {
+      const existed = credentialState.encrypted !== undefined;
+      credentialState.encrypted = undefined;
+      return existed;
+    });
+    public constructor(public readonly database: FakeDatabaseSync) {
+      FakeSecretsRepository.instances.push(this);
     }
   }
 
@@ -272,12 +343,16 @@ const mocks = vi.hoisted(() => {
     sessionOn,
     session,
     nativeTheme,
+    safeStorage,
+    shell,
+    credentialState,
     ipcMain,
     FakeDatabaseSync,
     runStorageMigrations,
     settingsState,
     startupState,
     FakeSettingsRepository,
+    FakeSecretsRepository,
     FakeExclusionsRepository,
     exclusionsState,
     FakeWindowManager,
@@ -299,11 +374,14 @@ vi.mock('electron', () => ({
   app: mocks.app,
   ipcMain: mocks.ipcMain,
   nativeTheme: mocks.nativeTheme,
+  safeStorage: mocks.safeStorage,
   screen: mocks.screen,
-  session: mocks.session
+  session: mocks.session,
+  shell: mocks.shell
 }));
 vi.mock('@desktop-translate/storage', () => ({
-  SqlitePhase3SettingsRepository: mocks.FakeSettingsRepository,
+  SqlitePhase4SettingsRepository: mocks.FakeSettingsRepository,
+  SqliteSecretsRepository: mocks.FakeSecretsRepository,
   SqliteAppExclusionsRepository: mocks.FakeExclusionsRepository,
   runStorageMigrations: mocks.runStorageMigrations
 }));
@@ -338,6 +416,12 @@ function latestSettings(): InstanceType<typeof mocks.FakeSettingsRepository> {
   const settings = mocks.FakeSettingsRepository.instances.at(-1);
   if (settings === undefined) throw new Error('Expected settings repository');
   return settings;
+}
+
+function latestSecrets(): InstanceType<typeof mocks.FakeSecretsRepository> {
+  const secrets = mocks.FakeSecretsRepository.instances.at(-1);
+  if (secrets === undefined) throw new Error('Expected secrets repository');
+  return secrets;
 }
 
 function latestWindows(): InstanceType<typeof mocks.FakeWindowManager> {
@@ -383,6 +467,63 @@ function selectionResult(overrides: Partial<SelectionResult> = {}): SelectionRes
   };
 }
 
+function pendingTranslationTransport() {
+  return {
+    send: vi.fn((_request: BaiduTransportRequest) => new Promise<never>(() => undefined))
+  };
+}
+
+async function beginOnlineTranslation(
+  controller: ShellController,
+  send: ReturnType<typeof pendingTranslationTransport>['send']
+): Promise<AbortSignal> {
+  await controller.saveBaiduCredentials({ appId: 'test-app-id', secretKey: 'test-secret' }, 1);
+  await controller.setTranslationEnabled(true);
+  latestSupervisor().emit('selection', selectionResult());
+  await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+  const signal = send.mock.calls[0]?.[0].signal;
+  if (signal === undefined) throw new Error('Expected an active Provider request');
+  return signal as AbortSignal;
+}
+
+const ACTIVE_REQUEST_CANCELLATION_SCENARIOS: ReadonlyArray<{
+  readonly name: string;
+  readonly trigger: (controller: ShellController) => void | Promise<void>;
+}> = [
+  {
+    name: 'online translation is disabled',
+    trigger: (controller) => controller.setTranslationEnabled(false)
+  },
+  {
+    name: 'Provider credentials are deleted',
+    trigger: (controller) => controller.deleteBaiduCredentials()
+  },
+  {
+    name: 'selection listening is paused',
+    trigger: (controller) => controller.setSelectionEnabled(false)
+  },
+  {
+    name: 'the Native Host becomes unhealthy',
+    trigger: () => { latestSupervisor().emit('unhealthy'); }
+  },
+  {
+    name: 'the Native Host starts restarting',
+    trigger: () => { latestSupervisor().emit('restarting'); }
+  },
+  {
+    name: 'the Native Host becomes fatal',
+    trigger: () => { latestSupervisor().emit('fatal'); }
+  },
+  {
+    name: 'the display topology changes',
+    trigger: () => { mocks.screen.emit('display-metrics-changed'); }
+  },
+  {
+    name: 'the shell is disposed',
+    trigger: (controller) => controller.dispose()
+  }
+];
+
 describe('ShellController', () => {
   beforeEach(() => {
     for (const key of ENVIRONMENT_KEYS) delete process.env[key];
@@ -390,8 +531,17 @@ describe('ShellController', () => {
     mocks.settingsState.loadResult = {
       ball: { visible: true, edgeSnap: true },
       theme: 'system',
-      selection: { enabled: true, ocrActivation: 'fallback' }
+      selection: { enabled: true, ocrActivation: 'fallback' },
+      translation: {
+        enabled: false,
+        providerId: 'baidu',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        consentVersion: 0
+      }
     };
+    mocks.credentialState.encryptionAvailable = true;
+    mocks.credentialState.encrypted = undefined;
     mocks.settingsState.rejectAnchor = false;
     mocks.startupState.windowStart = Promise.resolve();
     mocks.startupState.recreateWindowAfterStart = false;
@@ -419,8 +569,13 @@ describe('ShellController', () => {
     mocks.permissionCheck.mockClear();
     mocks.permissionRequest.mockClear();
     mocks.sessionOn.mockClear();
+    mocks.safeStorage.isAsyncEncryptionAvailable.mockClear();
+    mocks.safeStorage.encryptStringAsync.mockClear();
+    mocks.safeStorage.decryptStringAsync.mockClear();
+    mocks.shell.openExternal.mockClear();
     mocks.FakeDatabaseSync.instances.length = 0;
     mocks.FakeSettingsRepository.instances.length = 0;
+    mocks.FakeSecretsRepository.instances.length = 0;
     mocks.FakeExclusionsRepository.instances.length = 0;
     mocks.FakeWindowManager.instances.length = 0;
     mocks.FakeTrayController.instances.length = 0;
@@ -428,16 +583,40 @@ describe('ShellController', () => {
     mocks.runStorageMigrations.mockClear();
     mocks.registerUiShellIpc.mockClear();
     mocks.ipcDispose.mockClear();
+    mocks.registerSelectionCardIpc.mockClear();
+    mocks.cardIpcDispose.mockClear();
     mocks.nativeTheme.themeSource = 'system';
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     for (const key of ENVIRONMENT_KEYS) {
       const value = originalEnvironment[key];
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
   });
+
+  it.each(ACTIVE_REQUEST_CANCELLATION_SCENARIOS)(
+    'aborts the active Provider request when $name',
+    async ({ trigger }) => {
+      process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+      mocks.existsSync.mockReturnValue(true);
+      const transport = pendingTranslationTransport();
+      const controller = new ShellController({
+        requestQuit: vi.fn(),
+        translationTransport: transport
+      });
+      await controller.start();
+      await flushAsyncWork();
+      const signal = await beginOnlineTranslation(controller, transport.send);
+
+      await trigger(controller);
+
+      expect(signal.aborted).toBe(true);
+      await controller.dispose();
+    }
+  );
 
   it('starts the secure shell once and remains available without a Native Host', async () => {
     const requestQuit = vi.fn();
@@ -483,7 +662,14 @@ describe('ShellController', () => {
     mocks.settingsState.loadResult = {
       ball: { visible: false, edgeSnap: false, anchor },
       theme: 'dark',
-      selection: { enabled: true, ocrActivation: 'fallback' }
+      selection: { enabled: true, ocrActivation: 'fallback' },
+      translation: {
+        enabled: false,
+        providerId: 'baidu',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        consentVersion: 0
+      }
     };
     const controller = new ShellController({ requestQuit: vi.fn() });
     await controller.start();
@@ -511,8 +697,196 @@ describe('ShellController', () => {
     expect(windows.setBallBounds).toHaveBeenCalled();
   });
 
-  it('wires IPC actions to the existing role objects', async () => {
+  it('keeps online translation fail-closed and manages encrypted BYOK consent', async () => {
+    mocks.settingsState.loadResult.translation = {
+      enabled: true,
+      providerId: 'baidu',
+      sourceLanguage: 'auto',
+      targetLanguage: 'zh-CN',
+      consentVersion: 1
+    };
     const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    const settings = latestSettings();
+
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      enabled: false,
+      credentialStatus: 'missing',
+      consentVersion: 1
+    });
+    await expect(controller.setTranslationEnabled(true)).rejects.toThrow(/credentials and consent/u);
+    await expect(controller.testTranslationProvider()).resolves.toEqual({
+      ok: false,
+      code: 'credentials-missing'
+    });
+
+    await controller.saveBaiduCredentials({ appId: 'phase4-app', secretKey: 'phase4-key' }, 1);
+    expect(mocks.safeStorage.encryptStringAsync).toHaveBeenCalledOnce();
+    expect(latestSecrets().setEncrypted).toHaveBeenCalledOnce();
+    expect(settings.setTranslationConsentVersion).toHaveBeenCalledWith(1);
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      enabled: false,
+      credentialStatus: 'configured',
+      consentVersion: 1
+    });
+    const serializedSnapshot = JSON.stringify(controller.getDebugState().snapshot);
+    expect(serializedSnapshot).not.toContain('phase4-app');
+    expect(serializedSnapshot).not.toContain('phase4-key');
+
+    await controller.setTranslationEnabled(true);
+    await controller.setTranslationSourceLanguage('ja');
+    await controller.setTranslationTargetLanguage('en');
+    expect(settings.setTranslationEnabled).toHaveBeenCalledWith(true);
+    expect(settings.setTranslationSourceLanguage).toHaveBeenCalledWith('ja');
+    expect(settings.setTranslationTargetLanguage).toHaveBeenCalledWith('en');
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      enabled: true,
+      sourceLanguage: 'ja',
+      targetLanguage: 'en'
+    });
+
+    await controller.openProviderPrivacyPolicy();
+    await controller.openProviderServiceTerms();
+    expect(mocks.shell.openExternal).toHaveBeenNthCalledWith(
+      1,
+      'https://fanyi-app.baidu.com/static/agreement/privacy.html'
+    );
+    expect(mocks.shell.openExternal).toHaveBeenNthCalledWith(
+      2,
+      'https://fanyi-api.baidu.com/doc/6'
+    );
+    await controller.deleteBaiduCredentials();
+    expect(settings.setTranslationEnabled).toHaveBeenLastCalledWith(false);
+    expect(settings.resetTranslationConsent).toHaveBeenCalledOnce();
+    expect(latestSecrets().delete).toHaveBeenCalledOnce();
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      enabled: false,
+      credentialStatus: 'missing',
+      consentVersion: 0
+    });
+  });
+
+  it('starts fail-closed when the Electron async safeStorage backend rejects', async () => {
+    mocks.settingsState.loadResult.translation = {
+      enabled: true,
+      providerId: 'baidu',
+      sourceLanguage: 'auto',
+      targetLanguage: 'zh-CN',
+      consentVersion: 1
+    };
+    mocks.safeStorage.isAsyncEncryptionAvailable.mockRejectedValueOnce(
+      new Error('backend initialization failed')
+    );
+    const controller = new ShellController({ requestQuit: vi.fn() });
+
+    await expect(controller.start()).resolves.toBeUndefined();
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      enabled: false,
+      credentialStatus: 'unavailable',
+      consentVersion: 1
+    });
+  });
+
+  it('requires consent before the fixed provider connection probe can use the network', async () => {
+    mocks.credentialState.encrypted = Buffer.from(JSON.stringify({
+      version: 1,
+      appId: 'configured-app',
+      secretKey: 'configured-key'
+    }), 'utf8');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      credentialStatus: 'configured',
+      consentVersion: 0
+    });
+    await expect(controller.testTranslationProvider()).resolves.toEqual({
+      ok: false,
+      code: 'consent-required'
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('cancels an active translation before replacing credentials', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    const fetchMock = vi.fn((_input: string | URL | Request, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        const signal = init?.signal;
+        if (signal?.aborted) {
+          reject(new Error('aborted'));
+          return;
+        }
+        signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    await flushAsyncWork();
+    await controller.saveBaiduCredentials({ appId: 'old-app', secretKey: 'old-key' }, 1);
+    await controller.setTranslationEnabled(true);
+
+    latestSupervisor().emit('selection', selectionResult());
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledOnce());
+    const requestSignal = (fetchMock.mock.calls[0]?.[1] as RequestInit | undefined)?.signal;
+    expect(requestSignal?.aborted).toBe(false);
+
+    await controller.saveBaiduCredentials({ appId: 'new-app', secretKey: 'new-key' }, 1);
+    expect(requestSignal?.aborted).toBe(true);
+    expect(latestWindows().dismissSelectionCard).toHaveBeenCalled();
+    await flushAsyncWork();
+  });
+
+  it('disables outbound translation in memory before a persistence failure', async () => {
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    await controller.saveBaiduCredentials({ appId: 'phase4-app', secretKey: 'phase4-key' }, 1);
+    await controller.setTranslationEnabled(true);
+    latestSettings().setTranslationEnabled.mockRejectedValueOnce(new Error('write failed'));
+
+    await expect(controller.setTranslationEnabled(false)).rejects.toThrow(/write failed/u);
+    expect(controller.getDebugState().snapshot.translation.enabled).toBe(false);
+  });
+
+  it('attempts every credential deletion step while keeping failed persistence unavailable', async () => {
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    await controller.saveBaiduCredentials({ appId: 'phase4-app', secretKey: 'phase4-key' }, 1);
+    await controller.setTranslationEnabled(true);
+    const settings = latestSettings();
+    const secrets = latestSecrets();
+    settings.setTranslationEnabled.mockRejectedValueOnce(new Error('disable failed'));
+    settings.resetTranslationConsent.mockRejectedValueOnce(new Error('consent reset failed'));
+    secrets.delete.mockRejectedValueOnce(new Error('delete failed'));
+
+    await expect(controller.deleteBaiduCredentials()).rejects.toThrow(
+      /could not be fully removed/u
+    );
+    expect(settings.setTranslationEnabled).toHaveBeenLastCalledWith(false);
+    expect(settings.resetTranslationConsent).toHaveBeenCalledOnce();
+    expect(secrets.delete).toHaveBeenCalledOnce();
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      enabled: false,
+      credentialStatus: 'unavailable',
+      consentVersion: 0
+    });
+  });
+
+  it('wires IPC actions to the existing role objects', async () => {
+    const translationTransport = {
+      send: vi.fn(async () => ({
+        status: 200,
+        body: JSON.stringify({
+          from: 'en',
+          to: 'zh',
+          trans_result: [{ src: 'hello', dst: '你好' }]
+        })
+      }))
+    };
+    const controller = new ShellController({ requestQuit: vi.fn(), translationTransport });
     await controller.start();
     const registrationCall = mocks.registerUiShellIpc.mock.calls as unknown as readonly [unknown][];
     const registration = registrationCall[0]?.[0] as {
@@ -522,7 +896,7 @@ describe('ShellController', () => {
     };
     expect(registration.ipcMain).toBe(mocks.ipcMain);
     expect(registration.resolveRole({})).toBe('ball');
-    expect(registration.actions.getSnapshot?.()).toMatchObject({ version: 2 });
+    expect(registration.actions.getSnapshot?.()).toMatchObject({ version: 3 });
     registration.actions.openSettings?.();
     registration.actions.openContextMenu?.();
     expect(latestWindows().openSettings).toHaveBeenCalledOnce();
@@ -530,8 +904,41 @@ describe('ShellController', () => {
     await registration.actions.setBallVisible?.(false);
     await registration.actions.setEdgeSnap?.(false);
     await registration.actions.setTheme?.('dark');
+    await registration.actions.setSelectionEnabled?.(false);
+    await registration.actions.setOcrActivation?.('alt-drag');
+    await registration.actions.saveBaiduCredentials?.(
+      { appId: 'phase4-ipc-app', secretKey: 'phase4-ipc-key' },
+      1
+    );
+    await registration.actions.setTranslationEnabled?.(true);
+    await registration.actions.setTranslationSourceLanguage?.('ja');
+    await registration.actions.setTranslationTargetLanguage?.('en');
+    await expect(registration.actions.testTranslationProvider?.()).resolves.toEqual({ ok: true });
+    await registration.actions.openProviderPrivacyPolicy?.();
+    await registration.actions.openProviderServiceTerms?.();
     await registration.actions.resetBallPosition?.();
-    expect(controller.getDebugState().snapshot.theme).toBe('dark');
+    expect(controller.getDebugState().snapshot).toMatchObject({
+      theme: 'dark',
+      selection: { enabled: false, ocrActivation: 'alt-drag' },
+      translation: {
+        enabled: true,
+        sourceLanguage: 'ja',
+        targetLanguage: 'en',
+        credentialStatus: 'configured'
+      }
+    });
+    await registration.actions.deleteBaiduCredentials?.();
+
+    const cardRegistrationCall = mocks.registerSelectionCardIpc.mock.calls as unknown as readonly [unknown][];
+    const cardRegistration = cardRegistrationCall[0]?.[0] as {
+      readonly getCurrent: () => unknown;
+      readonly dismiss: () => void;
+      readonly retry: () => void;
+    };
+    expect(cardRegistration.getCurrent()).toBeUndefined();
+    cardRegistration.retry();
+    cardRegistration.dismiss();
+    expect(latestWindows().dismissSelectionCard).toHaveBeenCalled();
 
     const trayActions = latestTray().actions as {
       readonly openSettings: () => void;
@@ -652,7 +1059,7 @@ describe('ShellController', () => {
     const supervisor = latestSupervisor();
     expect(supervisor.options).toMatchObject({
       executablePath: 'C:\\native\\selection-host.exe',
-      desktopVersion: '0.3.0-phase3'
+      desktopVersion: '0.4.0-phase4'
     });
     expect(supervisor.request).toHaveBeenCalledWith('health', {});
     expect(controller.getDebugState().snapshot.native.status).toBe('ready');
@@ -699,7 +1106,7 @@ describe('ShellController', () => {
     expect(controller.getDebugState().snapshot.native.status).toBe('faulted');
   });
 
-  it('accepts listening health as the expected Phase 3 state', async () => {
+  it('accepts listening health as the expected Phase 4 state', async () => {
     process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
     mocks.existsSync.mockReturnValue(true);
     const controller = new ShellController({ requestQuit: vi.fn() });
@@ -740,6 +1147,8 @@ describe('ShellController', () => {
       excludedProcessNames: expect.arrayContaining(['BLOCKED.exe'])
     });
     expect(new Set(initialConfig.excludedProcessNames).size).toBe(2);
+    supervisor.emit('selection', selectionResult());
+    expect(latestWindows().presentSelectionCard).toHaveBeenCalledOnce();
 
     await controller.setSelectionEnabled(false);
     expect(latestSettings().setSelectionEnabled).toHaveBeenCalledWith(false);
@@ -795,11 +1204,12 @@ describe('ShellController', () => {
 
     expect(mocks.screen.screenToDipRect).toHaveBeenCalledOnce();
     expect(latestWindows().presentSelectionCard).toHaveBeenCalledWith({
+      kind: 'source-only',
       selectionId: '123e4567-e89b-42d3-a456-426614174000',
-      text: 'Phase Three source text',
+      sourceText: 'Phase Three source text',
       source: 'ocr',
       confidence: 0.75
-    }, { x: 210, y: 175, width: 380, height: 220 });
+    }, { x: 210, y: 175, width: 380, height: 320 });
     expect(controller.getDebugState()).toMatchObject({ cardCreated: true, cardVisible: true });
 
     latestWindows().presentSelectionCard.mockClear();
@@ -829,6 +1239,8 @@ describe('ShellController', () => {
       message: 'safe', selectionId: '123e4567-e89b-42d3-a456-426614174000'
     });
     expect(controller.getDebugState().snapshot.selection.lifecycle).not.toBe('faulted');
+    supervisor.emit('selection', selectionResult());
+    expect(latestWindows().presentSelectionCard).toHaveBeenCalledOnce();
     supervisor.emit('hostError', {
       code: 'pipe_error', scope: 'host', recoverable: false, message: 'safe'
     });

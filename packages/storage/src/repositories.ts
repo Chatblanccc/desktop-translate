@@ -64,5 +64,11 @@ export interface TranslationCacheRepository {
 export interface SecretsRepository {
   getEncrypted(key: string): Promise<Uint8Array | undefined>;
   setEncrypted(key: string, value: Uint8Array, updatedAt: string): Promise<void>;
+  replaceEncryptedIfCurrent(
+    key: string,
+    expectedValue: Uint8Array,
+    replacementValue: Uint8Array,
+    updatedAt: string
+  ): Promise<boolean>;
   delete(key: string): Promise<boolean>;
 }

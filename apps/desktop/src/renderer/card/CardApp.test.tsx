@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SelectionCardRendererBridge } from '../../preload/card-bridge.js';
@@ -8,8 +10,9 @@ import { CardApp } from './CardApp.js';
 afterEach(cleanup);
 
 const card = {
+  kind: 'source-only' as const,
   selectionId: '123e4567-e89b-42d3-a456-426614174000',
-  text: 'Phase Three source text',
+  sourceText: 'Phase Three source text',
   source: 'ocr' as const,
   confidence: 0.75
 };
@@ -21,11 +24,12 @@ describe('CardApp', () => {
     const api: SelectionCardRendererBridge = {
       getCurrent: vi.fn().mockResolvedValue(card),
       dismiss,
+      retry: vi.fn().mockResolvedValue(undefined),
       onChanged: vi.fn().mockReturnValue(unsubscribe)
     };
     const view = render(<CardApp api={api} />);
     await screen.findByRole('heading', { name: '识别结果' });
-    expect(screen.getByText(card.text)).toBeTruthy();
+    expect(screen.getByText(card.sourceText)).toBeTruthy();
     expect(screen.getByText(/本地 OCR · 75%/u)).toBeTruthy();
     expect(screen.queryByText(/译文/u)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '关闭识别结果' }));
@@ -39,6 +43,7 @@ describe('CardApp', () => {
     const api: SelectionCardRendererBridge = {
       getCurrent: vi.fn().mockResolvedValue(undefined),
       dismiss: vi.fn().mockResolvedValue(undefined),
+      retry: vi.fn().mockResolvedValue(undefined),
       onChanged: vi.fn((next) => {
         listener = next as typeof listener;
         return vi.fn();
@@ -47,7 +52,7 @@ describe('CardApp', () => {
     render(<CardApp api={api} />);
     await waitFor(() => expect(listener).toBeTypeOf('function'));
     act(() => { listener?.(card); });
-    await waitFor(() => expect(screen.getByText(card.text)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(card.sourceText)).toBeTruthy());
   });
 
   it('does not overwrite a pushed card with a stale initial response', async () => {
@@ -56,6 +61,7 @@ describe('CardApp', () => {
     const api: SelectionCardRendererBridge = {
       getCurrent: vi.fn(() => new Promise<undefined>((resolve) => { resolveInitial = resolve; })),
       dismiss: vi.fn().mockResolvedValue(undefined),
+      retry: vi.fn().mockResolvedValue(undefined),
       onChanged: vi.fn((next) => {
         listener = next as typeof listener;
         return vi.fn();
@@ -64,8 +70,65 @@ describe('CardApp', () => {
     render(<CardApp api={api} />);
     await waitFor(() => expect(listener).toBeTypeOf('function'));
     act(() => { listener?.(card); });
-    await screen.findByText(card.text);
+    await screen.findByText(card.sourceText);
     act(() => { resolveInitial?.(undefined); });
-    await waitFor(() => expect(screen.getByText(card.text)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(card.sourceText)).toBeTruthy());
+  });
+
+  it('renders hostile markup and URLs as scrollable plain text', async () => {
+    const hostile = '<img src=x onerror="globalThis.pwned=true"><script>pwned()</script>'
+      + ' https://evil.example/<svg/onload=pwned()>';
+    const sourceText = `${hostile}\n${'long-selection '.repeat(1_000)}`;
+    const api: SelectionCardRendererBridge = {
+      getCurrent: vi.fn().mockResolvedValue({ ...card, sourceText }),
+      dismiss: vi.fn().mockResolvedValue(undefined),
+      retry: vi.fn().mockResolvedValue(undefined),
+      onChanged: vi.fn().mockReturnValue(vi.fn())
+    };
+
+    const view = render(<CardApp api={api} />);
+    const region = await screen.findByRole('region', { name: '翻译内容' });
+    expect(view.container.querySelector('.card-text')?.textContent).toBe(sourceText);
+    expect(view.container.querySelector('img, script, svg, a')).toBeNull();
+    expect(region.getAttribute('tabindex')).toBe('0');
+    region.focus();
+    expect(document.activeElement).toBe(region);
+
+    const styles = readFileSync(resolve('src/renderer/card/styles.css'), 'utf8');
+    expect(styles).toMatch(/\.card-content\s*\{[\s\S]*?overflow:\s*auto;/u);
+  });
+
+  it('renders translated content and delegates retry for safe failures', async () => {
+    const retry = vi.fn().mockResolvedValue(undefined);
+    const translated = {
+      ...card,
+      kind: 'translated' as const,
+      requestId: '223e4567-e89b-42d3-a456-426614174000',
+      translatedText: '第四阶段译文',
+      targetLanguage: 'zh-CN',
+      attribution: { providerId: 'baidu', providerDisplayName: '百度翻译' },
+      fromCache: false
+    };
+    const api: SelectionCardRendererBridge = {
+      getCurrent: vi.fn().mockResolvedValue(translated),
+      dismiss: vi.fn().mockResolvedValue(undefined),
+      retry,
+      onChanged: vi.fn().mockReturnValue(vi.fn())
+    };
+    const view = render(<CardApp api={api} />);
+    expect(await screen.findByText(translated.translatedText)).toBeTruthy();
+    view.unmount();
+
+    const failed = {
+      ...card,
+      kind: 'failed' as const,
+      requestId: translated.requestId,
+      code: 'network-unavailable' as const,
+      retryable: true
+    };
+    vi.mocked(api.getCurrent).mockResolvedValue(failed);
+    render(<CardApp api={api} />);
+    fireEvent.click(await screen.findByRole('button', { name: '重试翻译' }));
+    expect(retry).toHaveBeenCalledOnce();
   });
 });

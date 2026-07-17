@@ -191,7 +191,7 @@ describe('secure window options', () => {
         x: 10,
         y: 20,
         width: 380,
-        height: 220,
+        height: 320,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -366,12 +366,13 @@ describe('WindowManager', () => {
     const { manager } = makeManager();
     await manager.start();
     const first = {
+      kind: 'source-only' as const,
       selectionId: '123e4567-e89b-42d3-a456-426614174000',
-      text: 'First source text',
+      sourceText: 'First source text',
       source: 'uia' as const,
       confidence: 1
     };
-    const firstBounds = { x: 100, y: 120, width: 380, height: 220 };
+    const firstBounds = { x: 100, y: 120, width: 380, height: 320 };
     manager.presentSelectionCard(first, firstBounds);
     await Promise.resolve();
     expect(electron.BrowserWindow.instances).toHaveLength(2);
@@ -382,16 +383,16 @@ describe('WindowManager', () => {
     expect(manager.getCurrentSelectionCard()).toEqual(first);
 
     const returned = manager.getCurrentSelectionCard()!;
-    (returned as { text: string }).text = 'mutated';
-    expect(manager.getCurrentSelectionCard()?.text).toBe(first.text);
+    (returned as { sourceText: string }).sourceText = 'mutated';
+    expect(manager.getCurrentSelectionCard()?.sourceText).toBe(first.sourceText);
 
     card.emit('ready-to-show');
     expect(card.setBounds).toHaveBeenCalledWith(firstBounds, false);
     expect(card.webContents.send).toHaveBeenCalledWith(SELECTION_CARD_CHANNELS.changed, first);
     expect(card.showInactive).toHaveBeenCalledOnce();
 
-    const replacement = { ...first, text: 'Replacement source text', source: 'ocr' as const };
-    const replacementBounds = { x: -500, y: 700, width: 380, height: 220 };
+    const replacement = { ...first, sourceText: 'Replacement source text', source: 'ocr' as const };
+    const replacementBounds = { x: -500, y: 700, width: 380, height: 320 };
     manager.presentSelectionCard(replacement, replacementBounds);
     expect(card.setBounds).toHaveBeenLastCalledWith(replacementBounds, false);
     expect(card.webContents.send).toHaveBeenLastCalledWith(
@@ -406,12 +407,13 @@ describe('WindowManager', () => {
     const { manager, onCardDismissed } = makeManager();
     await manager.start();
     const cardModel = {
+      kind: 'source-only' as const,
       selectionId: '123e4567-e89b-42d3-a456-426614174000',
-      text: 'Source text',
+      sourceText: 'Source text',
       source: 'uia' as const,
       confidence: 1
     };
-    manager.presentSelectionCard(cardModel, { x: 1, y: 2, width: 380, height: 220 });
+    manager.presentSelectionCard(cardModel, { x: 1, y: 2, width: 380, height: 320 });
     await Promise.resolve();
     const card = latestWindow();
     manager.dismissSelectionCard();
@@ -419,7 +421,7 @@ describe('WindowManager', () => {
     card.emit('ready-to-show');
     expect(card.showInactive).not.toHaveBeenCalled();
 
-    manager.presentSelectionCard(cardModel, { x: 3, y: 4, width: 380, height: 220 });
+    manager.presentSelectionCard(cardModel, { x: 3, y: 4, width: 380, height: 320 });
     expect(card.showInactive).toHaveBeenCalledOnce();
     expect(card.close().prevented).toBe(true);
     expect(card.webContents.send).toHaveBeenLastCalledWith(
@@ -456,11 +458,12 @@ describe('WindowManager', () => {
     await Promise.resolve();
     const settings = latestWindow();
     manager.presentSelectionCard({
+      kind: 'source-only',
       selectionId: '123e4567-e89b-42d3-a456-426614174000',
-      text: 'Source text',
+      sourceText: 'Source text',
       source: 'uia',
       confidence: 1
-    }, { x: 1, y: 2, width: 380, height: 220 });
+    }, { x: 1, y: 2, width: 380, height: 320 });
     await Promise.resolve();
     const card = latestWindow();
     manager.dispose();
