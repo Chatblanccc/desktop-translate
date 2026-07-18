@@ -100,6 +100,8 @@ function parseStoredCredentials(serialized: string): BaiduProviderCredentials {
 
 export class ProviderCredentialStore {
   private mutationGeneration = 0;
+  private readonly pendingMutationGenerations = new Set<number>();
+  private writeTail: Promise<void> = Promise.resolve();
 
   public constructor(
     private readonly repository: SecretsRepository,
@@ -126,9 +128,9 @@ export class ProviderCredentialStore {
 
   private async readStatus(generation: number): Promise<ProviderCredentialStatus> {
     await this.requireEncryption();
-    this.requireCurrentGeneration(generation);
+    this.requireReadableGeneration(generation);
     const encrypted = await this.repository.getEncrypted(BAIDU_CREDENTIAL_KEY);
-    this.requireCurrentGeneration(generation);
+    this.requireReadableGeneration(generation);
     if (encrypted === undefined) return 'missing';
     await this.decrypt(encrypted, generation);
     return 'configured';
@@ -138,32 +140,61 @@ export class ProviderCredentialStore {
     if (!isBaiduProviderCredentials(credentials)) {
       throw new TypeError('Baidu provider credentials are invalid');
     }
-    const generation = ++this.mutationGeneration;
-    await this.requireEncryption();
-    this.requireCurrentGeneration(generation);
-    const envelope: StoredCredentialEnvelope = {
-      version: CREDENTIAL_VERSION,
-      appId: credentials.appId,
-      secretKey: credentials.secretKey
-    };
-    const encrypted = await this.encrypt(JSON.stringify(envelope));
-    this.requireCurrentGeneration(generation);
-    await this.repository.setEncrypted(BAIDU_CREDENTIAL_KEY, encrypted, this.now());
+    const generation = this.beginMutation();
+    try {
+      await this.requireEncryption();
+      this.requireCurrentGeneration(generation);
+      const envelope: StoredCredentialEnvelope = {
+        version: CREDENTIAL_VERSION,
+        appId: credentials.appId,
+        secretKey: credentials.secretKey
+      };
+      const encrypted = await this.encrypt(JSON.stringify(envelope));
+      this.requireCurrentGeneration(generation);
+      await this.enqueueWrite(async () => {
+        this.requireCurrentGeneration(generation);
+        await this.repository.setEncrypted(BAIDU_CREDENTIAL_KEY, encrypted, this.now());
+        this.requireCurrentGeneration(generation);
+      });
+    } catch (error) {
+      // A newer save/delete owns the final state even if this older secure-
+      // storage operation wakes up by rejecting instead of resolving.
+      this.requireCurrentGeneration(generation);
+      throw error;
+    } finally {
+      this.pendingMutationGenerations.delete(generation);
+    }
   }
 
   public async load(): Promise<BaiduProviderCredentials | undefined> {
     const generation = this.mutationGeneration;
-    await this.requireEncryption();
-    this.requireCurrentGeneration(generation);
-    const encrypted = await this.repository.getEncrypted(BAIDU_CREDENTIAL_KEY);
-    this.requireCurrentGeneration(generation);
-    if (encrypted === undefined) return undefined;
-    return this.decrypt(encrypted, generation);
+    try {
+      await this.requireEncryption();
+      this.requireReadableGeneration(generation);
+      const encrypted = await this.repository.getEncrypted(BAIDU_CREDENTIAL_KEY);
+      this.requireReadableGeneration(generation);
+      if (encrypted === undefined) return undefined;
+      return await this.decrypt(encrypted, generation);
+    } catch (error) {
+      // A late backend failure from an old read must not make the caller mark
+      // credentials unavailable after a newer save or delete has won.
+      this.requireReadableGeneration(generation);
+      throw error;
+    }
   }
 
   public async delete(): Promise<boolean> {
-    this.mutationGeneration += 1;
-    return this.repository.delete(BAIDU_CREDENTIAL_KEY);
+    const generation = this.beginMutation();
+    try {
+      return await this.enqueueWrite(async () => {
+        this.requireCurrentGeneration(generation);
+        const deleted = await this.repository.delete(BAIDU_CREDENTIAL_KEY);
+        this.requireCurrentGeneration(generation);
+        return deleted;
+      });
+    } finally {
+      this.pendingMutationGenerations.delete(generation);
+    }
   }
 
   private async requireEncryption(): Promise<void> {
@@ -194,7 +225,7 @@ export class ProviderCredentialStore {
     } catch {
       throw new ProviderCredentialStoreError('credentials-corrupted');
     }
-    this.requireCurrentGeneration(generation);
+    this.requireReadableGeneration(generation);
 
     const shouldReEncrypt = decrypted.shouldReEncrypt;
     if (shouldReEncrypt) {
@@ -205,20 +236,44 @@ export class ProviderCredentialStore {
       } catch {
         throw new ProviderCredentialStoreError('credentials-corrupted');
       }
-      this.requireCurrentGeneration(generation);
+      this.requireReadableGeneration(generation);
     }
     const credentials = parseStoredCredentials(decrypted.result);
     if (shouldReEncrypt) {
       const replacement = await this.encrypt(decrypted.result);
-      this.requireCurrentGeneration(generation);
+      this.requireReadableGeneration(generation);
       await this.repository.replaceEncryptedIfCurrent(
         BAIDU_CREDENTIAL_KEY,
         encrypted,
         replacement,
         this.now()
       );
+      this.requireReadableGeneration(generation);
     }
+    this.requireReadableGeneration(generation);
     return credentials;
+  }
+
+  private beginMutation(): number {
+    const generation = ++this.mutationGeneration;
+    this.pendingMutationGenerations.add(generation);
+    return generation;
+  }
+
+  private enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.writeTail.then(operation);
+    this.writeTail = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
+  }
+
+  private requireReadableGeneration(generation: number): void {
+    this.requireCurrentGeneration(generation);
+    if (this.pendingMutationGenerations.has(generation)) {
+      throw new ProviderCredentialStoreError('operation-superseded');
+    }
   }
 
   private requireCurrentGeneration(generation: number): void {

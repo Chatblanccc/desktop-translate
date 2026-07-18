@@ -165,6 +165,33 @@ describe('SettingsApp', () => {
     await waitFor(() => expect(setSelectionEnabled).toHaveBeenCalledWith(false));
   });
 
+  it('keeps the selection toggle optimistic while Main persists it and rolls back on failure', async () => {
+    const { api, setSelectionEnabled } = createSettingsApi({
+      ...DEFAULT_UI_SHELL_SNAPSHOT,
+      native: { status: 'ready', degradedCapabilities: [] },
+      selection: { enabled: true, lifecycle: 'listening', ocrActivation: 'fallback' }
+    });
+    let rejectAction: ((reason?: unknown) => void) | undefined;
+    setSelectionEnabled.mockImplementation(() => new Promise<void>((_resolve, reject) => {
+      rejectAction = reject;
+    }));
+    render(<SettingsApp api={api} />);
+
+    const enabled = await screen.findByRole('checkbox', { name: /启用划词取词/u });
+    await waitFor(() => expect((enabled as HTMLInputElement).disabled).toBe(false));
+    fireEvent.click(enabled);
+
+    expect((enabled as HTMLInputElement).checked).toBe(false);
+    expect((enabled as HTMLInputElement).disabled).toBe(true);
+    rejectAction?.(new Error('persistence failed'));
+
+    await waitFor(() => {
+      expect((enabled as HTMLInputElement).checked).toBe(true);
+      expect((enabled as HTMLInputElement).disabled).toBe(false);
+    });
+    expect(screen.getByRole('alert').textContent).toMatch(/设置未能保存/u);
+  });
+
   it('requires consent before saving credentials and enables configured translation', async () => {
     const {
       api,

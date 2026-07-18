@@ -37,6 +37,17 @@ export type BaiduCredentialsSource =
   | BaiduCredentials
   | (() => BaiduCredentials | undefined | Promise<BaiduCredentials | undefined>);
 
+/**
+ * Main-only audit metadata. The symbol keeps the derived boolean out of normal
+ * request enumeration and serialization while allowing the validation wrapper
+ * to attest that the credential literal is absent from the encoded form.
+ */
+export const BAIDU_TRANSPORT_AUDIT_METADATA = Symbol("baidu-transport-audit-metadata");
+
+export interface BaiduTransportAuditMetadata {
+  readonly secretLiteralPresent: boolean;
+}
+
 export interface BaiduTransportRequest {
   readonly url: string;
   readonly method: "POST";
@@ -45,6 +56,7 @@ export interface BaiduTransportRequest {
   readonly signal: CancellationSignal;
   readonly timeoutMs: number;
   readonly maxResponseBytes: number;
+  readonly [BAIDU_TRANSPORT_AUDIT_METADATA]?: BaiduTransportAuditMetadata;
 }
 
 export interface BaiduTransportResponse {
@@ -254,20 +266,32 @@ export class BaiduTranslationProvider implements TranslationProvider {
       ["sign", sign],
     ]).toString();
 
+    const transportRequest: BaiduTransportRequest = {
+      url: BAIDU_TRANSLATION_ENDPOINT,
+      method: "POST",
+      headers: Object.freeze({
+        "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
+        accept: "application/json",
+      }),
+      body,
+      signal: context.signal,
+      timeoutMs: this.#timeoutMs,
+      maxResponseBytes: this.#maxResponseBytes,
+    };
+    Object.defineProperty(transportRequest, BAIDU_TRANSPORT_AUDIT_METADATA, {
+      value: Object.freeze({
+        secretLiteralPresent: [...new URLSearchParams(body).values()].some((value) =>
+          value.includes(credentials.secretKey)
+        ),
+      }),
+      enumerable: false,
+      configurable: false,
+      writable: false,
+    });
+
     let response: BaiduTransportResponse;
     try {
-      response = await this.#transport.send({
-        url: BAIDU_TRANSLATION_ENDPOINT,
-        method: "POST",
-        headers: Object.freeze({
-          "content-type": "application/x-www-form-urlencoded;charset=UTF-8",
-          accept: "application/json",
-        }),
-        body,
-        signal: context.signal,
-        timeoutMs: this.#timeoutMs,
-        maxResponseBytes: this.#maxResponseBytes,
-      });
+      response = await this.#transport.send(transportRequest);
     } catch (error) {
       throw mapTransportFailure(request, error);
     }
@@ -294,6 +318,9 @@ export class BaiduTranslationProvider implements TranslationProvider {
       !isSupportedBaiduLanguageCode(parsed.from) ||
       (sourceLanguage !== "auto" && parsed.from !== sourceLanguage)
     ) {
+      throw failure(request, "malformed-response", false);
+    }
+    if (!matchesBaiduSourceEcho(request.text, parsed.translations)) {
       throw failure(request, "malformed-response", false);
     }
 
@@ -563,6 +590,31 @@ type ParsedBaiduResponse =
       readonly translations: readonly { readonly src: string; readonly dst: string }[];
     }
   | { readonly kind: "failure"; readonly errorCode: string };
+
+function baiduSourceCorrelationKey(value: string): string {
+  return value
+    .normalize("NFC")
+    .replaceAll("\r\n", "\n")
+    .replaceAll("\r", "\n");
+}
+
+function matchesBaiduSourceEcho(
+  requestText: string,
+  translations: readonly { readonly src: string; readonly dst: string }[],
+): boolean {
+  const echoedSource = translations.map((entry) => entry.src).join("\n");
+  if (
+    baiduSourceCorrelationKey(echoedSource) !==
+    baiduSourceCorrelationKey(requestText)
+  ) {
+    return false;
+  }
+  return translations.every((entry) => {
+    const sourceIsBlank = baiduSourceCorrelationKey(entry.src).trim().length === 0;
+    const translationIsBlank = baiduSourceCorrelationKey(entry.dst).trim().length === 0;
+    return !sourceIsBlank || translationIsBlank;
+  });
+}
 
 function parseBaiduResponse(body: string): ParsedBaiduResponse {
   let value: unknown;

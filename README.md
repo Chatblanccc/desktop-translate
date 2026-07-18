@@ -31,12 +31,20 @@ Phase 4 不包含历史、收藏、持久翻译缓存、词典、音标、发音
 - Visual Studio 2022 Build Tools x64 C++，或仓库验证过的 portable llvm-mingw
 - 已安装所需语言的 Windows OCR language pack
 
+若 `.tools/llvm-mingw-*-ucrt-x86_64` 中存在仓库验证过的便携工具链，Native 脚本会优先使用它；
+否则使用已安装的 Visual Studio 2022 C++ 工具链。
+
 ## 运行与验收
 
 ```powershell
 pnpm install --frozen-lockfile
 pnpm start:phase4
 ```
+
+`start:phase4` 会优先使用当前 `SELECTION_HOST_PATH` 或已有 Native Host 产物；首次运行若未找到产物，
+会先执行 Native configure/build，再把解析出的 `selection-host.exe` 仅传给本次 Electron 进程。
+只准备并检查 Native Host、不启动界面时可运行 `pnpm prepare:phase4`。显式配置的
+`SELECTION_HOST_PATH` 无效时启动会直接失败，不会静默退回到不可用状态。
 
 完整 Phase 4 本地门禁：
 
@@ -46,17 +54,20 @@ pnpm phase4:verify
 
 门禁包含 lint、TypeScript、全部单元/组件/契约/集成测试、覆盖率、生产构建、Native
 配置/构建/测试、Phase 1 Named Pipe 回归、Phase 2 Shell 回归、Phase 3 真实 Host 回归、
-Phase 4 fake Provider smoke、完整 Electron E2E 和隐私扫描。关键步骤也可独立运行：
+Phase 4 fake Provider smoke、完整 Electron E2E 和隐私扫描。阶段门禁或不依赖 Native 构建路径的步骤也可独立运行：
 
 ```powershell
-pnpm native:configure
-pnpm native:build
-pnpm native:test
-pnpm phase3:smoke
+pnpm phase1:verify
+pnpm phase3:verify
 pnpm phase4:smoke
 pnpm test:e2e
 pnpm privacy:scan
 ```
+
+真实 Provider 验收可显式设置 `DESKTOP_TRANSLATE_PHASE4_AUDIT_FILE`，启用 Main-only 的脱敏 JSONL
+attestation；默认不构造该 wrapper，也不写文件或日志。记录只包含 endpoint、方法、header/field 名称、
+长度和布尔校验，不包含正文、APP ID、密钥、salt、签名、响应或 body。Windows 连接元数据可用
+`tooling/phase4-network-observe.ps1` 在短验证窗口内单独采集；原始 TLS body/pcap 不应进入仓库或 artifact。
 
 ## 目录
 

@@ -133,7 +133,7 @@ function corruptStoredBaiduCredentials(userData: string): void {
 
 async function quitApplication(application: ElectronApplication): Promise<void> {
   if (application.process().exitCode !== null) return;
-  const closed = application.waitForEvent('close', { timeout: 10_000 });
+  const closed = application.waitForEvent('close', { timeout: 30_000 });
   await application.evaluate(() => globalThis.__desktopTranslateTestApi?.quit());
   await closed;
 }

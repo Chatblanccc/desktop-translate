@@ -51,7 +51,10 @@ import {
   unionRectangles
 } from './selection-card-position.js';
 import { WindowManager } from './window-manager.js';
-import { ProviderCredentialStore } from '../translation/provider-credential-store.js';
+import {
+  ProviderCredentialStore,
+  ProviderCredentialStoreError
+} from '../translation/provider-credential-store.js';
 import { TranslationController } from '../translation/translation-controller.js';
 
 const PROVIDER_PRIVACY_URL = 'https://fanyi-app.baidu.com/static/agreement/privacy.html';
@@ -144,7 +147,21 @@ export class ShellController {
     const credentialStatus = await credentials.getStatus();
     this.state.initialize(await settings.load(), credentialStatus);
     const translationProvider = new BaiduTranslationProvider({
-      credentials: () => credentials.load(),
+      credentials: async () => {
+        try {
+          const loaded = await credentials.load();
+          if (loaded === undefined) void this.failClosedRuntimeCredentials('missing');
+          return loaded;
+        } catch (error) {
+          if (
+            !(error instanceof ProviderCredentialStoreError
+              && error.code === 'operation-superseded')
+          ) {
+            void this.failClosedRuntimeCredentials('unavailable');
+          }
+          throw error;
+        }
+      },
       ...(this.options.translationTransport === undefined
         ? {}
         : { transport: this.options.translationTransport })
@@ -372,7 +389,17 @@ export class ShellController {
     }
     this.dismissTranslationCard();
     this.cancelProviderTest('credentials-replaced');
-    await this.requireCredentials().save(credentials);
+    try {
+      await this.requireCredentials().save(credentials);
+    } catch (error) {
+      if (
+        !(error instanceof ProviderCredentialStoreError
+          && error.code === 'operation-superseded')
+      ) {
+        await this.failClosedRuntimeCredentials('unavailable');
+      }
+      throw error;
+    }
     await this.requireSettings().setTranslationConsentVersion(consentVersion);
     this.state.setTranslationConsentVersion(consentVersion);
     this.state.setTranslationCredentialStatus(await this.requireCredentials().getStatus());
@@ -474,9 +501,10 @@ export class ShellController {
     this.disposeCardIpc?.();
     this.disposeCardIpc = undefined;
     await this.positionWrite.catch(() => undefined);
-    await this.nativeHost?.stop().catch(() => undefined);
+    const nativeHost = this.nativeHost;
     this.nativeHost = undefined;
     this.nativeClient = undefined;
+    await nativeHost?.stop().catch(() => undefined);
     this.tray?.dispose();
     this.tray = undefined;
     this.windows?.dispose();
@@ -503,6 +531,22 @@ export class ShellController {
   private requireTranslationProvider(): BaiduTranslationProvider {
     if (this.translationProvider === undefined) throw new Error('Translation provider is not initialized');
     return this.translationProvider;
+  }
+
+  private failClosedRuntimeCredentials(status: 'missing' | 'unavailable'): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    const translation = this.state.getSnapshot().translation;
+    if (translation.credentialStatus === status && !translation.enabled) {
+      return Promise.resolve();
+    }
+
+    const persistDisabledState = translation.enabled;
+    this.state.setTranslationCredentialStatus(status);
+    const settings = this.settings;
+    if (!persistDisabledState || settings === undefined) return Promise.resolve();
+    return settings.setTranslationEnabled(false).catch(() => {
+      console.warn('[phase4:credentials] Failed to persist fail-closed translation state.');
+    });
   }
 
   private dismissTranslationCard(): void {
@@ -570,6 +614,7 @@ export class ShellController {
     this.nativeHost = supervisor;
     supervisor.on('ready', () => this.state.setNativeStatus('ready'));
     supervisor.on('clientReady', (client: NativeHostClient) => {
+      if (this.disposed || this.nativeHost !== supervisor) return;
       this.nativeClient = client;
       this.selectionCommand = this.selectionCommand
         .catch(() => undefined)
@@ -657,7 +702,11 @@ export class ShellController {
   }
 
   private async startNativeListening(client: NativeHostClient): Promise<void> {
-    if (this.nativeClient !== client || !this.state.getSnapshot().selection.enabled) return;
+    if (
+      this.disposed
+      || this.nativeClient !== client
+      || !this.state.getSnapshot().selection.enabled
+    ) return;
     this.state.setSelectionLifecycle('starting');
     await client.request('start', await this.nativeStartConfig(), 3_000);
     const health = await client.request('health', {});
@@ -673,7 +722,11 @@ export class ShellController {
 
   private async restartNativeListening(): Promise<void> {
     const client = this.nativeClient;
-    if (client === undefined || !this.state.getSnapshot().selection.enabled) return;
+    if (
+      this.disposed
+      || client === undefined
+      || !this.state.getSnapshot().selection.enabled
+    ) return;
     await client.request('stop', { reason: 'selection-config-changed' });
     await this.startNativeListening(client);
   }
@@ -687,7 +740,7 @@ export class ShellController {
   }
 
   private handleSelection(selection: SelectionResult): void {
-    if (!this.state.getSnapshot().selection.enabled) return;
+    if (this.disposed || !this.state.getSnapshot().selection.enabled) return;
     const physicalRects = selection.physicalRects.length > 0
       ? selection.physicalRects
       : [{ x: selection.releasePoint.x, y: selection.releasePoint.y, width: 1, height: 1 }];

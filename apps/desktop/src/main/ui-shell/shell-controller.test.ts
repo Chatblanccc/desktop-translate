@@ -286,12 +286,14 @@ const mocks = vi.hoisted(() => {
     rejectStop: boolean;
     rejectRequestStart: boolean;
     rejectRequestStop: boolean;
+    stopPromise: Promise<void> | undefined;
     health: HealthResponse;
   } = {
     rejectStart: false,
     rejectStop: false,
     rejectRequestStart: false,
     rejectRequestStop: false,
+    stopPromise: undefined,
     health: readyHealth
   };
 
@@ -317,6 +319,7 @@ const mocks = vi.hoisted(() => {
       return client;
     });
     public readonly stop = vi.fn(async () => {
+      await nativeState.stopPromise;
       if (nativeState.rejectStop) throw new Error('native stop failed');
     });
     public constructor(public readonly options: Record<string, unknown>) {
@@ -549,6 +552,7 @@ describe('ShellController', () => {
     mocks.nativeState.rejectStop = false;
     mocks.nativeState.rejectRequestStart = false;
     mocks.nativeState.rejectRequestStop = false;
+    mocks.nativeState.stopPromise = undefined;
     mocks.nativeState.health = mocks.readyHealth;
     mocks.exclusionsState.result = [];
     mocks.existsSync.mockReset().mockReturnValue(false);
@@ -617,6 +621,49 @@ describe('ShellController', () => {
       await controller.dispose();
     }
   );
+
+  it('ignores selections emitted while Native Host shutdown is pending', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    const transport = {
+      send: vi.fn(async () => ({
+        status: 200,
+        body: JSON.stringify({
+          from: 'en',
+          to: 'zh',
+          trans_result: [{ src: 'Phase Three source text', dst: 'translated' }]
+        })
+      }))
+    };
+    const controller = new ShellController({
+      requestQuit: vi.fn(),
+      translationTransport: transport
+    });
+    await controller.start();
+    await flushAsyncWork();
+    await controller.saveBaiduCredentials({ appId: 'phase4-app', secretKey: 'phase4-key' }, 1);
+    await controller.setTranslationEnabled(true);
+
+    let releaseStop: (() => void) | undefined;
+    mocks.nativeState.stopPromise = new Promise<void>((resolve) => {
+      releaseStop = resolve;
+    });
+    const supervisor = latestSupervisor();
+    const windows = latestWindows();
+    windows.presentSelectionCard.mockClear();
+    const disposal = controller.dispose();
+    try {
+      await vi.waitFor(() => expect(supervisor.stop).toHaveBeenCalledOnce());
+      supervisor.emit('selection', selectionResult());
+      await flushAsyncWork();
+
+      expect(transport.send).not.toHaveBeenCalled();
+      expect(windows.presentSelectionCard).not.toHaveBeenCalled();
+    } finally {
+      releaseStop?.();
+      await disposal;
+    }
+  });
 
   it('starts the secure shell once and remains available without a Native Host', async () => {
     const requestQuit = vi.fn();
@@ -787,6 +834,57 @@ describe('ShellController', () => {
     });
   });
 
+  it('disables repeated translation attempts after a runtime credential decrypt failure', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    mocks.credentialState.encrypted = Buffer.from(JSON.stringify({
+      version: 1,
+      appId: 'configured-app',
+      secretKey: 'configured-key'
+    }), 'utf8');
+    mocks.settingsState.loadResult.translation = {
+      enabled: true,
+      providerId: 'baidu',
+      sourceLanguage: 'auto',
+      targetLanguage: 'zh-CN',
+      consentVersion: 1
+    };
+    const transport = {
+      send: vi.fn(async () => ({ status: 200, body: '{}' }))
+    };
+    const controller = new ShellController({
+      requestQuit: vi.fn(),
+      translationTransport: transport
+    });
+    await controller.start();
+    await flushAsyncWork();
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      enabled: true,
+      credentialStatus: 'configured'
+    });
+    mocks.safeStorage.decryptStringAsync.mockRejectedValueOnce(
+      new Error('runtime secure-storage failure')
+    );
+
+    latestSupervisor().emit('selection', selectionResult());
+    await vi.waitFor(() => {
+      expect(controller.getDebugState().snapshot.translation).toMatchObject({
+        enabled: false,
+        credentialStatus: 'unavailable'
+      });
+    });
+    expect(transport.send).not.toHaveBeenCalled();
+    expect(mocks.safeStorage.decryptStringAsync).toHaveBeenCalledTimes(2);
+    expect(latestSettings().setTranslationEnabled).toHaveBeenCalledWith(false);
+
+    latestSupervisor().emit('selection', selectionResult({
+      selectionId: '123e4567-e89b-42d3-a456-426614174001'
+    }));
+    await flushAsyncWork();
+    expect(mocks.safeStorage.decryptStringAsync).toHaveBeenCalledTimes(2);
+    expect(transport.send).not.toHaveBeenCalled();
+  });
+
   it('requires consent before the fixed provider connection probe can use the network', async () => {
     mocks.credentialState.encrypted = Buffer.from(JSON.stringify({
       version: 1,
@@ -838,6 +936,41 @@ describe('ShellController', () => {
     expect(requestSignal?.aborted).toBe(true);
     expect(latestWindows().dismissSelectionCard).toHaveBeenCalled();
     await flushAsyncWork();
+  });
+
+  it('fails closed instead of reusing old credentials after replacement encryption fails', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    const transport = {
+      send: vi.fn(async () => ({ status: 200, body: '{}' }))
+    };
+    const controller = new ShellController({
+      requestQuit: vi.fn(),
+      translationTransport: transport
+    });
+    await controller.start();
+    await flushAsyncWork();
+    await controller.saveBaiduCredentials({ appId: 'old-app', secretKey: 'old-key' }, 1);
+    await controller.setTranslationEnabled(true);
+    mocks.safeStorage.decryptStringAsync.mockClear();
+    mocks.safeStorage.encryptStringAsync.mockRejectedValueOnce(
+      new Error('replacement encryption failed')
+    );
+
+    await expect(controller.saveBaiduCredentials({
+      appId: 'new-app',
+      secretKey: 'new-key'
+    }, 1)).rejects.toThrow(/unavailable/u);
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      enabled: false,
+      credentialStatus: 'unavailable'
+    });
+    expect(latestSettings().setTranslationEnabled).toHaveBeenLastCalledWith(false);
+
+    latestSupervisor().emit('selection', selectionResult());
+    await flushAsyncWork();
+    expect(transport.send).not.toHaveBeenCalled();
+    expect(mocks.safeStorage.decryptStringAsync).not.toHaveBeenCalled();
   });
 
   it('disables outbound translation in memory before a persistence failure', async () => {

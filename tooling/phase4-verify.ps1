@@ -78,6 +78,10 @@ function Assert-NoPhase4WorkspaceProcessLeak {
 $baselineProcessIds = @(
     Get-Phase4WorkspaceProcesses | ForEach-Object { [int]$_.ProcessId }
 )
+$originalSelectionHostPath = [Environment]::GetEnvironmentVariable(
+    'SELECTION_HOST_PATH',
+    [EnvironmentVariableTarget]::Process
+)
 
 Push-Location $root
 try {
@@ -89,8 +93,11 @@ try {
     Invoke-CheckedExternal -Label 'Unit, component, contract, and integration tests' -FilePath 'pnpm' -ArgumentList @('test')
     Invoke-CheckedExternal -Label 'Coverage thresholds' -FilePath 'pnpm' -ArgumentList @('test:coverage')
     Invoke-CheckedExternal -Label 'Production build' -FilePath 'pnpm' -ArgumentList @('build')
-    Invoke-CheckedExternal -Label 'Configure Native Host with pinned WinRT tooling' -FilePath 'pnpm' -ArgumentList @('native:configure')
-    Invoke-CheckedExternal -Label 'Build Native Host' -FilePath 'pnpm' -ArgumentList @('native:build')
+    Write-Host '[phase4] Prepare the development Native Host with pinned WinRT tooling'
+    & (Join-Path $PSScriptRoot 'start-phase4.ps1') -PrepareOnly -ForceNativeBuild
+    if (-not $env:SELECTION_HOST_PATH) {
+        throw 'Native Host preparation did not select an executable for the remaining smoke tests.'
+    }
     Invoke-CheckedExternal -Label 'Native core, Windows OCR, and Hook tests' -FilePath 'pnpm' -ArgumentList @('native:test')
     Invoke-CheckedExternal -Label 'Phase 1 Named Pipe regression smoke' -FilePath 'pnpm' -ArgumentList @('phase1:smoke')
     Invoke-CheckedExternal -Label 'Phase 2 Electron shell regression smoke' -FilePath 'pnpm' -ArgumentList @('phase2:smoke')
@@ -103,5 +110,10 @@ try {
     Write-Host '[phase4] Workspace process residual scan'
     Assert-NoPhase4WorkspaceProcessLeak -BaselineProcessIds $baselineProcessIds
 } finally {
+    if ($null -eq $originalSelectionHostPath) {
+        Remove-Item Env:SELECTION_HOST_PATH -ErrorAction SilentlyContinue
+    } else {
+        $env:SELECTION_HOST_PATH = $originalSelectionHostPath
+    }
     Pop-Location
 }

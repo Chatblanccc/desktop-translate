@@ -10,12 +10,19 @@ import {
 function deferred<T>(): {
   readonly promise: Promise<T>;
   readonly resolve: (value: T) => void;
+  readonly reject: (reason: unknown) => void;
 } {
   let resolvePromise: ((value: T) => void) | undefined;
-  const promise = new Promise<T>((resolve) => {
+  let rejectPromise: ((reason: unknown) => void) | undefined;
+  const promise = new Promise<T>((resolve, reject) => {
     resolvePromise = resolve;
+    rejectPromise = reject;
   });
-  return { promise, resolve: (value) => resolvePromise?.(value) };
+  return {
+    promise,
+    resolve: (value) => resolvePromise?.(value),
+    reject: (reason) => rejectPromise?.(reason)
+  };
 }
 
 function createHarness(options: { readonly available?: boolean; readonly encrypted?: Uint8Array } = {}) {
@@ -86,6 +93,91 @@ describe('ProviderCredentialStore', () => {
     expect(await harness.store.load()).toEqual({
       appId: 'phase4-app',
       secretKey: 'phase4-secret-sentinel'
+    });
+  });
+
+  it('fails closed instead of exposing old credentials while a replacement is pending', async () => {
+    const oldSerialized = JSON.stringify({
+      version: 1,
+      appId: 'old-app',
+      secretKey: 'old-secret'
+    });
+    const newSerialized = JSON.stringify({
+      version: 1,
+      appId: 'new-app',
+      secretKey: 'new-secret'
+    });
+    const harness = createHarness({
+      encrypted: Buffer.from(`encrypted:${oldSerialized}`, 'utf8')
+    });
+    const delayedEncryption = deferred<Buffer>();
+    vi.mocked(harness.safeStorage.encryptStringAsync).mockReturnValueOnce(
+      delayedEncryption.promise
+    );
+
+    const replacement = harness.store.save({ appId: 'new-app', secretKey: 'new-secret' });
+    await vi.waitFor(() => expect(harness.safeStorage.encryptStringAsync).toHaveBeenCalledOnce());
+
+    await expect(harness.store.load()).rejects.toEqual(
+      expect.objectContaining<Partial<ProviderCredentialStoreError>>({
+        code: 'operation-superseded'
+      })
+    );
+    await expect(harness.store.getStatus()).resolves.toBe('unavailable');
+    expect(harness.repository.getEncrypted).not.toHaveBeenCalled();
+
+    delayedEncryption.resolve(Buffer.from(`encrypted:${newSerialized}`, 'utf8'));
+    await replacement;
+    await expect(harness.store.load()).resolves.toEqual({
+      appId: 'new-app',
+      secretKey: 'new-secret'
+    });
+  });
+
+  it('lets deletion supersede a hung replacement before it reaches persistent storage', async () => {
+    const oldSerialized = JSON.stringify({
+      version: 1,
+      appId: 'old-app',
+      secretKey: 'old-secret'
+    });
+    const harness = createHarness({
+      encrypted: Buffer.from(`encrypted:${oldSerialized}`, 'utf8')
+    });
+    const delayedEncryption = deferred<Buffer>();
+    vi.mocked(harness.safeStorage.encryptStringAsync).mockReturnValueOnce(
+      delayedEncryption.promise
+    );
+
+    const replacement = harness.store.save({ appId: 'new-app', secretKey: 'new-secret' });
+    const replacementFailure = replacement.catch((error: unknown) => error);
+    await vi.waitFor(() => expect(harness.safeStorage.encryptStringAsync).toHaveBeenCalledOnce());
+
+    await expect(harness.store.delete()).resolves.toBe(true);
+    await expect(harness.store.getStatus()).resolves.toBe('missing');
+    expect(harness.getStored()).toBeUndefined();
+
+    delayedEncryption.reject(new Error('late replacement failed'));
+    await expect(replacementFailure).resolves.toEqual(
+      expect.objectContaining<Partial<ProviderCredentialStoreError>>({
+        code: 'operation-superseded'
+      })
+    );
+    expect(harness.getStored()).toBeUndefined();
+  });
+
+  it('continues the serialized write queue after a repository write rejects', async () => {
+    const harness = createHarness();
+    vi.mocked(harness.repository.setEncrypted).mockRejectedValueOnce(
+      new Error('database write failed')
+    );
+
+    await expect(harness.store.save({ appId: 'first-app', secretKey: 'first-secret' }))
+      .rejects.toThrow(/database write failed/u);
+    await expect(harness.store.save({ appId: 'second-app', secretKey: 'second-secret' }))
+      .resolves.toBeUndefined();
+    await expect(harness.store.load()).resolves.toEqual({
+      appId: 'second-app',
+      secretKey: 'second-secret'
     });
   });
 
@@ -203,6 +295,37 @@ describe('ProviderCredentialStore', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('classifies a stale decrypt rejection as superseded after a newer save', async () => {
+    const oldSerialized = JSON.stringify({
+      version: 1,
+      appId: 'old-app',
+      secretKey: 'old-secret'
+    });
+    const harness = createHarness({
+      encrypted: Buffer.from(`encrypted:${oldSerialized}`, 'utf8')
+    });
+    const delayedDecrypt = deferred<{ readonly result: string; readonly shouldReEncrypt: boolean }>();
+    vi.mocked(harness.safeStorage.decryptStringAsync).mockImplementationOnce(
+      () => delayedDecrypt.promise
+    );
+
+    const oldLoad = harness.store.load();
+    const oldFailure = oldLoad.catch((error: unknown) => error);
+    await vi.waitFor(() => expect(harness.safeStorage.decryptStringAsync).toHaveBeenCalledOnce());
+    await harness.store.save({ appId: 'new-app', secretKey: 'new-secret' });
+    delayedDecrypt.reject(new Error('old key failed'));
+
+    await expect(oldFailure).resolves.toEqual(
+      expect.objectContaining<Partial<ProviderCredentialStoreError>>({
+        code: 'operation-superseded'
+      })
+    );
+    await expect(harness.store.load()).resolves.toEqual({
+      appId: 'new-app',
+      secretKey: 'new-secret'
+    });
   });
 
   it('re-encrypts a credential when the platform requests key rotation', async () => {

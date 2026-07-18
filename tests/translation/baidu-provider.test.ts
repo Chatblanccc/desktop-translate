@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   BAIDU_DEFAULT_MAX_RESPONSE_BYTES,
   BAIDU_TRANSLATION_ENDPOINT,
+  BAIDU_TRANSPORT_AUDIT_METADATA,
   BaiduTranslationProvider,
   BaiduTransportError,
   FetchBaiduTransport,
@@ -122,6 +123,36 @@ test("posts only translation and authentication fields and normalizes a successf
   assert.equal(params.get("salt"), "1435660288");
   assert.equal(params.get("sign"), "f89f9594663708c1605f3d736d01d2d4");
   assert.equal(transport.request?.body.includes("12345678"), false);
+  assert.deepEqual(transport.request?.[BAIDU_TRANSPORT_AUDIT_METADATA], {
+    secretLiteralPresent: false,
+  });
+  assert.equal(
+    Object.getOwnPropertyDescriptor(transport.request!, BAIDU_TRANSPORT_AUDIT_METADATA)?.enumerable,
+    false,
+  );
+});
+
+test("derives secret-literal audit metadata without exposing the credential", async () => {
+  const transport = new FakeTransport({
+    status: 200,
+    body: JSON.stringify({
+      from: "en",
+      to: "zh",
+      trans_result: [{ src: "apple", dst: "result" }],
+    }),
+  });
+  const adapter = new BaiduTranslationProvider({
+    credentials: { appId: "app", secretKey: "apple" },
+    transport,
+    createSalt: () => "1",
+  });
+
+  await adapter.translate(REQUEST, context());
+
+  assert.deepEqual(transport.request?.[BAIDU_TRANSPORT_AUDIT_METADATA], {
+    secretLiteralPresent: true,
+  });
+  assert.equal(JSON.stringify(transport.request).includes("secretLiteralPresent"), false);
 });
 
 test("maps missing credentials, unsupported languages, and UTF-8 byte overflow before transport", async () => {
@@ -224,6 +255,91 @@ test("rejects response languages that do not match the request or adapter vocabu
   await expectFailure(unknownDetectedSource.translate(REQUEST, context()), "malformed-response", false);
 });
 
+test("rejects successful responses whose echoed source does not match the request", async () => {
+  const mismatchedSources = [
+    ["forged source"],
+    ["app"],
+    ["apple", "apple"],
+    ["ple", "ap"],
+    ["appLe"],
+    ["app le"],
+    ["apple", ""],
+  ] as const;
+
+  for (const sources of mismatchedSources) {
+    const adapter = provider({
+      status: 200,
+      body: JSON.stringify({
+        from: "en",
+        to: "zh",
+        trans_result: sources.map((src, index) => ({
+          src,
+          dst: index === 0 ? "translation" : "injected translation",
+        })),
+      }),
+    }).provider;
+    await expectFailure(adapter.translate(REQUEST, context()), "malformed-response", false);
+  }
+
+  const movedLineBreak = provider({
+    status: 200,
+    body: JSON.stringify({
+      from: "en",
+      to: "zh",
+      trans_result: [
+        { src: "a", dst: "first" },
+        { src: "bc", dst: "second" },
+      ],
+    }),
+  }).provider;
+  await expectFailure(
+    movedLineBreak.translate({ ...REQUEST, text: "ab\nc" }, context()),
+    "malformed-response",
+    false,
+  );
+});
+
+test("accepts a matching source echo across documented line segmentation and line endings", async () => {
+  const cases = [
+    { text: "first\nsecond", sources: ["first", "second"] },
+    { text: "first\nsecond", sources: ["first\nsecond"] },
+    { text: "first\r\nsecond", sources: ["first", "second"] },
+    { text: "caf\u00e9", sources: ["cafe\u0301"] },
+  ] as const;
+
+  for (const fixture of cases) {
+    const adapter = provider({
+      status: 200,
+      body: JSON.stringify({
+        from: "en",
+        to: "zh",
+        trans_result: fixture.sources.map((src, index) => ({
+          src,
+          dst: `translated-${index}`,
+        })),
+      }),
+    }).provider;
+    const result = await adapter.translate({ ...REQUEST, text: fixture.text }, context());
+    assert.equal(result.originalText, fixture.text);
+  }
+
+  const trailingBlank = provider({
+    status: 200,
+    body: JSON.stringify({
+      from: "en",
+      to: "zh",
+      trans_result: [
+        { src: "apple", dst: "translation" },
+        { src: "", dst: "" },
+      ],
+    }),
+  }).provider;
+  await assert.doesNotReject(trailingBlank.translate({
+    ...REQUEST,
+    text: "apple\n",
+  }, context()));
+});
+
 test("maps transport and HTTP failures without retaining response bodies", async () => {
   const network = provider(new BaiduTransportError("network", "secret raw body")).provider;
   const networkFailure = await expectFailure(
@@ -293,7 +409,7 @@ test("does not trust provider-forged request metadata, time, attribution, or cac
     body: JSON.stringify({
       from: "en",
       to: "zh",
-      trans_result: [{ src: "forged source", dst: "trusted translation only" }],
+      trans_result: [{ src: REQUEST.text, dst: "trusted translation only" }],
       requestId: "provider-request",
       selectionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       originalText: "provider text",

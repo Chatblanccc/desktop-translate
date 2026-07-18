@@ -40,6 +40,7 @@ const electron = vi.hoisted(() => {
     private readonly contents = new FakeWebContents();
     public readonly setAlwaysOnTop = vi.fn();
     public readonly showInactive = vi.fn(() => { this.visible = true; });
+    public readonly moveTop = vi.fn();
     public readonly show = vi.fn(() => { this.visible = true; });
     public readonly hide = vi.fn(() => { this.visible = false; });
     public readonly focus = vi.fn();
@@ -390,6 +391,14 @@ describe('WindowManager', () => {
     expect(card.setBounds).toHaveBeenCalledWith(firstBounds, false);
     expect(card.webContents.send).toHaveBeenCalledWith(SELECTION_CARD_CHANNELS.changed, first);
     expect(card.showInactive).toHaveBeenCalledOnce();
+    expect(card.moveTop).toHaveBeenCalledOnce();
+    expect(card.showInactive.mock.invocationCallOrder[0]!).toBeLessThan(
+      card.moveTop.mock.invocationCallOrder[0]!
+    );
+    expect(card.moveTop.mock.invocationCallOrder[0]!).toBeLessThan(
+      card.setAlwaysOnTop.mock.invocationCallOrder[1]!
+    );
+    expect(card.setAlwaysOnTop).toHaveBeenCalledTimes(2);
 
     const replacement = { ...first, sourceText: 'Replacement source text', source: 'ocr' as const };
     const replacementBounds = { x: -500, y: 700, width: 380, height: 320 };
@@ -400,6 +409,9 @@ describe('WindowManager', () => {
       replacement
     );
     expect(card.showInactive).toHaveBeenCalledTimes(2);
+    expect(card.moveTop).toHaveBeenCalledTimes(2);
+    expect(card.setAlwaysOnTop).toHaveBeenCalledTimes(3);
+    expect(card.focus).not.toHaveBeenCalled();
     expect(electron.BrowserWindow.instances).toHaveLength(2);
   });
 
@@ -420,9 +432,13 @@ describe('WindowManager', () => {
     expect(manager.getCurrentSelectionCard()).toBeUndefined();
     card.emit('ready-to-show');
     expect(card.showInactive).not.toHaveBeenCalled();
+    expect(card.moveTop).not.toHaveBeenCalled();
+    expect(card.setAlwaysOnTop).toHaveBeenCalledOnce();
 
     manager.presentSelectionCard(cardModel, { x: 3, y: 4, width: 380, height: 320 });
     expect(card.showInactive).toHaveBeenCalledOnce();
+    expect(card.moveTop).toHaveBeenCalledOnce();
+    expect(card.setAlwaysOnTop).toHaveBeenCalledTimes(2);
     expect(card.close().prevented).toBe(true);
     expect(card.webContents.send).toHaveBeenLastCalledWith(
       SELECTION_CARD_CHANNELS.changed,
@@ -430,6 +446,12 @@ describe('WindowManager', () => {
     );
     expect(card.hide).toHaveBeenCalledTimes(2);
     expect(onCardDismissed).toHaveBeenCalledOnce();
+
+    manager.presentSelectionCard(cardModel, { x: 5, y: 6, width: 380, height: 320 });
+    expect(card.showInactive).toHaveBeenCalledTimes(2);
+    expect(card.moveTop).toHaveBeenCalledTimes(2);
+    expect(card.setAlwaysOnTop).toHaveBeenCalledTimes(3);
+    expect(card.focus).not.toHaveBeenCalled();
 
     card.destroy();
     expect(manager.getCardWindow()).toBeUndefined();

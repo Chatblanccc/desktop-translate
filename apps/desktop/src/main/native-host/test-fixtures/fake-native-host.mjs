@@ -130,6 +130,7 @@ const server = net.createServer((socket) => {
         }));
       } else if (request.method === 'shutdown') {
         listening = false;
+        if (mode === 'selection-during-shutdown') sendSelection();
         socket.write(encode({ ...base, method: 'shutdown', payload: { ok: true } }));
         if (mode !== 'ignore-shutdown') setTimeout(() => process.exit(0), 10);
       } else {

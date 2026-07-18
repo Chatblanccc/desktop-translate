@@ -5,6 +5,10 @@ import {
   createE2eBaiduTransport
 } from '../../e2e/fixtures/e2e-baidu-transport.js';
 import { ShellLifecycle } from './shell-lifecycle.js';
+import {
+  createPhase4AuditTransport,
+  PHASE4_AUDIT_FILE_ENV
+} from './translation/phase4-audit-transport.js';
 import { ShellController, type Phase2DebugState } from './ui-shell/shell-controller.js';
 
 const testUserData = process.env.DESKTOP_TRANSLATE_USER_DATA_DIR;
@@ -13,7 +17,7 @@ if (!app.isPackaged && testUserData) app.setPath('userData', resolve(testUserDat
 const lifecycle = new ShellLifecycle<ShellController>({
   createShell: (requestQuit) => new ShellController({
     requestQuit,
-    ...resolveE2eTranslationTransport()
+    ...resolveTranslationTransport()
   }),
   onShellStarted: installTestApi,
   onInitializationFailure: () => {
@@ -26,6 +30,15 @@ const lifecycle = new ShellLifecycle<ShellController>({
   // safeStorage key material before the process exits.
   finishShutdown: () => app.quit()
 });
+
+function resolveTranslationTransport(): { readonly translationTransport?: BaiduTransport } {
+  const e2e = resolveE2eTranslationTransport();
+  if (e2e.translationTransport !== undefined || process.env.DESKTOP_TRANSLATE_E2E === '1') {
+    return e2e;
+  }
+  const auditTransport = createPhase4AuditTransport(process.env[PHASE4_AUDIT_FILE_ENV]);
+  return auditTransport === undefined ? {} : { translationTransport: auditTransport };
+}
 
 function resolveE2eTranslationTransport(): { readonly translationTransport?: BaiduTransport } {
   if (app.isPackaged || process.env.DESKTOP_TRANSLATE_E2E !== '1') return {};

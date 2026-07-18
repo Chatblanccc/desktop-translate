@@ -27,14 +27,16 @@
     "phase4:smoke": "pnpm --filter @desktop-translate/desktop phase4:smoke",
     "phase4:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/phase4-verify.ps1",
     "privacy:scan": "node ./tooling/privacy-scan.mjs",
-    "start:phase4": "pnpm --filter @desktop-translate/desktop start:phase4",
+    "start:phase4": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/start-phase4.ps1",
+    "prepare:phase4": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/start-phase4.ps1 -PrepareOnly",
+    "prepare:phase4:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/start-phase4.ps1 -PrepareOnly -ForceNativeBuild",
     "native:configure": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/native-phase1.ps1 -Action Configure",
     "native:build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/native-phase1.ps1 -Action Build",
     "native:test": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/native-phase1.ps1 -Action Test"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
-    "ajv": "8.17.1",
+    "ajv": "8.18.0",
     "ajv-formats": "3.0.1",
     "electron": "^43.1.1",
     "oxlint": "^1.74.0",

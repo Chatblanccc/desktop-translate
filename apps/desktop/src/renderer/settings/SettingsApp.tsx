@@ -135,6 +135,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
   const [providerSecretKey, setProviderSecretKey] = useState('');
   const [providerConsent, setProviderConsent] = useState(false);
   const [providerFeedback, setProviderFeedback] = useState<string | null>(null);
+  const [pendingSelectionEnabled, setPendingSelectionEnabled] = useState<boolean | null>(null);
   const [pendingTranslationEnabled, setPendingTranslationEnabled] = useState<boolean | null>(null);
   const nativeStatus = NATIVE_STATUS[snapshot.native.status];
   const controlsDisabled = loading || pendingAction !== null;
@@ -142,6 +143,12 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
   const providerConfigured = snapshot.translation.credentialStatus === 'configured';
 
   useDocumentTheme(snapshot.theme);
+
+  useEffect(() => {
+    if (pendingSelectionEnabled === snapshot.selection.enabled) {
+      setPendingSelectionEnabled(null);
+    }
+  }, [pendingSelectionEnabled, snapshot.selection.enabled]);
 
   useEffect(() => {
     if (pendingTranslationEnabled === snapshot.translation.enabled) {
@@ -232,10 +239,15 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
           <SettingRow
             title="启用划词取词"
             description="监听鼠标划选，优先读取应用提供的真实文字选区。"
-            checked={snapshot.selection.enabled}
+            checked={pendingSelectionEnabled ?? snapshot.selection.enabled}
             disabled={controlsDisabled}
             onChange={(enabled) => {
-              runAction('selection-enabled', () => api.setSelectionEnabled(enabled));
+              setPendingSelectionEnabled(enabled);
+              runAction(
+                'selection-enabled',
+                () => api.setSelectionEnabled(enabled),
+                () => setPendingSelectionEnabled(null)
+              );
             }}
           />
           <fieldset className="selection-mode-fieldset">
