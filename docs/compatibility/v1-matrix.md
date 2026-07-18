@@ -1,6 +1,8 @@
 # V1 兼容性矩阵
 
-状态：目标矩阵；实测栏必须在 Phase 1 探针运行后填写
+状态：目标矩阵；2026-07-18 已取得一个 Windows 11 单屏环境的部分证据，尚未完成矩阵。
+当前本机样本：Windows 11 build `26200`、单屏 `1440×960`、`150%` 缩放、底部任务栏。
+`LIMITED` 只表示该样本已有证据，不等于应用或系统维度整体通过。
 目标：Windows 10 22H2 / Windows 11 x64，当前用户标准权限
 
 Windows 10 22H2 在本项目中是兼容性目标，不等于操作系统安全支持承诺。其常规支持已于 2025-10-14 结束；正式发布必须把无 ESU/LTSC 的 Windows 10 标为 best-effort，并以仍受支持的 Windows 11 作为安全基线：[Microsoft 生命周期公告](https://learn.microsoft.com/en-us/lifecycle/announcements/windows-10-end-of-support)。
@@ -18,10 +20,10 @@ Windows 10 22H2 在本项目中是兼容性目标，不等于操作系统安全�
 
 ## 2. 应用/内容矩阵
 
-| 场景 | 计划等级 | 首选 | 回退 | V1 预期与边界 | Phase 1 实测 |
+| 场景 | 计划等级 | 首选 | 回退 | V1 预期与边界 | 累计实测 |
 |---|---:|---|---|---|---|
-| Windows 记事本纯文本 | A | UIA TextPattern | OCR | 基准真选区、矩形和多行 | 待验证 |
-| Chrome 普通 HTML 文本 | A | UIA | OCR | 普通段落/链接/多行；Canvas 不走 UIA | 待验证 |
+| Windows 记事本纯文本 | A | UIA TextPattern | OCR | 基准真选区、矩形和多行 | `LIMITED`：Notepad `11.2605.34.0` 的实际选区 UIA 探针返回 `Hello world`、`rectCount=1`；真实鼠标 `桌面翻译测试 → Desktop Translation Test`、`EN` 与 Provider 归属通过；多行/OCR 回退仍待测 |
+| Chrome 普通 HTML 文本 | A | UIA | OCR | 普通段落/链接/多行；Canvas 不走 UIA | `LIMITED`：Chrome `150.0.7871.101` 对公开文本 `Example Domain` 的真实鼠标划词翻译通过，Z-order 修复后再次复测结果卡可见；多行、OCR 回退和耗时矩阵仍待测 |
 | Edge 普通 HTML 文本 | A | UIA | OCR | 同 Chrome | 待验证 |
 | Word 桌面版 `.docx` | A | UIA | OCR | 普通正文；复杂浮动对象另测 | 待验证 |
 | Edge 文本型 PDF | A/B | UIA | OCR | 取决于 PDF 文本层和 Provider | 待验证 |
@@ -43,13 +45,14 @@ Windows 10 22H2 在本项目中是兼容性目标，不等于操作系统安全�
 
 | 维度 | 必测组合 | 通过标准 | 实测 |
 |---|---|---|---|
-| OS | Windows 10 22H2 x64；Windows 11 当前受支持版本 x64 | 安装/启动、Pipe、Hook、UIA、DXGI 探针无系统级崩溃 | 待验证 |
+| OS | Windows 10 22H2 x64；Windows 11 当前受支持版本 x64 | 安装/启动、Pipe、Hook、UIA、DXGI 探针无系统级崩溃 | `LIMITED`：仅 Windows 11 build `26200` 本机样本；Windows 10 与完整 DXGI 矩阵仍待测 |
 | 权限 | Main/Host 均普通权限；普通目标；管理员目标 | 普通目标可测；管理员目标明确失败且不提权 | 待验证 |
-| DPI | 100%、125%、150%、200% | Hook 点、UIA rect、OCR crop 和显示器快照一致 | 待验证 |
-| 多屏 | 左/右/上布局、负坐标、不同 DPI | 不钳制负坐标；锚点/裁剪落在正确 output | 待验证 |
+| DPI | 100%、125%、150%、200% | Hook 点、UIA rect、OCR crop 和显示器快照一致 | `LIMITED`：仅 `150%`；`100/125/200%` 待测 |
+| 多屏 | 左/右/上布局、负坐标、不同 DPI | 不钳制负坐标；锚点/裁剪落在正确 output | `PENDING`：当前样本为单屏 `1440×960`，不能证明负坐标或混合 DPI |
+| 任务栏/工作区 | 上、下、左、右 | 卡片保持在 workArea 内且不被目标窗口遮挡 | `LIMITED`：仅底部任务栏普通位置样本；边缘用例与其余三边待测 |
 | 旋转 | 0°、90°（最低要求） | DXGI crop 方向与屏幕可见内容一致 | 待验证 |
 | 显示变化 | 热插拔、改主屏、改缩放/分辨率 | 旧任务取消，duplication 重建，无错屏截图 | 待验证 |
-| 输入 | 鼠标单击、短拖、长拖、双击、触控板模拟鼠标 | 单击/短拖不误触；合格手势只生成一个 selection | 待验证 |
+| 输入 | 鼠标单击、短拖、长拖、双击、触控板模拟鼠标 | 单击/短拖不误触；合格手势只生成一个 selection | `LIMITED`：Chrome 已完成真实鼠标划词；短拖、长拖、双击和触控板矩阵仍待测 |
 | 会话 | 本地交互会话；锁定/解锁；RDP 仅观察 | 锁定时不采集；恢复后可重建或明确降级 | 待验证 |
 
 ## 4. 测试记录模板
@@ -75,7 +78,9 @@ Result: pass / limited / fail
 Evidence path:
 ```
 
-任何“limited/fail”必须链接 [风险登记](../phase1/risk-register.md) 或缺陷编号。版本升级后，Chrome/Edge/Word/PDF/VS Code 的核心用例应重新抽样；兼容性结论不可永久继承。
+任何“limited/fail”必须链接 [Phase 1 风险登记](../phase1/risk-register.md)、
+[Phase 4 风险登记](../phase4/risk-register.md)或缺陷编号。版本升级后，Chrome/Edge/Word/PDF/VS Code
+的核心用例应重新抽样；兼容性结论不可永久继承。
 
 ## 5. 对外表述
 

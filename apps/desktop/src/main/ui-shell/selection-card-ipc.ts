@@ -7,6 +7,7 @@ export interface SelectionCardIpcOptions {
   readonly resolveRole: (event: InvokeEventLike) => WindowRole | undefined;
   readonly getCurrent: () => SelectionCardViewModel | undefined;
   readonly dismiss: () => void;
+  readonly retry: () => void | Promise<void>;
 }
 
 function assertCard(event: InvokeEventLike, resolveRole: SelectionCardIpcOptions['resolveRole']): void {
@@ -31,8 +32,14 @@ export function registerSelectionCardIpc(options: SelectionCardIpcOptions): () =
     if (args.length !== 0) throw new TypeError('Selection card request does not accept arguments');
     options.dismiss();
   });
+  ipcMain.handle(SELECTION_CARD_CHANNELS.retry, async (event, ...args) => {
+    assertCard(event, resolveRole);
+    if (args.length !== 0) throw new TypeError('Selection card request does not accept arguments');
+    await options.retry();
+  });
   return () => {
     ipcMain.removeHandler(SELECTION_CARD_CHANNELS.getCurrent);
     ipcMain.removeHandler(SELECTION_CARD_CHANNELS.dismiss);
+    ipcMain.removeHandler(SELECTION_CARD_CHANNELS.retry);
   };
 }

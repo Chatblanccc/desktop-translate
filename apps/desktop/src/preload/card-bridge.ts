@@ -10,6 +10,7 @@ export type SelectionCardChangedListener = (value: SelectionCardViewModel | unde
 export interface SelectionCardRendererBridge {
   getCurrent(): Promise<SelectionCardViewModel | undefined>;
   dismiss(): Promise<void>;
+  retry(): Promise<void>;
   onChanged(listener: SelectionCardChangedListener): () => void;
 }
 
@@ -28,6 +29,10 @@ export function createSelectionCardRendererBridge(
     },
     async dismiss() {
       const result = await ipc.invoke(SELECTION_CARD_CHANNELS.dismiss);
+      if (result !== undefined) throw new Error('Main returned an unexpected card response');
+    },
+    async retry() {
+      const result = await ipc.invoke(SELECTION_CARD_CHANNELS.retry);
       if (result !== undefined) throw new Error('Main returned an unexpected card response');
     },
     onChanged(listener: SelectionCardChangedListener) {

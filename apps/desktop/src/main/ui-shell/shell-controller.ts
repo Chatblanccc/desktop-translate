@@ -1,12 +1,15 @@
 import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import {
   app,
   ipcMain,
   nativeTheme,
+  safeStorage,
   screen,
   session,
+  shell,
   type Rectangle
 } from 'electron';
 import type {
@@ -20,12 +23,17 @@ import type {
   ThemeMode,
   UiShellSnapshot
 } from '@desktop-translate/contracts/ui-shell';
-import type { SelectionCardViewModel } from '@desktop-translate/contracts/selection-card';
 import {
   SqliteAppExclusionsRepository,
-  SqlitePhase3SettingsRepository,
+  SqlitePhase4SettingsRepository,
+  SqliteSecretsRepository,
   runStorageMigrations
 } from '@desktop-translate/storage';
+import {
+  BaiduTranslationProvider,
+  TranslationProviderError,
+  type BaiduTransport
+} from '@desktop-translate/translation';
 import { NativeHostClient } from '../native-host/native-host-client.js';
 import { NativeHostSupervisor } from '../native-host/native-host-supervisor.js';
 import {
@@ -43,9 +51,19 @@ import {
   unionRectangles
 } from './selection-card-position.js';
 import { WindowManager } from './window-manager.js';
+import {
+  ProviderCredentialStore,
+  ProviderCredentialStoreError
+} from '../translation/provider-credential-store.js';
+import { TranslationController } from '../translation/translation-controller.js';
+
+const PROVIDER_PRIVACY_URL = 'https://fanyi-app.baidu.com/static/agreement/privacy.html';
+const PROVIDER_SERVICE_TERMS_URL = 'https://fanyi-api.baidu.com/doc/6';
+const TRANSLATION_CONSENT_VERSION = 1;
 
 export interface ShellControllerOptions {
   readonly requestQuit: () => void;
+  readonly translationTransport?: BaiduTransport;
 }
 
 interface NativeLaunchOptions {
@@ -68,8 +86,12 @@ export interface Phase2DebugState {
 export class ShellController {
   private readonly state = new UiShellState();
   private database: DatabaseSync | undefined;
-  private settings: SqlitePhase3SettingsRepository | undefined;
+  private settings: SqlitePhase4SettingsRepository | undefined;
   private exclusions: SqliteAppExclusionsRepository | undefined;
+  private credentials: ProviderCredentialStore | undefined;
+  private translationProvider: BaiduTranslationProvider | undefined;
+  private translation: TranslationController | undefined;
+  private providerTestAbortController: AbortController | undefined;
   private windows: WindowManager | undefined;
   private tray: TrayController | undefined;
   private nativeHost: NativeHostSupervisor | undefined;
@@ -82,7 +104,7 @@ export class ShellController {
   private positionWrite = Promise.resolve();
   private selectionCommand = Promise.resolve();
   private readonly displayChanged = (): void => {
-    this.windows?.dismissSelectionCard();
+    this.dismissTranslationCard();
     void this.recoverBallPosition().catch(() => {
       console.warn('[phase2:display] Failed to persist recovered ball position.');
     });
@@ -112,12 +134,39 @@ export class ShellController {
     const database = new DatabaseSync(join(app.getPath('userData'), 'desktop-translate.sqlite3'));
     this.database = database;
     runStorageMigrations(database, { migrationsDirectory: resolveMigrationsDirectory() });
-    const settings = new SqlitePhase3SettingsRepository(database, {
-      onInvalidSetting: (key) => console.warn(`[phase3:settings] Ignored invalid setting: ${key}`)
+    const settings = new SqlitePhase4SettingsRepository(database, {
+      onInvalidSetting: (key) => console.warn(`[phase4:settings] Ignored invalid setting: ${key}`)
     });
     this.settings = settings;
     this.exclusions = new SqliteAppExclusionsRepository(database);
-    this.state.initialize(await settings.load());
+    const credentials = new ProviderCredentialStore(
+      new SqliteSecretsRepository(database),
+      safeStorage
+    );
+    this.credentials = credentials;
+    const credentialStatus = await credentials.getStatus();
+    this.state.initialize(await settings.load(), credentialStatus);
+    const translationProvider = new BaiduTranslationProvider({
+      credentials: async () => {
+        try {
+          const loaded = await credentials.load();
+          if (loaded === undefined) void this.failClosedRuntimeCredentials('missing');
+          return loaded;
+        } catch (error) {
+          if (
+            !(error instanceof ProviderCredentialStoreError
+              && error.code === 'operation-superseded')
+          ) {
+            void this.failClosedRuntimeCredentials('unavailable');
+          }
+          throw error;
+        }
+      },
+      ...(this.options.translationTransport === undefined
+        ? {}
+        : { transport: this.options.translationTransport })
+    });
+    this.translationProvider = translationProvider;
     if (this.disposed) return;
     nativeTheme.themeSource = this.state.getSnapshot().theme;
 
@@ -134,9 +183,15 @@ export class ShellController {
           console.warn('[phase2:display] Failed to persist the moved ball position.');
         });
       },
-      onCardDismissed: () => undefined
+      onCardDismissed: () => this.translation?.dismiss()
     });
     this.windows = windows;
+    this.translation = new TranslationController({
+      provider: translationProvider,
+      getSettings: () => this.state.getSnapshot().translation,
+      presentCard: (card, bounds) => windows.presentSelectionCard(card, bounds),
+      hideCard: () => windows.dismissSelectionCard()
+    });
     this.disposeIpc = registerUiShellIpc({
       ipcMain,
       resolveRole: (event) => windows.resolveRole(event),
@@ -149,6 +204,15 @@ export class ShellController {
         setTheme: (value) => this.setTheme(value),
         setSelectionEnabled: (value) => this.setSelectionEnabled(value),
         setOcrActivation: (value) => this.setOcrActivation(value),
+        setTranslationEnabled: (value) => this.setTranslationEnabled(value),
+        setTranslationSourceLanguage: (value) => this.setTranslationSourceLanguage(value),
+        setTranslationTargetLanguage: (value) => this.setTranslationTargetLanguage(value),
+        saveBaiduCredentials: (value, consentVersion) =>
+          this.saveBaiduCredentials(value, consentVersion),
+        deleteBaiduCredentials: () => this.deleteBaiduCredentials(),
+        testTranslationProvider: () => this.testTranslationProvider(),
+        openProviderPrivacyPolicy: () => this.openProviderPrivacyPolicy(),
+        openProviderServiceTerms: () => this.openProviderServiceTerms(),
         resetBallPosition: () => this.resetBallPosition()
       }
     });
@@ -156,7 +220,8 @@ export class ShellController {
       ipcMain,
       resolveRole: (event) => windows.resolveRole(event),
       getCurrent: () => windows.getCurrentSelectionCard(),
-      dismiss: () => windows.dismissSelectionCard(true)
+      dismiss: () => windows.dismissSelectionCard(true),
+      retry: () => this.translation?.retry()
     });
 
     const tray = new TrayController({
@@ -255,7 +320,7 @@ export class ShellController {
     const settings = this.requireSettings();
     await settings.setSelectionEnabled(value);
     this.state.setSelectionEnabled(value);
-    if (!value) this.windows?.dismissSelectionCard();
+    if (!value) this.dismissTranslationCard();
     const client = this.nativeClient;
     if (client === undefined) return;
     this.selectionCommand = this.selectionCommand
@@ -268,6 +333,7 @@ export class ShellController {
   }
 
   public async setOcrActivation(value: OcrActivation): Promise<void> {
+    this.dismissTranslationCard();
     const settings = this.requireSettings();
     await settings.setOcrActivation(value);
     this.state.setOcrActivation(value);
@@ -278,6 +344,145 @@ export class ShellController {
     await this.selectionCommand;
   }
 
+  public async setTranslationEnabled(value: boolean): Promise<void> {
+    const settings = this.requireSettings();
+    if (!value) {
+      // Fail closed in memory before touching persistence. A database failure
+      // must not leave the old credential usable for another outbound request.
+      this.dismissTranslationCard();
+      this.cancelProviderTest('translation-disabled');
+      this.state.setTranslationEnabled(false);
+      await settings.setTranslationEnabled(false);
+      return;
+    }
+    const snapshot = this.state.getSnapshot();
+    if (
+      snapshot.translation.credentialStatus !== 'configured'
+      || snapshot.translation.consentVersion < TRANSLATION_CONSENT_VERSION
+    ) {
+      throw new Error('Online translation requires configured credentials and consent');
+    }
+    await settings.setTranslationEnabled(true);
+    this.state.setTranslationEnabled(true);
+  }
+
+  public async setTranslationTargetLanguage(value: string): Promise<void> {
+    this.dismissTranslationCard();
+    const settings = this.requireSettings();
+    await settings.setTranslationTargetLanguage(value);
+    this.state.setTranslationTargetLanguage(value);
+  }
+
+  public async setTranslationSourceLanguage(value: string): Promise<void> {
+    this.dismissTranslationCard();
+    const settings = this.requireSettings();
+    await settings.setTranslationSourceLanguage(value);
+    this.state.setTranslationSourceLanguage(value);
+  }
+
+  public async saveBaiduCredentials(
+    credentials: { readonly appId: string; readonly secretKey: string },
+    consentVersion: number
+  ): Promise<void> {
+    if (consentVersion !== TRANSLATION_CONSENT_VERSION) {
+      throw new TypeError('Translation consent version is invalid');
+    }
+    this.dismissTranslationCard();
+    this.cancelProviderTest('credentials-replaced');
+    try {
+      await this.requireCredentials().save(credentials);
+    } catch (error) {
+      if (
+        !(error instanceof ProviderCredentialStoreError
+          && error.code === 'operation-superseded')
+      ) {
+        await this.failClosedRuntimeCredentials('unavailable');
+      }
+      throw error;
+    }
+    await this.requireSettings().setTranslationConsentVersion(consentVersion);
+    this.state.setTranslationConsentVersion(consentVersion);
+    this.state.setTranslationCredentialStatus(await this.requireCredentials().getStatus());
+  }
+
+  public async deleteBaiduCredentials(): Promise<void> {
+    this.dismissTranslationCard();
+    this.cancelProviderTest('credentials-deleted');
+    // Reflect the most conservative runtime state before any storage operation.
+    this.state.setTranslationEnabled(false);
+    this.state.setTranslationConsentVersion(0);
+    this.state.setTranslationCredentialStatus('unavailable');
+
+    const settings = this.requireSettings();
+    let persistenceError: unknown;
+    try {
+      await settings.setTranslationEnabled(false);
+    } catch (error) {
+      persistenceError = error;
+    }
+    try {
+      await settings.resetTranslationConsent();
+    } catch (error) {
+      persistenceError ??= error;
+    }
+
+    let credentialDeleted = false;
+    try {
+      await this.requireCredentials().delete();
+      credentialDeleted = true;
+    } catch (error) {
+      persistenceError ??= error;
+    }
+    this.state.setTranslationCredentialStatus(credentialDeleted ? 'missing' : 'unavailable');
+    if (persistenceError !== undefined) {
+      throw new Error('Provider credentials could not be fully removed');
+    }
+  }
+
+  public async testTranslationProvider(): Promise<{ readonly ok: boolean; readonly code?: string }> {
+    const translation = this.state.getSnapshot().translation;
+    if (translation.credentialStatus !== 'configured') {
+      return { ok: false, code: 'credentials-missing' };
+    }
+    if (translation.consentVersion < TRANSLATION_CONSENT_VERSION) {
+      return { ok: false, code: 'consent-required' };
+    }
+    this.cancelProviderTest('provider-test-replaced');
+    const controller = new AbortController();
+    this.providerTestAbortController = controller;
+    try {
+      await this.requireTranslationProvider().translate({
+        requestId: randomUUID(),
+        selectionId: randomUUID(),
+        text: 'hello',
+        sourceLanguage: 'en',
+        targetLanguage: 'zh-CN'
+      }, {
+        signal: controller.signal,
+        now: () => new Date()
+      });
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        code: error instanceof TranslationProviderError ? error.failure.code : 'unknown'
+      };
+    } finally {
+      if (this.providerTestAbortController === controller) {
+        this.providerTestAbortController = undefined;
+      }
+      controller.abort('provider-test-complete');
+    }
+  }
+
+  public async openProviderPrivacyPolicy(): Promise<void> {
+    await shell.openExternal(PROVIDER_PRIVACY_URL);
+  }
+
+  public async openProviderServiceTerms(): Promise<void> {
+    await shell.openExternal(PROVIDER_SERVICE_TERMS_URL);
+  }
+
   public dispose(): Promise<void> {
     this.disposePromise ??= this.performDispose();
     return this.disposePromise;
@@ -285,6 +490,8 @@ export class ShellController {
 
   private async performDispose(): Promise<void> {
     this.disposed = true;
+    this.cancelProviderTest('app-disposed');
+    this.translation?.cancelAndHide();
     screen.removeListener('display-added', this.displayChanged);
     screen.removeListener('display-removed', this.displayChanged);
     screen.removeListener('display-metrics-changed', this.displayChanged);
@@ -294,9 +501,10 @@ export class ShellController {
     this.disposeCardIpc?.();
     this.disposeCardIpc = undefined;
     await this.positionWrite.catch(() => undefined);
-    await this.nativeHost?.stop().catch(() => undefined);
+    const nativeHost = this.nativeHost;
     this.nativeHost = undefined;
     this.nativeClient = undefined;
+    await nativeHost?.stop().catch(() => undefined);
     this.tray?.dispose();
     this.tray = undefined;
     this.windows?.dispose();
@@ -305,11 +513,51 @@ export class ShellController {
     this.database = undefined;
     this.settings = undefined;
     this.exclusions = undefined;
+    this.credentials = undefined;
+    this.translationProvider = undefined;
+    this.translation = undefined;
   }
 
-  private requireSettings(): SqlitePhase3SettingsRepository {
-    if (this.settings === undefined) throw new Error('Phase 3 settings are not initialized');
+  private requireSettings(): SqlitePhase4SettingsRepository {
+    if (this.settings === undefined) throw new Error('Phase 4 settings are not initialized');
     return this.settings;
+  }
+
+  private requireCredentials(): ProviderCredentialStore {
+    if (this.credentials === undefined) throw new Error('Provider credentials are not initialized');
+    return this.credentials;
+  }
+
+  private requireTranslationProvider(): BaiduTranslationProvider {
+    if (this.translationProvider === undefined) throw new Error('Translation provider is not initialized');
+    return this.translationProvider;
+  }
+
+  private failClosedRuntimeCredentials(status: 'missing' | 'unavailable'): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    const translation = this.state.getSnapshot().translation;
+    if (translation.credentialStatus === status && !translation.enabled) {
+      return Promise.resolve();
+    }
+
+    const persistDisabledState = translation.enabled;
+    this.state.setTranslationCredentialStatus(status);
+    const settings = this.settings;
+    if (!persistDisabledState || settings === undefined) return Promise.resolve();
+    return settings.setTranslationEnabled(false).catch(() => {
+      console.warn('[phase4:credentials] Failed to persist fail-closed translation state.');
+    });
+  }
+
+  private dismissTranslationCard(): void {
+    if (this.translation === undefined) this.windows?.dismissSelectionCard();
+    else this.translation.cancelAndHide();
+  }
+
+  private cancelProviderTest(reason: string): void {
+    const controller = this.providerTestAbortController;
+    this.providerTestAbortController = undefined;
+    controller?.abort(reason);
   }
 
   private async handleBallMoved(bounds: Rectangle): Promise<void> {
@@ -366,6 +614,7 @@ export class ShellController {
     this.nativeHost = supervisor;
     supervisor.on('ready', () => this.state.setNativeStatus('ready'));
     supervisor.on('clientReady', (client: NativeHostClient) => {
+      if (this.disposed || this.nativeHost !== supervisor) return;
       this.nativeClient = client;
       this.selectionCommand = this.selectionCommand
         .catch(() => undefined)
@@ -382,7 +631,7 @@ export class ShellController {
     supervisor.on('health', (health: HealthResponse) => this.applyHealth(health));
     supervisor.on('unhealthy', () => {
       this.nativeClient = undefined;
-      this.windows?.dismissSelectionCard();
+      this.dismissTranslationCard();
       this.state.setNativeStatus('starting');
       this.state.setSelectionLifecycle(
         this.state.getSnapshot().selection.enabled ? 'starting' : 'disabled'
@@ -390,7 +639,7 @@ export class ShellController {
     });
     supervisor.on('restarting', () => {
       this.nativeClient = undefined;
-      this.windows?.dismissSelectionCard();
+      this.dismissTranslationCard();
       this.state.setNativeStatus('starting');
       this.state.setSelectionLifecycle(
         this.state.getSnapshot().selection.enabled ? 'starting' : 'disabled'
@@ -398,7 +647,7 @@ export class ShellController {
     });
     supervisor.on('fatal', () => {
       this.nativeClient = undefined;
-      this.windows?.dismissSelectionCard();
+      this.dismissTranslationCard();
       this.state.setNativeStatus('faulted');
       this.state.setSelectionLifecycle('faulted');
     });
@@ -453,7 +702,11 @@ export class ShellController {
   }
 
   private async startNativeListening(client: NativeHostClient): Promise<void> {
-    if (this.nativeClient !== client || !this.state.getSnapshot().selection.enabled) return;
+    if (
+      this.disposed
+      || this.nativeClient !== client
+      || !this.state.getSnapshot().selection.enabled
+    ) return;
     this.state.setSelectionLifecycle('starting');
     await client.request('start', await this.nativeStartConfig(), 3_000);
     const health = await client.request('health', {});
@@ -464,12 +717,16 @@ export class ShellController {
     if (this.nativeClient !== client) return;
     await client.request('stop', { reason: 'selection-disabled' });
     this.state.setSelectionLifecycle('disabled');
-    this.windows?.dismissSelectionCard();
+    this.dismissTranslationCard();
   }
 
   private async restartNativeListening(): Promise<void> {
     const client = this.nativeClient;
-    if (client === undefined || !this.state.getSnapshot().selection.enabled) return;
+    if (
+      this.disposed
+      || client === undefined
+      || !this.state.getSnapshot().selection.enabled
+    ) return;
     await client.request('stop', { reason: 'selection-config-changed' });
     await this.startNativeListening(client);
   }
@@ -478,12 +735,12 @@ export class ShellController {
     if (error.selectionId !== undefined && error.recoverable) return;
     if (!error.recoverable) {
       this.state.setSelectionLifecycle('faulted');
-      this.windows?.dismissSelectionCard();
+      this.dismissTranslationCard();
     }
   }
 
   private handleSelection(selection: SelectionResult): void {
-    if (!this.state.getSnapshot().selection.enabled) return;
+    if (this.disposed || !this.state.getSnapshot().selection.enabled) return;
     const physicalRects = selection.physicalRects.length > 0
       ? selection.physicalRects
       : [{ x: selection.releasePoint.x, y: selection.releasePoint.y, width: 1, height: 1 }];
@@ -494,14 +751,8 @@ export class ShellController {
       x: Math.round(anchor.x + anchor.width / 2),
       y: Math.round(anchor.y + anchor.height / 2)
     });
-    const card: SelectionCardViewModel = {
-      selectionId: selection.selectionId,
-      text: selection.text,
-      source: selection.source,
-      confidence: selection.confidence
-    };
-    this.windows?.presentSelectionCard(
-      card,
+    this.translation?.handleSelection(
+      selection,
       resolveSelectionCardBounds(anchor, display.workArea)
     );
   }

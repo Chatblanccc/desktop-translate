@@ -18,6 +18,11 @@ function Invoke-CheckedExternal {
     }
 }
 
+$originalSelectionHostPath = [Environment]::GetEnvironmentVariable(
+    'SELECTION_HOST_PATH',
+    [EnvironmentVariableTarget]::Process
+)
+
 Push-Location $root
 try {
     Write-Host '[phase1] TypeScript typecheck'
@@ -34,21 +39,19 @@ try {
         exit 0
     }
 
-    $portableLlvm = Get-ChildItem -LiteralPath (Join-Path $root '.tools') -Directory `
-        -Filter 'llvm-mingw-*-ucrt-x86_64' -ErrorAction SilentlyContinue |
-        Sort-Object Name -Descending | Select-Object -First 1
-    if ($portableLlvm) {
-        $env:PATH = "$(Join-Path $portableLlvm.FullName 'bin');$env:PATH"
-    }
-
     Write-Host '[phase1] Configure Native Host'
-    Invoke-CheckedExternal -FilePath 'pnpm' -ArgumentList @('native:configure')
+    & (Join-Path $PSScriptRoot 'native-phase1.ps1') -Action Configure
     Write-Host '[phase1] Build Native Host'
-    Invoke-CheckedExternal -FilePath 'pnpm' -ArgumentList @('native:build')
+    & (Join-Path $PSScriptRoot 'native-phase1.ps1') -Action Build -SetSelectionHostPath
     Write-Host '[phase1] Run Native Host tests'
-    Invoke-CheckedExternal -FilePath 'pnpm' -ArgumentList @('native:test')
+    & (Join-Path $PSScriptRoot 'native-phase1.ps1') -Action Test
     Write-Host '[phase1] Run live Named Pipe handshake'
     Invoke-CheckedExternal -FilePath 'pnpm' -ArgumentList @('phase1:smoke')
 } finally {
+    if ($null -eq $originalSelectionHostPath) {
+        Remove-Item Env:SELECTION_HOST_PATH -ErrorAction SilentlyContinue
+    } else {
+        $env:SELECTION_HOST_PATH = $originalSelectionHostPath
+    }
     Pop-Location
 }

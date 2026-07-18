@@ -1,24 +1,18 @@
 {
   "name": "desktop-translate",
-  "version": "0.3.0-phase3",
+  "version": "0.4.0-phase4",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.32.1",
   "engines": {
     "node": ">=22.23.1 <25"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "electron",
-      "esbuild"
-    ]
-  },
   "scripts": {
     "build": "pnpm -r --if-present build",
     "lint": "oxlint . --deny-warnings",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-    "test:coverage": "pnpm --filter @desktop-translate/desktop test:coverage",
+    "test:coverage": "pnpm -r --workspace-concurrency=1 --if-present test:coverage",
     "test:e2e": "pnpm --filter @desktop-translate/desktop test:e2e",
     "test:contracts": "pnpm --filter @desktop-translate/contracts test",
     "test:desktop": "pnpm --filter @desktop-translate/desktop test",
@@ -30,13 +24,19 @@
     "phase3:smoke": "pnpm --filter @desktop-translate/desktop phase3:smoke",
     "phase3:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/phase3-verify.ps1",
     "start:phase3": "pnpm --filter @desktop-translate/desktop start:phase3",
+    "phase4:smoke": "pnpm --filter @desktop-translate/desktop phase4:smoke",
+    "phase4:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/phase4-verify.ps1",
+    "privacy:scan": "node ./tooling/privacy-scan.mjs",
+    "start:phase4": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/start-phase4.ps1",
+    "prepare:phase4": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/start-phase4.ps1 -PrepareOnly",
+    "prepare:phase4:verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/start-phase4.ps1 -PrepareOnly -ForceNativeBuild",
     "native:configure": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/native-phase1.ps1 -Action Configure",
     "native:build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/native-phase1.ps1 -Action Build",
     "native:test": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/native-phase1.ps1 -Action Test"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",
-    "ajv": "8.17.1",
+    "ajv": "8.18.0",
     "ajv-formats": "3.0.1",
     "electron": "^43.1.1",
     "oxlint": "^1.74.0",

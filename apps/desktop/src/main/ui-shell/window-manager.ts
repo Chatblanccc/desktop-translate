@@ -234,7 +234,7 @@ export class WindowManager {
     if (!this.cardReady) return;
     window.setBounds(bounds, false);
     window.webContents.send(SELECTION_CARD_CHANNELS.changed, this.currentCard);
-    window.showInactive();
+    this.showCardInactiveOnTop(window);
   }
 
   public dismissSelectionCard(notify = false): void {
@@ -329,10 +329,16 @@ export class WindowManager {
       ) return;
       window.setBounds(this.currentCardBounds, false);
       window.webContents.send(SELECTION_CARD_CHANNELS.changed, this.currentCard);
-      window.showInactive();
+      this.showCardInactiveOnTop(window);
     });
     await window.loadFile(html);
     await this.applySystemAccent(window);
+  }
+
+  private showCardInactiveOnTop(window: BrowserWindow): void {
+    window.showInactive();
+    window.moveTop();
+    window.setAlwaysOnTop(true, 'floating');
   }
 
   private register(window: BrowserWindow, role: WindowRole, html: string): void {

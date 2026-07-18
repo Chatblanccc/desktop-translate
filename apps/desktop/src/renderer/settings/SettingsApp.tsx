@@ -1,4 +1,4 @@
-import { useId, useState, type JSX } from 'react';
+import { useEffect, useId, useState, type JSX } from 'react';
 import {
   type NativeUiStatus,
   type OcrActivation,
@@ -8,7 +8,7 @@ import {
   useUiShellSnapshot
 } from '../shared/shell-api.js';
 
-const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.3.0-phase3';
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.4.0-phase4';
 
 const NATIVE_STATUS: Readonly<
   Record<NativeUiStatus, { readonly title: string; readonly description: string }>
@@ -52,12 +52,34 @@ const OCR_OPTIONS: ReadonlyArray<{ readonly value: OcrActivation; readonly label
   { value: 'alt-drag', label: '仅 Alt + 拖动' }
 ];
 
+const TARGET_LANGUAGE_OPTIONS = [
+  { value: 'zh-CN', label: '简体中文' },
+  { value: 'en', label: '英语' },
+  { value: 'ja', label: '日语' },
+  { value: 'ko', label: '韩语' }
+] as const;
+
+const SOURCE_LANGUAGE_OPTIONS = [
+  { value: 'auto', label: '自动检测' },
+  ...TARGET_LANGUAGE_OPTIONS
+] as const;
+
+const TRANSLATION_CONSENT_VERSION = 1;
+
 type PendingAction =
   | 'ball-visible'
   | 'edge-snap'
   | 'theme'
   | 'selection-enabled'
   | 'ocr-activation'
+  | 'translation-enabled'
+  | 'translation-source-language'
+  | 'translation-target-language'
+  | 'save-provider-credentials'
+  | 'delete-provider-credentials'
+  | 'test-provider'
+  | 'open-provider-privacy'
+  | 'open-provider-service-terms'
   | 'reset'
   | null;
 
@@ -109,15 +131,40 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
   const { snapshot, loading, error: snapshotError } = useUiShellSnapshot(api);
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [providerAppId, setProviderAppId] = useState('');
+  const [providerSecretKey, setProviderSecretKey] = useState('');
+  const [providerConsent, setProviderConsent] = useState(false);
+  const [providerFeedback, setProviderFeedback] = useState<string | null>(null);
+  const [pendingSelectionEnabled, setPendingSelectionEnabled] = useState<boolean | null>(null);
+  const [pendingTranslationEnabled, setPendingTranslationEnabled] = useState<boolean | null>(null);
   const nativeStatus = NATIVE_STATUS[snapshot.native.status];
   const controlsDisabled = loading || pendingAction !== null;
+  const credentialUnavailable = snapshot.translation.credentialStatus === 'unavailable';
+  const providerConfigured = snapshot.translation.credentialStatus === 'configured';
 
   useDocumentTheme(snapshot.theme);
 
-  const runAction = (action: Exclude<PendingAction, null>, operation: () => Promise<void>): void => {
+  useEffect(() => {
+    if (pendingSelectionEnabled === snapshot.selection.enabled) {
+      setPendingSelectionEnabled(null);
+    }
+  }, [pendingSelectionEnabled, snapshot.selection.enabled]);
+
+  useEffect(() => {
+    if (pendingTranslationEnabled === snapshot.translation.enabled) {
+      setPendingTranslationEnabled(null);
+    }
+  }, [pendingTranslationEnabled, snapshot.translation.enabled]);
+
+  const runAction = (
+    action: Exclude<PendingAction, null>,
+    operation: () => Promise<void>,
+    onFailure?: () => void
+  ): void => {
     setPendingAction(action);
     setActionError(null);
     void operation().catch(() => {
+      onFailure?.();
       setActionError('设置未能保存，请稍后重试。');
     }).finally(() => {
       setPendingAction(null);
@@ -136,7 +183,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
         </span>
         <span>
           <span className="app-name">桌面翻译</span>
-          <span className="app-stage">Phase 3 · 内部开发预览</span>
+          <span className="app-stage">Phase 4 · 内部开发预览</span>
         </span>
       </header>
 
@@ -192,10 +239,15 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
           <SettingRow
             title="启用划词取词"
             description="监听鼠标划选，优先读取应用提供的真实文字选区。"
-            checked={snapshot.selection.enabled}
+            checked={pendingSelectionEnabled ?? snapshot.selection.enabled}
             disabled={controlsDisabled}
             onChange={(enabled) => {
-              runAction('selection-enabled', () => api.setSelectionEnabled(enabled));
+              setPendingSelectionEnabled(enabled);
+              runAction(
+                'selection-enabled',
+                () => api.setSelectionEnabled(enabled),
+                () => setPendingSelectionEnabled(null)
+              );
             }}
           />
           <fieldset className="selection-mode-fieldset">
@@ -256,6 +308,207 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
             ))}
           </div>
         </fieldset>
+      </section>
+
+      <section className="settings-section" aria-labelledby="translation-heading">
+        <h2 id="translation-heading">在线翻译</h2>
+        <div className="settings-card provider-settings-card">
+          <SettingRow
+            title="启用百度在线翻译"
+            description={providerConfigured
+              ? '划词原文将发送给百度翻译，失败时仍保留本地原文。'
+              : '请先保存自己的百度翻译 APP ID 和密钥。'}
+            checked={pendingTranslationEnabled ?? snapshot.translation.enabled}
+            disabled={
+              controlsDisabled
+              || !providerConfigured
+              || snapshot.translation.consentVersion < TRANSLATION_CONSENT_VERSION
+            }
+            onChange={(enabled) => {
+              setPendingTranslationEnabled(enabled);
+              runAction(
+                'translation-enabled',
+                () => api.setTranslationEnabled(enabled),
+                () => setPendingTranslationEnabled(null)
+              );
+            }}
+          />
+
+          <div className="provider-language-row">
+            <label className="setting-copy" htmlFor="translation-source-language">
+              <span className="setting-title">源语言</span>
+              <span className="setting-description">默认自动检测，也可以限定常用源语言。</span>
+            </label>
+            <select
+              id="translation-source-language"
+              value={snapshot.translation.sourceLanguage}
+              disabled={controlsDisabled}
+              onChange={(event) => {
+                runAction(
+                  'translation-source-language',
+                  () => api.setTranslationSourceLanguage(event.currentTarget.value)
+                );
+              }}
+            >
+              {SOURCE_LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="provider-language-row">
+            <label className="setting-copy" htmlFor="translation-target-language">
+              <span className="setting-title">目标语言</span>
+              <span className="setting-description">可随时调整译文语言。</span>
+            </label>
+            <select
+              id="translation-target-language"
+              value={snapshot.translation.targetLanguage}
+              disabled={controlsDisabled}
+              onChange={(event) => {
+                runAction(
+                  'translation-target-language',
+                  () => api.setTranslationTargetLanguage(event.currentTarget.value)
+                );
+              }}
+            >
+              {TARGET_LANGUAGE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <fieldset className="provider-credentials" disabled={controlsDisabled}>
+            <legend className="setting-title">百度翻译凭据</legend>
+            <p className="setting-description">
+              凭据仅由 Electron Main 使用，并通过 Windows 安全存储加密后写入本机数据库；界面不会回显密钥。
+            </p>
+            <label className="provider-input-label" htmlFor="provider-app-id">
+              <span>APP ID</span>
+              <input
+                id="provider-app-id"
+                type="text"
+                autoComplete="off"
+                maxLength={128}
+                value={providerAppId}
+                onChange={(event) => setProviderAppId(event.currentTarget.value)}
+              />
+            </label>
+            <label className="provider-input-label" htmlFor="provider-secret-key">
+              <span>密钥</span>
+              <input
+                id="provider-secret-key"
+                type="password"
+                autoComplete="new-password"
+                maxLength={512}
+                value={providerSecretKey}
+                onChange={(event) => setProviderSecretKey(event.currentTarget.value)}
+              />
+            </label>
+            <label className="provider-consent" htmlFor="provider-consent">
+              <input
+                id="provider-consent"
+                type="checkbox"
+                checked={providerConsent}
+                onChange={(event) => setProviderConsent(event.currentTarget.checked)}
+              />
+              <span>我已了解：启用后，选中的最终文本和语言参数会发送给百度翻译。</span>
+            </label>
+            <div className="provider-actions">
+              <button
+                className="primary-button"
+                type="button"
+                disabled={
+                  controlsDisabled
+                  || providerAppId.trim().length === 0
+                  || providerSecretKey.trim().length === 0
+                  || !providerConsent
+                }
+                onClick={() => {
+                  runAction('save-provider-credentials', async () => {
+                    await api.saveBaiduCredentials(
+                      providerAppId.trim(),
+                      providerSecretKey.trim(),
+                      TRANSLATION_CONSENT_VERSION
+                    );
+                    setProviderAppId('');
+                    setProviderSecretKey('');
+                    setProviderConsent(false);
+                    setProviderFeedback('凭据已安全保存。');
+                  });
+                }}
+              >
+                {pendingAction === 'save-provider-credentials'
+                  ? '保存中…'
+                  : providerConfigured ? '替换凭据' : '保存凭据'}
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={controlsDisabled || !providerConfigured}
+                onClick={() => {
+                  runAction('test-provider', async () => {
+                    const result = await api.testTranslationProvider();
+                    setProviderFeedback(result.ok
+                      ? '连接测试成功。'
+                      : `连接测试失败：${result.code ?? 'unknown'}`);
+                  });
+                }}
+              >
+                {pendingAction === 'test-provider' ? '测试中…' : '测试连接'}
+              </button>
+              <button
+                className="secondary-button danger-button"
+                type="button"
+                disabled={
+                  controlsDisabled || snapshot.translation.credentialStatus === 'missing'
+                }
+                onClick={() => {
+                  runAction('delete-provider-credentials', async () => {
+                    await api.deleteBaiduCredentials();
+                    setProviderAppId('');
+                    setProviderSecretKey('');
+                    setProviderConsent(false);
+                    setProviderFeedback('凭据已删除，在线翻译已关闭。');
+                  });
+                }}
+              >
+                删除凭据
+              </button>
+              <button
+                className="link-button"
+                type="button"
+                disabled={controlsDisabled}
+                onClick={() => {
+                  runAction('open-provider-privacy', () => api.openProviderPrivacyPolicy());
+                }}
+              >
+                查看百度翻译隐私说明
+              </button>
+              <button
+                className="link-button"
+                type="button"
+                disabled={controlsDisabled}
+                onClick={() => {
+                  runAction('open-provider-service-terms', () => api.openProviderServiceTerms());
+                }}
+              >
+                查看百度翻译开放平台服务条款
+              </button>
+            </div>
+            <p className="provider-network-notice">
+              “测试连接”会立即联网，但只发送固定英文探针，不发送当前选区文本。
+            </p>
+            <output className="provider-status" aria-live="polite">
+              安全存储状态：{
+                credentialUnavailable ? '不可用'
+                  : providerConfigured ? '凭据已配置'
+                    : '未配置凭据'
+              }
+              {providerFeedback === null ? '' : ` · ${providerFeedback}`}
+            </output>
+          </fieldset>
+        </div>
       </section>
 
       <section className="settings-section" aria-labelledby="status-heading">

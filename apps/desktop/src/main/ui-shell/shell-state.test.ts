@@ -9,7 +9,14 @@ describe('UiShellState', () => {
     state.initialize({
       ball: { visible: false, edgeSnap: true },
       theme: 'dark',
-      selection: { enabled: true, ocrActivation: 'fallback' }
+      selection: { enabled: true, ocrActivation: 'fallback' },
+      translation: {
+        enabled: false,
+        providerId: 'baidu',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        consentVersion: 0
+      }
     });
     const snapshot = state.getSnapshot();
     expect(snapshot.ball.visible).toBe(false);
@@ -36,7 +43,14 @@ describe('UiShellState', () => {
     state.initialize({
       ball: { visible: true, edgeSnap: true },
       theme: 'system',
-      selection: { enabled: false, ocrActivation: 'fallback' }
+      selection: { enabled: false, ocrActivation: 'fallback' },
+      translation: {
+        enabled: false,
+        providerId: 'baidu',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        consentVersion: 0
+      }
     });
     expect(state.getSnapshot().selection.lifecycle).toBe('disabled');
     state.setSelectionEnabled(true);
@@ -51,5 +65,32 @@ describe('UiShellState', () => {
     expect(state.getSnapshot().ball.anchor).toBeUndefined();
     state.setSelectionEnabled(false);
     expect(state.getSnapshot().selection.lifecycle).toBe('disabled');
+  });
+
+  it('fails closed until translation credentials and consent are configured', () => {
+    const state = new UiShellState();
+    state.initialize({
+      ball: { visible: true, edgeSnap: true },
+      theme: 'system',
+      selection: { enabled: true, ocrActivation: 'fallback' },
+      translation: {
+        enabled: true,
+        providerId: 'baidu',
+        sourceLanguage: 'auto',
+        targetLanguage: 'zh-CN',
+        consentVersion: 1
+      }
+    }, 'missing');
+    expect(state.getSnapshot().translation.enabled).toBe(false);
+    state.setTranslationCredentialStatus('configured');
+    state.setTranslationConsentVersion(1);
+    state.setTranslationEnabled(true);
+    state.setTranslationTargetLanguage('en');
+    expect(state.getSnapshot().translation).toMatchObject({
+      enabled: true,
+      credentialStatus: 'configured',
+      consentVersion: 1,
+      targetLanguage: 'en'
+    });
   });
 });

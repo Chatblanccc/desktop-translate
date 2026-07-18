@@ -38,6 +38,13 @@ describe('renderer bridges', () => {
     await api.setTheme('dark');
     await api.setSelectionEnabled(false);
     await api.setOcrActivation('alt-drag');
+    await api.setTranslationEnabled(false);
+    await api.setTranslationSourceLanguage('auto');
+    await api.setTranslationTargetLanguage('en');
+    await api.saveBaiduCredentials('app-id', 'secret-key', 1);
+    await api.deleteBaiduCredentials();
+    await api.openProviderPrivacyPolicy();
+    await api.openProviderServiceTerms();
     await api.resetBallPosition();
     expect(invoke.mock.calls).toEqual([
       [UI_SHELL_CHANNELS.setBallVisible, { value: false }],
@@ -45,6 +52,15 @@ describe('renderer bridges', () => {
       [UI_SHELL_CHANNELS.setTheme, { value: 'dark' }],
       [UI_SHELL_CHANNELS.setSelectionEnabled, { value: false }],
       [UI_SHELL_CHANNELS.setOcrActivation, { value: 'alt-drag' }],
+      [UI_SHELL_CHANNELS.setTranslationEnabled, { value: false }],
+      [UI_SHELL_CHANNELS.setTranslationSourceLanguage, { value: 'auto' }],
+      [UI_SHELL_CHANNELS.setTranslationTargetLanguage, { value: 'en' }],
+      [UI_SHELL_CHANNELS.saveBaiduCredentials, {
+        appId: 'app-id', secretKey: 'secret-key', consentVersion: 1
+      }],
+      [UI_SHELL_CHANNELS.deleteBaiduCredentials],
+      [UI_SHELL_CHANNELS.openProviderPrivacyPolicy],
+      [UI_SHELL_CHANNELS.openProviderServiceTerms],
       [UI_SHELL_CHANNELS.resetBallPosition]
     ]);
   });
@@ -67,6 +83,31 @@ describe('renderer bridges', () => {
     await expect(createSettingsRendererBridge(port).getSnapshot()).resolves.toEqual(
       DEFAULT_UI_SHELL_SNAPSHOT
     );
+  });
+
+  it('accepts only sanitized provider test results', async () => {
+    const { port, invoke } = createIpc();
+    const api = createSettingsRendererBridge(port);
+    invoke.mockResolvedValueOnce({ ok: true });
+    await expect(api.testTranslationProvider()).resolves.toEqual({ ok: true });
+    invoke.mockResolvedValueOnce({ ok: false, code: 'network-unavailable' });
+    await expect(api.testTranslationProvider()).resolves.toEqual({
+      ok: false,
+      code: 'network-unavailable'
+    });
+
+    for (const invalid of [
+      null,
+      [],
+      'failed',
+      { ok: 'yes' },
+      { ok: false, code: 500 },
+      { ok: false, code: 'INVALID CODE' },
+      { ok: true, raw: 'secret' }
+    ]) {
+      invoke.mockResolvedValueOnce(invalid);
+      await expect(api.testTranslationProvider()).rejects.toThrow(/invalid provider test result/u);
+    }
   });
 
   it('rejects non-void command responses', async () => {

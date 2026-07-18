@@ -5,8 +5,9 @@ import { registerSelectionCardIpc } from './selection-card-ipc.js';
 import type { InvokeEventLike, IpcMainPort } from './ui-shell-ipc.js';
 
 const card: SelectionCardViewModel = {
+  kind: 'source-only',
   selectionId: '123e4567-e89b-42d3-a456-426614174000',
-  text: 'source text',
+  sourceText: 'source text',
   source: 'uia',
   confidence: 1
 };
@@ -20,21 +21,25 @@ function setup(role: 'card' | 'ball' = 'card') {
   const mainFrame = { url: 'file:///card.html' };
   const event: InvokeEventLike = { sender: { id: 1, mainFrame }, senderFrame: mainFrame };
   const dismiss = vi.fn();
+  const retry = vi.fn();
   const dispose = registerSelectionCardIpc({
     ipcMain,
     resolveRole: () => role,
     getCurrent: () => card,
-    dismiss
+    dismiss,
+    retry
   });
-  return { handlers, event, dismiss, dispose };
+  return { handlers, event, dismiss, retry, dispose };
 }
 
 describe('selection card IPC', () => {
   it('allows only the registered card main frame', () => {
-    const { handlers, event, dismiss } = setup();
+    const { handlers, event, dismiss, retry } = setup();
     expect(handlers.get(SELECTION_CARD_CHANNELS.getCurrent)?.(event)).toEqual(card);
     handlers.get(SELECTION_CARD_CHANNELS.dismiss)?.(event);
     expect(dismiss).toHaveBeenCalledOnce();
+    void handlers.get(SELECTION_CARD_CHANNELS.retry)?.(event);
+    expect(retry).toHaveBeenCalledOnce();
   });
 
   it('rejects other roles, subframes, and arguments', () => {
@@ -49,9 +54,9 @@ describe('selection card IPC', () => {
       .toThrow(/does not accept/u);
   });
 
-  it('removes both handlers during shutdown', () => {
+  it('removes every handler during shutdown', () => {
     const { handlers, dispose } = setup();
-    expect(handlers.size).toBe(2);
+    expect(handlers.size).toBe(3);
     dispose();
     expect(handlers.size).toBe(0);
   });

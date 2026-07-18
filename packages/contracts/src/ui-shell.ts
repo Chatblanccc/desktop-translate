@@ -1,6 +1,13 @@
+import {
+  isPhase4TranslationProviderId,
+  isPhase4TranslationSourceLanguage,
+  isPhase4TranslationTargetLanguage,
+  type LanguageCode,
+} from "./translation.js";
+
 /** Shared Electron UI shell contracts. Keep renderer-facing payloads dependency-free. */
 
-export const UI_SHELL_VERSION = 2 as const;
+export const UI_SHELL_VERSION = 3 as const;
 
 export const THEME_MODES = ["system", "light", "dark"] as const;
 export type ThemeMode = (typeof THEME_MODES)[number];
@@ -29,6 +36,18 @@ export type OcrActivation = (typeof OCR_ACTIVATIONS)[number];
 export const BALL_EDGES = ["left", "right"] as const;
 export type BallEdge = (typeof BALL_EDGES)[number];
 
+export const CREDENTIAL_STATUSES = ["missing", "configured", "unavailable"] as const;
+export type CredentialStatus = (typeof CREDENTIAL_STATUSES)[number];
+
+export interface TranslationUiState {
+  readonly enabled: boolean;
+  readonly providerId: string;
+  readonly sourceLanguage: LanguageCode | "auto";
+  readonly targetLanguage: LanguageCode;
+  readonly credentialStatus: CredentialStatus;
+  readonly consentVersion: number;
+}
+
 export interface BallAnchor {
   readonly displayId: string;
   readonly edge: BallEdge;
@@ -52,6 +71,8 @@ export interface UiShellSnapshot {
     readonly lifecycle: SelectionLifecycle;
     readonly ocrActivation: OcrActivation;
   };
+  /** Non-sensitive configuration only. Provider credentials never enter this snapshot. */
+  readonly translation: TranslationUiState;
 }
 
 export const DEFAULT_UI_SHELL_SNAPSHOT: UiShellSnapshot = Object.freeze({
@@ -69,6 +90,14 @@ export const DEFAULT_UI_SHELL_SNAPSHOT: UiShellSnapshot = Object.freeze({
     enabled: true,
     lifecycle: "starting",
     ocrActivation: "fallback",
+  }),
+  translation: Object.freeze({
+    enabled: false,
+    providerId: "baidu",
+    sourceLanguage: "auto",
+    targetLanguage: "zh-CN",
+    credentialStatus: "missing",
+    consentVersion: 0,
   }),
 });
 
@@ -124,6 +153,10 @@ export function isOcrActivation(value: unknown): value is OcrActivation {
   return typeof value === "string" && OCR_ACTIVATIONS.includes(value as OcrActivation);
 }
 
+export function isCredentialStatus(value: unknown): value is CredentialStatus {
+  return typeof value === "string" && CREDENTIAL_STATUSES.includes(value as CredentialStatus);
+}
+
 export function isBallAnchor(value: unknown): value is BallAnchor {
   return (
     isRecord(value) &&
@@ -144,7 +177,10 @@ function isDegradedCapability(value: unknown): value is string {
 }
 
 export function isUiShellSnapshot(value: unknown): value is UiShellSnapshot {
-  if (!isRecord(value) || !hasOnlyKeys(value, ["version", "ball", "theme", "native", "selection"])) return false;
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ["version", "ball", "theme", "native", "selection", "translation"])
+  ) return false;
   if (value.version !== UI_SHELL_VERSION || !isThemeMode(value.theme)) return false;
 
   const ball = value.ball;
@@ -167,6 +203,30 @@ export function isUiShellSnapshot(value: unknown): value is UiShellSnapshot {
     typeof selection.enabled !== "boolean" ||
     !isSelectionLifecycle(selection.lifecycle) ||
     !isOcrActivation(selection.ocrActivation)
+  ) return false;
+
+  const translation = value.translation;
+  if (
+    !isRecord(translation) ||
+    !hasOnlyKeys(translation, [
+      "enabled",
+      "providerId",
+      "sourceLanguage",
+      "targetLanguage",
+      "credentialStatus",
+      "consentVersion",
+    ])
+  ) return false;
+  if (
+    typeof translation.enabled !== "boolean" ||
+    !isPhase4TranslationProviderId(translation.providerId) ||
+    !isPhase4TranslationSourceLanguage(translation.sourceLanguage) ||
+    !isPhase4TranslationTargetLanguage(translation.targetLanguage) ||
+    !isCredentialStatus(translation.credentialStatus) ||
+    typeof translation.consentVersion !== "number" ||
+    !Number.isSafeInteger(translation.consentVersion) ||
+    translation.consentVersion < 0 ||
+    translation.consentVersion > 1_000_000
   ) return false;
 
   return true;

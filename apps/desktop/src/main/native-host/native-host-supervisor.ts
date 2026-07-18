@@ -149,7 +149,14 @@ export class NativeHostSupervisor extends EventEmitter {
       }
       this.readyChildren.add(child);
       client.on('selection/result', (event: SelectionResultEvent) => {
-        if (this.client === client && this.child === child) this.emit('selection', event.payload);
+        if (
+          this.active
+          && !this.stopping
+          && this.client === client
+          && this.child === child
+        ) {
+          this.emit('selection', event.payload);
+        }
       });
       client.on('host/error', (event: HostErrorEvent) => {
         if (this.client === client && this.child === child) this.emit('hostError', event.payload);

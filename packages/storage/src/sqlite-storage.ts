@@ -11,7 +11,12 @@ import {
   type OcrActivation,
   type ThemeMode,
 } from "../../contracts/src/ui-shell.js";
-import type { SettingsRepository } from "./repositories.js";
+import {
+  isPhase4TranslationProviderId,
+  isPhase4TranslationSourceLanguage,
+  isPhase4TranslationTargetLanguage,
+} from "../../contracts/src/translation.js";
+import type { SecretsRepository, SettingsRepository } from "./repositories.js";
 
 export interface StorageMigration {
   readonly version: number;
@@ -194,6 +199,110 @@ export class SqliteSettingsRepository implements SettingsRepository {
     assertSettingKey(key);
     const result = this.#delete.run(key);
     return Number(result.changes) > 0;
+  }
+}
+
+interface SecretRow {
+  readonly encryptedValue: unknown;
+  readonly encryptionScheme: unknown;
+}
+
+const SAFE_STORAGE_ENCRYPTION_SCHEME = "electron-safe-storage-v1";
+const MAX_ENCRYPTED_SECRET_BYTES = 1024 * 1024;
+
+export class SqliteSecretsRepository implements SecretsRepository {
+  readonly #select: StatementSync;
+  readonly #upsert: StatementSync;
+  readonly #replaceIfCurrent: StatementSync;
+  readonly #delete: StatementSync;
+
+  constructor(database: DatabaseSync) {
+    this.#select = database.prepare(
+      `SELECT encrypted_value AS encryptedValue, encryption_scheme AS encryptionScheme
+       FROM secrets WHERE key = ?`,
+    );
+    this.#upsert = database.prepare(`
+      INSERT INTO secrets(key, encrypted_value, encryption_scheme, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET
+        encrypted_value = excluded.encrypted_value,
+        encryption_scheme = excluded.encryption_scheme,
+        updated_at = excluded.updated_at
+    `);
+    this.#replaceIfCurrent = database.prepare(`
+      UPDATE secrets
+      SET encrypted_value = ?, encryption_scheme = ?, updated_at = ?
+      WHERE key = ? AND encryption_scheme = ? AND encrypted_value = ?
+    `);
+    this.#delete = database.prepare("DELETE FROM secrets WHERE key = ?");
+  }
+
+  async getEncrypted(key: string): Promise<Uint8Array | undefined> {
+    assertSettingKey(key);
+    const row = this.#select.get(key) as unknown as
+      | SecretRow
+      | undefined;
+    if (row === undefined) return undefined;
+    if (
+      row.encryptionScheme !== SAFE_STORAGE_ENCRYPTION_SCHEME ||
+      !(row.encryptedValue instanceof Uint8Array) ||
+      row.encryptedValue.byteLength < 1 ||
+      row.encryptedValue.byteLength > MAX_ENCRYPTED_SECRET_BYTES
+    ) {
+      throw new TypeError("Stored encrypted secret is invalid");
+    }
+    return new Uint8Array(row.encryptedValue);
+  }
+
+  async setEncrypted(key: string, value: Uint8Array, updatedAt: string): Promise<void> {
+    assertSettingKey(key);
+    assertUpdatedAt(updatedAt);
+    if (
+      !(value instanceof Uint8Array) ||
+      value.byteLength < 1 ||
+      value.byteLength > MAX_ENCRYPTED_SECRET_BYTES
+    ) {
+      throw new TypeError("Encrypted secret must contain 1 byte to 1 MiB");
+    }
+    // node:sqlite copies this blob synchronously; clone first so callers never share repository state.
+    this.#upsert.run(
+      key,
+      new Uint8Array(value),
+      SAFE_STORAGE_ENCRYPTION_SCHEME,
+      updatedAt,
+    );
+  }
+
+  async replaceEncryptedIfCurrent(
+    key: string,
+    expectedValue: Uint8Array,
+    replacementValue: Uint8Array,
+    updatedAt: string
+  ): Promise<boolean> {
+    assertSettingKey(key);
+    assertUpdatedAt(updatedAt);
+    for (const value of [expectedValue, replacementValue]) {
+      if (
+        !(value instanceof Uint8Array) ||
+        value.byteLength < 1 ||
+        value.byteLength > MAX_ENCRYPTED_SECRET_BYTES
+      ) {
+        throw new TypeError("Encrypted secret must contain 1 byte to 1 MiB");
+      }
+    }
+    const result = this.#replaceIfCurrent.run(
+      new Uint8Array(replacementValue),
+      SAFE_STORAGE_ENCRYPTION_SCHEME,
+      updatedAt,
+      key,
+      SAFE_STORAGE_ENCRYPTION_SCHEME,
+      new Uint8Array(expectedValue),
+    );
+    return Number(result.changes) > 0;
+  }
+
+  async delete(key: string): Promise<boolean> {
+    assertSettingKey(key);
+    return Number(this.#delete.run(key).changes) > 0;
   }
 }
 
@@ -419,6 +528,186 @@ export class SqlitePhase3SettingsRepository {
     }
     return fallback;
   }
+}
+
+export const PHASE4_SETTING_KEYS = Object.freeze({
+  ...PHASE3_SETTING_KEYS,
+  translationEnabled: "translation.enabled",
+  translationProviderId: "translation.providerId",
+  translationSourceLanguage: "translation.sourceLanguage",
+  translationTargetLanguage: "translation.targetLanguage",
+  translationConsentVersion: "translation.consentVersion",
+} as const);
+
+export type Phase4SettingKey = (typeof PHASE4_SETTING_KEYS)[keyof typeof PHASE4_SETTING_KEYS];
+
+export interface Phase4UiSettings extends Phase3UiSettings {
+  readonly translation: {
+    readonly enabled: boolean;
+    readonly providerId: string;
+    readonly sourceLanguage: string | "auto";
+    readonly targetLanguage: string;
+    /** Zero means the user has not accepted a Phase 4 outbound-text consent notice. */
+    readonly consentVersion: number;
+  };
+}
+
+export const DEFAULT_PHASE4_UI_SETTINGS: Phase4UiSettings = Object.freeze({
+  ...DEFAULT_PHASE3_UI_SETTINGS,
+  translation: Object.freeze({
+    enabled: false,
+    providerId: "baidu",
+    sourceLanguage: "auto",
+    targetLanguage: "zh-CN",
+    consentVersion: 0,
+  }),
+});
+
+export interface SqlitePhase4SettingsRepositoryOptions {
+  readonly now?: () => string;
+  /** Receives only the invalid key; persisted values never cross this diagnostic boundary. */
+  readonly onInvalidSetting?: (key: Phase4SettingKey) => void;
+}
+
+export class SqlitePhase4SettingsRepository {
+  readonly #phase3: SqlitePhase3SettingsRepository;
+  readonly #settings: SqliteSettingsRepository;
+  readonly #select: StatementSync;
+  readonly #now: () => string;
+  readonly #onInvalidSetting: ((key: Phase4SettingKey) => void) | undefined;
+
+  constructor(database: DatabaseSync, options: SqlitePhase4SettingsRepositoryOptions = {}) {
+    this.#now = options.now ?? (() => new Date().toISOString());
+    this.#onInvalidSetting = options.onInvalidSetting;
+    this.#phase3 = new SqlitePhase3SettingsRepository(database, {
+      now: this.#now,
+      ...(options.onInvalidSetting === undefined
+        ? {}
+        : { onInvalidSetting: options.onInvalidSetting }),
+    });
+    this.#settings = new SqliteSettingsRepository(database);
+    this.#select = database.prepare("SELECT value_json AS valueJson FROM settings WHERE key = ?");
+  }
+
+  async load(): Promise<Phase4UiSettings> {
+    const phase3 = await this.#phase3.load();
+    return {
+      ...phase3,
+      translation: {
+        enabled: this.#readValidated(
+          PHASE4_SETTING_KEYS.translationEnabled,
+          isBoolean,
+          DEFAULT_PHASE4_UI_SETTINGS.translation.enabled,
+        ),
+        providerId: this.#readValidated(
+          PHASE4_SETTING_KEYS.translationProviderId,
+          isProviderId,
+          DEFAULT_PHASE4_UI_SETTINGS.translation.providerId,
+        ),
+        sourceLanguage: this.#readValidated(
+          PHASE4_SETTING_KEYS.translationSourceLanguage,
+          isPhase4TranslationSourceLanguage,
+          DEFAULT_PHASE4_UI_SETTINGS.translation.sourceLanguage,
+        ),
+        targetLanguage: this.#readValidated(
+          PHASE4_SETTING_KEYS.translationTargetLanguage,
+          isPhase4TranslationTargetLanguage,
+          DEFAULT_PHASE4_UI_SETTINGS.translation.targetLanguage,
+        ),
+        consentVersion: this.#readValidated(
+          PHASE4_SETTING_KEYS.translationConsentVersion,
+          isConsentVersion,
+          DEFAULT_PHASE4_UI_SETTINGS.translation.consentVersion,
+        ),
+      },
+    };
+  }
+
+  async setBallVisible(value: boolean): Promise<void> {
+    await this.#phase3.setBallVisible(value);
+  }
+
+  async setEdgeSnap(value: boolean): Promise<void> {
+    await this.#phase3.setEdgeSnap(value);
+  }
+
+  async setTheme(value: ThemeMode): Promise<void> {
+    await this.#phase3.setTheme(value);
+  }
+
+  async setBallAnchor(value: BallAnchor): Promise<void> {
+    await this.#phase3.setBallAnchor(value);
+  }
+
+  async resetBallAnchor(): Promise<void> {
+    await this.#phase3.resetBallAnchor();
+  }
+
+  async setSelectionEnabled(value: boolean): Promise<void> {
+    await this.#phase3.setSelectionEnabled(value);
+  }
+
+  async setOcrActivation(value: OcrActivation): Promise<void> {
+    await this.#phase3.setOcrActivation(value);
+  }
+
+  async setTranslationEnabled(value: boolean): Promise<void> {
+    if (!isBoolean(value)) throw new TypeError("Translation enabled must be a boolean");
+    await this.#settings.set(PHASE4_SETTING_KEYS.translationEnabled, value, this.#now());
+  }
+
+  async setTranslationProviderId(value: string): Promise<void> {
+    if (!isProviderId(value)) throw new TypeError("Translation provider id is invalid");
+    await this.#settings.set(PHASE4_SETTING_KEYS.translationProviderId, value, this.#now());
+  }
+
+  async setTranslationSourceLanguage(value: string | "auto"): Promise<void> {
+    if (!isPhase4TranslationSourceLanguage(value)) {
+      throw new TypeError("Translation source language is invalid");
+    }
+    await this.#settings.set(PHASE4_SETTING_KEYS.translationSourceLanguage, value, this.#now());
+  }
+
+  async setTranslationTargetLanguage(value: string): Promise<void> {
+    if (!isPhase4TranslationTargetLanguage(value)) {
+      throw new TypeError("Translation target language is invalid");
+    }
+    await this.#settings.set(PHASE4_SETTING_KEYS.translationTargetLanguage, value, this.#now());
+  }
+
+  async setTranslationConsentVersion(value: number): Promise<void> {
+    if (!isConsentVersion(value)) throw new TypeError("Translation consent version is invalid");
+    await this.#settings.set(PHASE4_SETTING_KEYS.translationConsentVersion, value, this.#now());
+  }
+
+  async resetTranslationConsent(): Promise<void> {
+    await this.#settings.delete(PHASE4_SETTING_KEYS.translationConsentVersion);
+  }
+
+  #readValidated<T>(key: Phase4SettingKey, guard: (value: unknown) => value is T, fallback: T): T {
+    const row = this.#select.get(key) as unknown as SettingRow | undefined;
+    if (row === undefined) return fallback;
+    try {
+      const value = JSON.parse(row.valueJson) as unknown;
+      if (guard(value)) return value;
+    } catch {
+      // Invalid values use the safe fallback path below.
+    }
+    try {
+      this.#onInvalidSetting?.(key);
+    } catch {
+      // Diagnostics must never prevent safe startup defaults.
+    }
+    return fallback;
+  }
+}
+
+function isProviderId(value: unknown): value is string {
+  return isPhase4TranslationProviderId(value);
+}
+
+function isConsentVersion(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= 1_000_000;
 }
 
 export class SqliteAppExclusionsRepository {

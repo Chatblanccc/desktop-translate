@@ -57,6 +57,20 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
     await expect(supervisor.stop()).resolves.toBeUndefined();
   }, 5_000);
 
+  it('does not forward a queued selection after shutdown starts', async () => {
+    const supervisor = new NativeHostSupervisor({
+      executablePath: process.execPath,
+      executableArguments: [fakeHost, '--fake-mode', 'selection-during-shutdown']
+    });
+    const selection = vi.fn();
+    supervisor.on('selection', selection);
+
+    await supervisor.start();
+    await supervisor.stop();
+
+    expect(selection).not.toHaveBeenCalled();
+  }, 5_000);
+
   it('retains a failed-handshake child until forced termination has completed', async () => {
     const supervisor = new NativeHostSupervisor({
       executablePath: process.execPath,

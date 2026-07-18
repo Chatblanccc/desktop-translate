@@ -6,8 +6,9 @@ import {
 import type { IpcRendererBridgePort } from './bridge.js';
 
 const valid = {
+  kind: 'source-only' as const,
   selectionId: '123e4567-e89b-42d3-a456-426614174000',
-  text: 'source text',
+  sourceText: 'source text',
   source: 'ocr' as const,
   confidence: 0.75
 };
@@ -23,18 +24,22 @@ function createIpc() {
 describe('selection card preload bridge', () => {
   it('validates current card and void dismiss responses', async () => {
     const { port, invoke } = createIpc();
-    invoke.mockResolvedValueOnce(valid).mockResolvedValueOnce(undefined);
+    invoke.mockResolvedValueOnce(valid).mockResolvedValueOnce(undefined).mockResolvedValueOnce(undefined);
     const api = createSelectionCardRendererBridge(port);
     await expect(api.getCurrent()).resolves.toEqual(valid);
     await expect(api.dismiss()).resolves.toBeUndefined();
+    await expect(api.retry()).resolves.toBeUndefined();
     expect(invoke.mock.calls).toEqual([
       [SELECTION_CARD_CHANNELS.getCurrent],
-      [SELECTION_CARD_CHANNELS.dismiss]
+      [SELECTION_CARD_CHANNELS.dismiss],
+      [SELECTION_CARD_CHANNELS.retry]
     ]);
-    invoke.mockResolvedValueOnce({ ...valid, text: '' });
+    invoke.mockResolvedValueOnce({ ...valid, sourceText: '' });
     await expect(api.getCurrent()).rejects.toThrow(/invalid/u);
     invoke.mockResolvedValueOnce({ unexpected: true });
     await expect(api.dismiss()).rejects.toThrow(/unexpected/u);
+    invoke.mockResolvedValueOnce({ unexpected: true });
+    await expect(api.retry()).rejects.toThrow(/unexpected/u);
   });
 
   it('strips events, ignores malformed pushes, and removes its own listener', () => {

@@ -23,6 +23,14 @@ function setup(role: 'ball' | 'settings' = 'settings') {
     setTheme: vi.fn().mockResolvedValue(undefined),
     setSelectionEnabled: vi.fn().mockResolvedValue(undefined),
     setOcrActivation: vi.fn().mockResolvedValue(undefined),
+    setTranslationEnabled: vi.fn().mockResolvedValue(undefined),
+    setTranslationSourceLanguage: vi.fn().mockResolvedValue(undefined),
+    setTranslationTargetLanguage: vi.fn().mockResolvedValue(undefined),
+    saveBaiduCredentials: vi.fn().mockResolvedValue(undefined),
+    deleteBaiduCredentials: vi.fn().mockResolvedValue(undefined),
+    testTranslationProvider: vi.fn().mockResolvedValue({ ok: true }),
+    openProviderPrivacyPolicy: vi.fn().mockResolvedValue(undefined),
+    openProviderServiceTerms: vi.fn().mockResolvedValue(undefined),
     resetBallPosition: vi.fn().mockResolvedValue(undefined)
   };
   const mainFrame = { url: `file:///desktop/${role}.html` };
@@ -53,12 +61,32 @@ describe('UI shell IPC', () => {
     await requireHandler(handlers, UI_SHELL_CHANNELS.setOcrActivation)(event, {
       value: 'alt-drag'
     });
+    await requireHandler(handlers, UI_SHELL_CHANNELS.setTranslationEnabled)(event, { value: true });
+    await requireHandler(handlers, UI_SHELL_CHANNELS.setTranslationSourceLanguage)(event, {
+      value: 'auto'
+    });
+    await requireHandler(handlers, UI_SHELL_CHANNELS.setTranslationTargetLanguage)(event, {
+      value: 'zh-CN'
+    });
+    await requireHandler(handlers, UI_SHELL_CHANNELS.saveBaiduCredentials)(event, {
+      appId: 'app-id', secretKey: 'secret-key', consentVersion: 1
+    });
+    await requireHandler(handlers, UI_SHELL_CHANNELS.testTranslationProvider)(event);
+    await requireHandler(handlers, UI_SHELL_CHANNELS.openProviderPrivacyPolicy)(event);
+    await requireHandler(handlers, UI_SHELL_CHANNELS.openProviderServiceTerms)(event);
     await requireHandler(handlers, UI_SHELL_CHANNELS.resetBallPosition)(event);
     expect(actions.setBallVisible).toHaveBeenCalledWith(false);
     expect(actions.setEdgeSnap).toHaveBeenCalledWith(false);
     expect(actions.setTheme).toHaveBeenCalledWith('dark');
     expect(actions.setSelectionEnabled).toHaveBeenCalledWith(false);
     expect(actions.setOcrActivation).toHaveBeenCalledWith('alt-drag');
+    expect(actions.setTranslationEnabled).toHaveBeenCalledWith(true);
+    expect(actions.setTranslationSourceLanguage).toHaveBeenCalledWith('auto');
+    expect(actions.setTranslationTargetLanguage).toHaveBeenCalledWith('zh-CN');
+    expect(actions.saveBaiduCredentials).toHaveBeenCalledWith(
+      { appId: 'app-id', secretKey: 'secret-key' },
+      1
+    );
     expect(actions.resetBallPosition).toHaveBeenCalledOnce();
     await expect(
       requireHandler(handlers, UI_SHELL_CHANNELS.setTheme)(event, { value: 'remote-code' })
@@ -103,6 +131,25 @@ describe('UI shell IPC', () => {
     await expect(
       requireHandler(handlers, UI_SHELL_CHANNELS.setOcrActivation)(event, { value: 'always' })
     ).rejects.toThrow(/Invalid OCR/u);
+    await expect(
+      requireHandler(handlers, UI_SHELL_CHANNELS.setTranslationEnabled)(event, { value: 'yes' })
+    ).rejects.toThrow(/Invalid translation enabled/u);
+    await expect(
+      requireHandler(handlers, UI_SHELL_CHANNELS.setTranslationSourceLanguage)(event, {
+        value: 'eo'
+      })
+    ).rejects.toThrow(/Invalid translation source language/u);
+    await expect(
+      requireHandler(handlers, UI_SHELL_CHANNELS.setTranslationTargetLanguage)(event, { value: 'bad value' })
+    ).rejects.toThrow(/Invalid translation language/u);
+    await expect(
+      requireHandler(handlers, UI_SHELL_CHANNELS.setTranslationTargetLanguage)(event, { value: 'eo' })
+    ).rejects.toThrow(/Invalid translation language/u);
+    await expect(
+      requireHandler(handlers, UI_SHELL_CHANNELS.saveBaiduCredentials)(event, {
+        appId: 'app-id', secretKey: 'secret-key', consentVersion: 0
+      })
+    ).rejects.toThrow(/Invalid provider credential/u);
     await expect(
       requireHandler(handlers, UI_SHELL_CHANNELS.resetBallPosition)(event, {})
     ).rejects.toThrow(/does not accept/u);

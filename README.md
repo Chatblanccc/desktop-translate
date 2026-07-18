@@ -1,8 +1,8 @@
 # Desktop Translate
 
-Windows 桌面划词助手。当前版本为 **`0.3.0-phase3` 内部开发预览**：在 Phase 2
-安全桌面壳层基础上，接入真实全局鼠标 Hook、UI Automation 优先取词、本机 OCR 回退，
-并在选区附近展示只含原文的结果卡。
+Windows 桌面划词助手。Phase 3 本地取词闭环已经以 `PASS WITH ACCEPTED RISKS` 验收；
+当前开发目标为 **`0.4.0-phase4` 内部开发预览**：在已验收的 source-only 卡片上增加
+默认关闭、用户自带凭据的百度通用文本翻译闭环。
 
 ## 当前能力边界
 
@@ -14,9 +14,12 @@ Windows 桌面划词助手。当前版本为 **`0.3.0-phase3` 内部开发预览
 - 原文结果卡使用独立、沙箱化 Renderer/Preload，单例替换且不抢目标应用焦点。
 - 密码元素、安全桌面、提权目标、排除进程、受保护内容与跨屏 OCR 在捕获前拒绝。
 - Ball、Settings、Card 均无 Node/Electron 原始能力；设置通过 Main-only `node:sqlite` 持久化。
+- Phase 4 在线翻译默认关闭；只有用户完成隐私告知、配置 BYOK 凭据并显式启用后才联网。
+- Phase 4 首发仅接入百度通用文本翻译；源语言默认 `auto`、目标语言默认 `zh-CN`，两者均可在受支持选项内配置。
+- 翻译网络与凭据只存在于 Electron Main；Provider 失败保留原文并降级，不影响 Native 取词。
 
-Phase 3 不包含翻译 Provider、译文、历史收藏、凭据、云 OCR、安装器、签名、自动更新或
-正式发布。完整范围从[文档索引](docs/README.md)开始，协议以
+Phase 4 不包含历史、收藏、持久翻译缓存、词典、音标、发音、例句、第二家 Provider、云 OCR、
+安装器、签名、自动更新或正式发布。完整范围从[文档索引](docs/README.md)开始，协议以
 [JSON Schema](protocol/native-ipc.schema.json)为单一事实来源。
 
 ## 环境
@@ -28,30 +31,43 @@ Phase 3 不包含翻译 Provider、译文、历史收藏、凭据、云 OCR、�
 - Visual Studio 2022 Build Tools x64 C++，或仓库验证过的 portable llvm-mingw
 - 已安装所需语言的 Windows OCR language pack
 
+若 `.tools/llvm-mingw-*-ucrt-x86_64` 中存在仓库验证过的便携工具链，Native 脚本会优先使用它；
+否则使用已安装的 Visual Studio 2022 C++ 工具链。
+
 ## 运行与验收
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm start:phase3
+pnpm start:phase4
 ```
 
-完整 Phase 3 本地门禁：
+`start:phase4` 会优先使用当前 `SELECTION_HOST_PATH` 或已有 Native Host 产物；首次运行若未找到产物，
+会先执行 Native configure/build，再把解析出的 `selection-host.exe` 仅传给本次 Electron 进程。
+只准备并检查 Native Host、不启动界面时可运行 `pnpm prepare:phase4`。显式配置的
+`SELECTION_HOST_PATH` 无效时启动会直接失败，不会静默退回到不可用状态。
+
+完整 Phase 4 本地门禁：
 
 ```powershell
-pnpm phase3:verify
+pnpm phase4:verify
 ```
 
 门禁包含 lint、TypeScript、全部单元/组件/契约/集成测试、覆盖率、生产构建、Native
-配置/构建/测试、Phase 1 Named Pipe 回归、Phase 2 Shell 回归、真实 Host 启停和 Electron
-E2E。关键步骤也可独立运行：
+配置/构建/测试、Phase 1 Named Pipe 回归、Phase 2 Shell 回归、Phase 3 真实 Host 回归、
+Phase 4 fake Provider smoke、完整 Electron E2E 和隐私扫描。阶段门禁或不依赖 Native 构建路径的步骤也可独立运行：
 
 ```powershell
-pnpm native:configure
-pnpm native:build
-pnpm native:test
-pnpm phase3:smoke
+pnpm phase1:verify
+pnpm phase3:verify
+pnpm phase4:smoke
 pnpm test:e2e
+pnpm privacy:scan
 ```
+
+真实 Provider 验收可显式设置 `DESKTOP_TRANSLATE_PHASE4_AUDIT_FILE`，启用 Main-only 的脱敏 JSONL
+attestation；默认不构造该 wrapper，也不写文件或日志。记录只包含 endpoint、方法、header/field 名称、
+长度和布尔校验，不包含正文、APP ID、密钥、salt、签名、响应或 body。Windows 连接元数据可用
+`tooling/phase4-network-observe.ps1` 在短验证窗口内单独采集；原始 TLS body/pcap 不应进入仓库或 artifact。
 
 ## 目录
 
@@ -60,9 +76,9 @@ apps/desktop/        Electron Main、三套角色化 Preload/Renderer 与 E2E
 native/              Windows C++ Host、Windows OCR、探针和 Native 测试
 packages/contracts/  Native IPC、UI Shell、结果卡与领域契约
 packages/application/纯应用状态机
-packages/translation/后续阶段 Provider 抽象（Phase 3 未调用）
+packages/translation/Provider 抽象、网络边界与百度适配器
 packages/storage/    SQLite migration 与 repository
 protocol/            Native IPC v1 canonical JSON Schema
 docs/                架构、安全、兼容性、风险、规格与验收文档
-tooling/             Native 工具链准备和 Phase 1/2/3 验收脚本
+tooling/             Native 工具链准备和 Phase 1/2/3/4 验收脚本
 ```

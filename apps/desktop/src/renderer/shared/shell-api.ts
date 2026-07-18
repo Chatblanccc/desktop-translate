@@ -34,6 +34,14 @@ export interface SettingsRendererApi extends UiShellReaderApi {
   setTheme(theme: ThemeMode): Promise<void>;
   setSelectionEnabled(enabled: boolean): Promise<void>;
   setOcrActivation(activation: OcrActivation): Promise<void>;
+  setTranslationEnabled(enabled: boolean): Promise<void>;
+  setTranslationSourceLanguage(language: string): Promise<void>;
+  setTranslationTargetLanguage(language: string): Promise<void>;
+  saveBaiduCredentials(appId: string, secretKey: string, consentVersion: number): Promise<void>;
+  deleteBaiduCredentials(): Promise<void>;
+  testTranslationProvider(): Promise<{ readonly ok: boolean; readonly code?: string }>;
+  openProviderPrivacyPolicy(): Promise<void>;
+  openProviderServiceTerms(): Promise<void>;
   resetBallPosition(): Promise<void>;
 }
 

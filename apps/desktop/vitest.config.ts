@@ -9,6 +9,10 @@ export default defineConfig({
       reporter: ['text', 'json-summary', 'html'],
       reportsDirectory: 'artifacts/coverage',
       include: [
+        // This Vitest project owns desktop runtime coverage. Workspace packages
+        // use their node:test contract suites and remain part of the preceding
+        // `pnpm test` gate; including unexecuted package sources here would turn
+        // the desktop percentage into a misleading cross-runner denominator.
         'src/main/**/*.ts',
         'src/preload/**/*.ts',
         'src/renderer/**/*.ts',
@@ -18,6 +22,7 @@ export default defineConfig({
         'src/main/index.ts',
         'src/main/phase1-smoke.ts',
         'src/main/phase3-smoke.ts',
+        'src/main/phase4-smoke.ts',
         'src/renderer/**/main.tsx',
         'src/renderer/global.d.ts'
       ],

@@ -1,10 +1,12 @@
 {
   "name": "@desktop-translate/translation",
-  "version": "0.3.0-phase3",
+  "version": "0.4.0-phase4",
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test ../../tests/translation/*.test.ts",
+    "test:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-include=src/**/*.ts --test-coverage-lines=80 --test-coverage-functions=80 --test-coverage-branches=75 ../../tests/translation/*.test.ts"
   },
   "exports": "./src/index.ts"
 }

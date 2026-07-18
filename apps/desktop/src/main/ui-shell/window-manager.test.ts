@@ -40,6 +40,7 @@ const electron = vi.hoisted(() => {
     private readonly contents = new FakeWebContents();
     public readonly setAlwaysOnTop = vi.fn();
     public readonly showInactive = vi.fn(() => { this.visible = true; });
+    public readonly moveTop = vi.fn();
     public readonly show = vi.fn(() => { this.visible = true; });
     public readonly hide = vi.fn(() => { this.visible = false; });
     public readonly focus = vi.fn();
@@ -191,7 +192,7 @@ describe('secure window options', () => {
         x: 10,
         y: 20,
         width: 380,
-        height: 220,
+        height: 320,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -366,12 +367,13 @@ describe('WindowManager', () => {
     const { manager } = makeManager();
     await manager.start();
     const first = {
+      kind: 'source-only' as const,
       selectionId: '123e4567-e89b-42d3-a456-426614174000',
-      text: 'First source text',
+      sourceText: 'First source text',
       source: 'uia' as const,
       confidence: 1
     };
-    const firstBounds = { x: 100, y: 120, width: 380, height: 220 };
+    const firstBounds = { x: 100, y: 120, width: 380, height: 320 };
     manager.presentSelectionCard(first, firstBounds);
     await Promise.resolve();
     expect(electron.BrowserWindow.instances).toHaveLength(2);
@@ -382,16 +384,24 @@ describe('WindowManager', () => {
     expect(manager.getCurrentSelectionCard()).toEqual(first);
 
     const returned = manager.getCurrentSelectionCard()!;
-    (returned as { text: string }).text = 'mutated';
-    expect(manager.getCurrentSelectionCard()?.text).toBe(first.text);
+    (returned as { sourceText: string }).sourceText = 'mutated';
+    expect(manager.getCurrentSelectionCard()?.sourceText).toBe(first.sourceText);
 
     card.emit('ready-to-show');
     expect(card.setBounds).toHaveBeenCalledWith(firstBounds, false);
     expect(card.webContents.send).toHaveBeenCalledWith(SELECTION_CARD_CHANNELS.changed, first);
     expect(card.showInactive).toHaveBeenCalledOnce();
+    expect(card.moveTop).toHaveBeenCalledOnce();
+    expect(card.showInactive.mock.invocationCallOrder[0]!).toBeLessThan(
+      card.moveTop.mock.invocationCallOrder[0]!
+    );
+    expect(card.moveTop.mock.invocationCallOrder[0]!).toBeLessThan(
+      card.setAlwaysOnTop.mock.invocationCallOrder[1]!
+    );
+    expect(card.setAlwaysOnTop).toHaveBeenCalledTimes(2);
 
-    const replacement = { ...first, text: 'Replacement source text', source: 'ocr' as const };
-    const replacementBounds = { x: -500, y: 700, width: 380, height: 220 };
+    const replacement = { ...first, sourceText: 'Replacement source text', source: 'ocr' as const };
+    const replacementBounds = { x: -500, y: 700, width: 380, height: 320 };
     manager.presentSelectionCard(replacement, replacementBounds);
     expect(card.setBounds).toHaveBeenLastCalledWith(replacementBounds, false);
     expect(card.webContents.send).toHaveBeenLastCalledWith(
@@ -399,6 +409,9 @@ describe('WindowManager', () => {
       replacement
     );
     expect(card.showInactive).toHaveBeenCalledTimes(2);
+    expect(card.moveTop).toHaveBeenCalledTimes(2);
+    expect(card.setAlwaysOnTop).toHaveBeenCalledTimes(3);
+    expect(card.focus).not.toHaveBeenCalled();
     expect(electron.BrowserWindow.instances).toHaveLength(2);
   });
 
@@ -406,21 +419,26 @@ describe('WindowManager', () => {
     const { manager, onCardDismissed } = makeManager();
     await manager.start();
     const cardModel = {
+      kind: 'source-only' as const,
       selectionId: '123e4567-e89b-42d3-a456-426614174000',
-      text: 'Source text',
+      sourceText: 'Source text',
       source: 'uia' as const,
       confidence: 1
     };
-    manager.presentSelectionCard(cardModel, { x: 1, y: 2, width: 380, height: 220 });
+    manager.presentSelectionCard(cardModel, { x: 1, y: 2, width: 380, height: 320 });
     await Promise.resolve();
     const card = latestWindow();
     manager.dismissSelectionCard();
     expect(manager.getCurrentSelectionCard()).toBeUndefined();
     card.emit('ready-to-show');
     expect(card.showInactive).not.toHaveBeenCalled();
+    expect(card.moveTop).not.toHaveBeenCalled();
+    expect(card.setAlwaysOnTop).toHaveBeenCalledOnce();
 
-    manager.presentSelectionCard(cardModel, { x: 3, y: 4, width: 380, height: 220 });
+    manager.presentSelectionCard(cardModel, { x: 3, y: 4, width: 380, height: 320 });
     expect(card.showInactive).toHaveBeenCalledOnce();
+    expect(card.moveTop).toHaveBeenCalledOnce();
+    expect(card.setAlwaysOnTop).toHaveBeenCalledTimes(2);
     expect(card.close().prevented).toBe(true);
     expect(card.webContents.send).toHaveBeenLastCalledWith(
       SELECTION_CARD_CHANNELS.changed,
@@ -428,6 +446,12 @@ describe('WindowManager', () => {
     );
     expect(card.hide).toHaveBeenCalledTimes(2);
     expect(onCardDismissed).toHaveBeenCalledOnce();
+
+    manager.presentSelectionCard(cardModel, { x: 5, y: 6, width: 380, height: 320 });
+    expect(card.showInactive).toHaveBeenCalledTimes(2);
+    expect(card.moveTop).toHaveBeenCalledTimes(2);
+    expect(card.setAlwaysOnTop).toHaveBeenCalledTimes(3);
+    expect(card.focus).not.toHaveBeenCalled();
 
     card.destroy();
     expect(manager.getCardWindow()).toBeUndefined();
@@ -456,11 +480,12 @@ describe('WindowManager', () => {
     await Promise.resolve();
     const settings = latestWindow();
     manager.presentSelectionCard({
+      kind: 'source-only',
       selectionId: '123e4567-e89b-42d3-a456-426614174000',
-      text: 'Source text',
+      sourceText: 'Source text',
       source: 'uia',
       confidence: 1
-    }, { x: 1, y: 2, width: 380, height: 220 });
+    }, { x: 1, y: 2, width: 380, height: 320 });
     await Promise.resolve();
     const card = latestWindow();
     manager.dispose();
