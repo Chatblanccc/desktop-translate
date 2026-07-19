@@ -426,8 +426,8 @@ pnpm phase5:verify -- -EvidenceRoot ./artifacts/phase5/<git-sha>/<new-verify-run
 | `pnpm phase5:lane-a:product` | formal Lane A entry；当前因 runtime-control contract、packaged endpoint 与 action driver 未实现而返回 `NOT_IMPLEMENTED_BLOCKER` |
 | `pnpm phase5:provider-smoke:selftest` | real/fake 边界、脱敏与开发 fault/recovery 负向自测；不调用真实 Provider，固定 `NOT ACCEPTANCE` |
 | `pnpm phase5:provider-smoke` | PERF-08 CLI；formal health 只允许真实百度 product provider，formal fault/aggregate 在可信故障控制器实现前固定 fail closed |
-| `pnpm phase5:acceptance-decision:selftest` | 冻结 43-gate exact set、候选绑定、canonical digest、角色权限、source validator 与 approval receipt fail-closed 自测；当前可信生产 validator 为 0/43 |
-| `pnpm phase5:acceptance-decision -- --input <draft.json> --output <new-decision.json>` | append-never 正式决议入口；43 个 gate 均无可信 source validator，且非 PENDING 签字没有可信 receipt verifier，会稳定阻断批准 |
+| `pnpm phase5:acceptance-decision:selftest` | 冻结 43-gate exact set、候选绑定、canonical digest、角色权限、source validator 与 approval receipt fail-closed 自测；当前生产 validator 为 1/43 implemented，42/43 fail-closed blocked |
+| `pnpm phase5:acceptance-decision -- --input <draft.json> --output <new-decision.json>` | append-never 正式决议入口；`G2-CLEAN-SOURCE` 已实现 evaluator-time Git cleanliness 交叉验证，其余 42 个 gate 无可信 source validator，且非 PENDING 签字没有可信 receipt verifier，会稳定阻断批准 |
 | `pnpm phase5:process-privacy:selftest` | 进程身份、残留与证据隐私负向自测 |
 | `pnpm phase5:release:selftest` | release evidence/identity fail-closed 自测，不签名或发布 artifact |
 
@@ -486,7 +486,8 @@ release/acceptance-decision.json
 artifact-set digest 与固定顺序的 43 项 gate 路径/hash/status；签字不进入 payload 本体，而必须逐条引用该 payload
 SHA-256。相同自然人可以合并签四个角色，但必须对重复 signer 使用 `MERGED_PROJECT_OWNER`。该权限声明不替代
 Authenticode、attestation、fixed-lab、Provider、clean VM 或硬件证据。当前 registry 覆盖全部 43 个 gate，
-但当前 43 个生产 source validator 全部明确返回 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`；非 PENDING 角色记录也会
+其中 `G2-CLEAN-SOURCE` 已实现 exact workspace-state 与 evaluator 独立 Git 状态交叉验证；其余 42 个生产 source validator
+仍明确返回 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`；非 PENDING 角色记录也会
 返回 `APPROVAL_RECEIPT_VERIFIER_NOT_IMPLEMENTED`。已有结构解析、阈值重算
 和哈希绑定代码不能授予生产信任；必须再接入受保护运行证明、系统 Authenticode 验签、离线 DSSE/Sigstore 验证、
 独立下载与真实故障控制证明。因此 selftest 通过只证明决议工具 fail closed，不能形成

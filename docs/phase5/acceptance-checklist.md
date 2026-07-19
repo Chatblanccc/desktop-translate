@@ -24,7 +24,7 @@
 | PERF-09 产品退出 | `DEV 2×5 PASS / FORMAL NOT RUN` | 10/10 成功、failure=0、forced cleanup=0、privacy PASS；正式 signed artifact 3×50 未运行 |
 | 产品 idle 资源 | `DEV 15s PASS / FORMAL NOT RUN` | 产品 UI 正常退出且 residual/WER/privacy/cleanup 通过；正式 900s/5s 未运行 |
 | Windows UI 快检 | `MANUAL DEVELOPMENT QA PASS` | Ball/Settings/Native service/版本面可用，设置页 Phase 4 副标题已修为 Phase 5；不替代签名 RC、clean VM 或兼容矩阵 |
-| 验收决议 source validators | `0/43 TRUSTED / 43 BLOCKED` | 43/43 registry fail closed；全部生产 gate 返回 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`，当前不可能形成批准 |
+| 验收决议 source validators | `1/43 IMPLEMENTED / 42 BLOCKED` | 43/43 registry fail closed；`G2-CLEAN-SOURCE` 将 `captureMode=signed`（signed-release capture mode，非密码学签名/receipt）的 workspace-state 与 evaluator 当前独立读取的 Git 状态交叉验证，其余 42 个仍返回 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`，当前不可能形成批准 |
 | Phase 5 正式结论 | `NOT YET ACCEPTED / RELEASE BLOCKED` | fixed-lab、真实产品 8h、签名 RC、实机、可信 validator/approval receipt 与签字均未完成 |
 
 详细证据边界见[验证报告](validation-report.md)。
@@ -211,8 +211,8 @@
 - [ ] verification 不修改 tracked files、不残留产品进程。
 - [x] 验收决议 fail-closed scaffold 已实现：[`acceptance-decision.schema.json`](../../schemas/phase5/acceptance-decision.schema.json)
   固定 43 个 exact gate ID、候选身份、canonical payload 与角色权限，registry 为 43/43。
-- [ ] 完成全部 43 个 gate 的可信 source validator；当前生产路径为 `0/43`，全部 43 个稳定返回
-  `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`。PERF、Authenticode、DSSE、manifest 与 clean-download 的结构解析器
+- [ ] 完成全部 43 个 gate 的可信 source validator；当前生产路径为 `1/43`，仅 `G2-CLEAN-SOURCE`
+  能交叉复算 candidate/clean Git 状态，其余 42 个稳定返回 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`。PERF、Authenticode、DSSE、manifest 与 clean-download 的结构解析器
   不能替代系统验签、离线 attestation 验证、受保护运行证明或独立下载，因此正式决议必然阻断。
 - [ ] 实现四角色 domain-separated cryptographic signature 或受保护平台 approval receipt verifier；在此之前任何
   非 `PENDING` 角色记录均额外返回 `APPROVAL_RECEIPT_VERIFIER_NOT_IMPLEMENTED`，项目负责人合并承担角色也不能绕过。

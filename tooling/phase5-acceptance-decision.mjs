@@ -69,6 +69,7 @@ const EXACT_ARTIFACT_ROLES = Object.freeze(['application', 'asar', 'installer', 
 const EXACT_SIGNED_ARTIFACT_ROLES = Object.freeze(['application', 'installer', 'nativeHost']);
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const GIT_SHA_PATTERN = /^[a-f0-9]{40}$/u;
+const EMPTY_SHA256 = createHash('sha256').digest('hex');
 const ROLE_DECISION_STATEMENT = 'This role decision is bound to the exact Phase 5 acceptance payload.';
 const PHASE5_TAG_PATTERN = /^refs\/tags\/phase5-rc-[A-Za-z0-9._-]+$/u;
 const OFFICIAL_REPOSITORY = 'Chatblanccc/desktop-translate';
@@ -459,7 +460,7 @@ const sourceValidator = Object.freeze({
 export const GATE_SOURCE_VALIDATORS = deepFreeze({
   'G0-SCOPE-FREEZE': sourceValidator.notImplemented('No frozen scope-decision source schema is implemented.'),
   'G1-PHASE4-BASELINE': sourceValidator.notImplemented('No frozen Phase 4 archive/regression source schema is implemented.'),
-  'G2-CLEAN-SOURCE': sourceValidator.notImplemented('No frozen workspace-state source schema is implemented for this gate.'),
+  'G2-CLEAN-SOURCE': sourceValidator.implemented('CLEAN_WORKSPACE_STATE_V1'),
   'G2-VERSION-TOOLCHAIN': sourceValidator.notImplemented('No frozen version/toolchain environment source schema is implemented.'),
   'WP1-METRICS-PRIVACY': sourceValidator.notImplemented('No frozen instrumentation/privacy source schema is implemented.'),
   'WP2-BASELINE-REGRESSION': sourceValidator.notImplemented('No frozen three-round baseline source schema is implemented.'),
@@ -503,6 +504,7 @@ export const GATE_SOURCE_VALIDATORS = deepFreeze({
 });
 
 const SOURCE_VALIDATOR_IMPLEMENTATIONS = Object.freeze({
+  CLEAN_WORKSPACE_STATE_V1: verifyCleanWorkspaceStateSource,
   PERF03_FORMAL_SUMMARY_V1: verifyPerf03Source,
   PERF08_PROVIDER_SMOKE_V2: verifyProviderSmokeSources,
   FINAL_RELEASE_MANIFEST_V1: verifyFinalManifestGateSource,
@@ -757,6 +759,63 @@ function verifyGateSourceSemantics(decision, item, verified) {
   const blockerCountBefore = decision.blockers.length;
   implementation(decision, verified);
   return decision.blockers.length === blockerCountBefore;
+}
+
+function verifyCleanWorkspaceStateSource(decision, verified) {
+  const state = verified.sourceResults.get('workspaceState')?.parsed;
+  const errors = [];
+  if (!isPlainObject(state)) {
+    errors.push('workspaceState must be a JSON object.');
+  } else {
+    assertExactKeys(state, [
+      'schemaVersion',
+      'headSha',
+      'sourceIdentity',
+      'developmentDirty',
+      'acceptanceEligible',
+      'patchDigest',
+      'statusDigest',
+      'trackedPatchSha256',
+      'untrackedFileCount',
+      'untrackedBytes',
+      'captureMode'
+    ], errors, 'workspaceState');
+    if (state.schemaVersion !== 1) errors.push('workspaceState.schemaVersion must be 1.');
+    if (state.headSha !== decision.candidate.gitSha) errors.push('workspaceState.headSha must equal candidate.gitSha.');
+    if (state.sourceIdentity !== `HEAD:${decision.candidate.gitSha}`) errors.push('workspaceState.sourceIdentity must identify the exact clean candidate HEAD.');
+    if (state.developmentDirty !== false) errors.push('workspaceState.developmentDirty must be false.');
+    if (state.acceptanceEligible !== true) errors.push('workspaceState.acceptanceEligible must be true.');
+    if (state.patchDigest !== null) errors.push('workspaceState.patchDigest must be null.');
+    if (state.statusDigest !== EMPTY_SHA256) errors.push('workspaceState.statusDigest must be the SHA-256 of an empty Git status.');
+    if (state.trackedPatchSha256 !== EMPTY_SHA256) errors.push('workspaceState.trackedPatchSha256 must be the SHA-256 of an empty tracked patch.');
+    if (!Object.is(state.untrackedFileCount, 0)) errors.push('workspaceState.untrackedFileCount must be the integer 0.');
+    if (!Object.is(state.untrackedBytes, 0)) errors.push('workspaceState.untrackedBytes must be the integer 0.');
+    if (state.captureMode !== 'signed') errors.push("workspaceState.captureMode must be 'signed'.");
+
+    const claims = verified.envelope.claims;
+    if (
+      state.headSha !== claims.sourceGitSha
+      || claims.worktreeClean !== true
+      || state.developmentDirty !== claims.developmentDirty
+      || state.patchDigest !== claims.patchDigest
+    ) {
+      errors.push('workspaceState must agree with every clean-source envelope claim.');
+    }
+  }
+
+  const repositoryState = decision.repositoryState.before;
+  if (
+    repositoryState.verified !== true
+    || repositoryState.clean !== true
+    || repositoryState.gitSha !== decision.candidate.gitSha
+    || (isPlainObject(state) && repositoryState.gitSha !== state.headSha)
+  ) {
+    errors.push('workspaceState must agree with the evaluator independently captured clean repository state.');
+  }
+
+  for (const detail of errors) {
+    addBlocker(decision, 'GATE_SOURCE_SEMANTIC_INVALID', 'G2-CLEAN-SOURCE', detail);
+  }
 }
 
 function verifyPerf03Source(decision, verified) {

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { copyFile, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
@@ -45,8 +45,13 @@ test('all 43 frozen gates have one explicit, unique, non-empty fail-closed polic
     assert(Object.isFrozen(policy));
   }
   assert.deepEqual(Object.keys(GATE_SOURCE_VALIDATORS).sort(), FROZEN_GATES.map(({ id }) => id).sort());
-  assert.equal(Object.values(GATE_SOURCE_VALIDATORS).filter(({ kind }) => kind === 'IMPLEMENTED').length, 0);
-  assert.equal(Object.values(GATE_SOURCE_VALIDATORS).filter(({ kind }) => kind === 'NOT_IMPLEMENTED').length, 43);
+  assert.equal(Object.values(GATE_SOURCE_VALIDATORS).filter(({ kind }) => kind === 'IMPLEMENTED').length, 1);
+  assert.equal(Object.values(GATE_SOURCE_VALIDATORS).filter(({ kind }) => kind === 'NOT_IMPLEMENTED').length, 42);
+  assert.deepEqual(GATE_SOURCE_VALIDATORS['G2-CLEAN-SOURCE'], {
+    kind: 'IMPLEMENTED',
+    implementation: 'CLEAN_WORKSPACE_STATE_V1'
+  });
+  assert.equal(GATE_SOURCE_VALIDATORS['WP6-DETERMINISTIC-VERIFY'].kind, 'NOT_IMPLEMENTED');
 });
 
 test('the public evaluator cannot upgrade coordinated synthetic sources to acceptance', async () => {
@@ -56,7 +61,7 @@ test('the public evaluator cannot upgrade coordinated synthetic sources to accep
     assert.equal(decision.status, 'BLOCKED');
     assert.equal(decision.acceptance, false);
     assert.deepEqual(decision.pending, []);
-    assert.equal(decision.blockers.filter(({ code }) => code === 'GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED').length, 43);
+    assert.equal(decision.blockers.filter(({ code }) => code === 'GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED').length, 42);
     assert.deepEqual(decision.repositoryState, {
       before: { gitSha: draft.candidate.gitSha, clean: true, verified: true },
       after: { gitSha: draft.candidate.gitSha, clean: true, verified: true }
@@ -71,7 +76,7 @@ test('synthetic sources cannot produce a 43-gate PASS and missing schemas are ex
     assert.equal(decision.status, 'BLOCKED');
     assert.equal(decision.acceptance, false);
     const notImplemented = decision.blockers.filter(({ code }) => code === 'GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED');
-    assert.equal(notImplemented.length, 43);
+    assert.equal(notImplemented.length, 42);
     for (const gateId of ['WP3-PERF-03', 'WP3-PERF-08', 'WP5-AUTHENTICODE', 'WP7-CLEAN-VM', 'WP7-DISPLAY-HARDWARE']) {
       assert(notImplemented.some(({ subject }) => subject === gateId), `${gateId} arbitrary source must be blocked`);
     }
@@ -169,6 +174,92 @@ test('a valid envelope cannot promote a source whose bytes do not match its hash
   });
 });
 
+test('the exact signed clean workspace state is bound to the independently observed repository state', async () => {
+  await withCandidate(async ({ root, draft, evaluationOptions }) => {
+    const decision = await evaluateAcceptanceDecision(draft, { workspaceRoot: root, now: NOW, ...evaluationOptions });
+    assert.equal(decision.status, 'BLOCKED');
+    assert.equal(decision.acceptance, false);
+    assert.equal(decision.blockers.some(({ subject, code }) => (
+      subject === 'G2-CLEAN-SOURCE'
+      && ['GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED', 'GATE_SOURCE_SEMANTIC_INVALID'].includes(code)
+    )), false);
+  });
+});
+
+test('the real signed workspace-state producer remains compatible with the clean-source evaluator', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'phase5-workspace-state-integration-'));
+  try {
+    const supplyChainDirectory = join(root, 'tooling', 'supply-chain');
+    await mkdir(supplyChainDirectory, { recursive: true });
+    for (const name of ['capture-phase5-workspace-state.mjs', 'phase5-supply-chain-lib.mjs']) {
+      await copyFile(join(import.meta.dirname, 'supply-chain', name), join(supplyChainDirectory, name));
+    }
+    const gitSha = await initializeTemporaryGitRepository(root, [
+      'tooling/supply-chain/capture-phase5-workspace-state.mjs',
+      'tooling/supply-chain/phase5-supply-chain-lib.mjs'
+    ]);
+    const logicalPath = 'evidence/build/workspace-state.json';
+    const absolutePath = join(root, ...logicalPath.split('/'));
+    await mkdir(dirname(absolutePath), { recursive: true });
+    const producer = spawnSync(process.execPath, [
+      join(supplyChainDirectory, 'capture-phase5-workspace-state.mjs'),
+      '--output', absolutePath,
+      '--mode', 'signed',
+      '--expected-head', gitSha
+    ], { cwd: root, encoding: 'utf8', windowsHide: true });
+    assert.equal(producer.status, 0, producer.stderr);
+    const bytes = await readFile(absolutePath);
+    const workspaceStateBinding = {
+      path: logicalPath,
+      sha256: createHash('sha256').update(bytes).digest('hex')
+    };
+    const { draft } = await buildCandidate(root, gitSha, { workspaceStateBinding });
+    const decision = await evaluateAcceptanceDecision(draft, { workspaceRoot: root, now: NOW });
+    assert.equal(decision.status, 'BLOCKED');
+    assert.equal(decision.blockers.some(({ subject, code }) => (
+      subject === 'G2-CLEAN-SOURCE'
+      && ['GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED', 'GATE_SOURCE_SEMANTIC_INVALID'].includes(code)
+    )), false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('an exact-looking deterministic verify summary remains blocked without trusted execution provenance', async () => {
+  await withCandidate(async ({ root, draft, evaluationOptions }) => {
+    const decision = await evaluateAcceptanceDecision(draft, { workspaceRoot: root, now: NOW, ...evaluationOptions });
+    assert.equal(decision.status, 'BLOCKED');
+    assert(decision.blockers.some(({ code, subject }) => (
+      code === 'GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED'
+      && subject === 'WP6-DETERMINISTIC-VERIFY'
+    )));
+  });
+});
+
+for (const [label, mutate, expectedDetail] of [
+  ['another candidate SHA', (state) => { state.headSha = 'f'.repeat(40); }, /candidate\.gitSha/u],
+  ['unsigned capture mode', (state) => { state.captureMode = 'unsigned'; }, /captureMode/u],
+  ['ineligible capture', (state) => { state.acceptanceEligible = false; }, /acceptanceEligible/u],
+  ['dirty capture', (state) => { state.developmentDirty = true; }, /developmentDirty/u],
+  ['an unexpected field', (state) => { state.forgedPass = true; }, /unexpected fields/u]
+]) {
+  test(`clean-source validation rejects ${label} even when the source and envelope hashes are updated`, async () => {
+    await withCandidate(async ({ root, draft, evaluationOptions }) => {
+      await mutateGateSource(root, draft, 'G2-CLEAN-SOURCE', 'workspaceState', mutate);
+      const decision = await evaluateAcceptanceDecision(draft, { workspaceRoot: root, now: NOW, ...evaluationOptions });
+      assert.equal(decision.status, 'BLOCKED');
+      assert(decision.blockers.some(({ code, subject, detail }) => (
+        code === 'GATE_SOURCE_SEMANTIC_INVALID'
+        && subject === 'G2-CLEAN-SOURCE'
+        && expectedDetail.test(detail)
+      )));
+      assert.equal(decision.blockers.some(({ code, subject }) => (
+        code === 'GATE_SOURCE_INVALID' && subject === 'G2-CLEAN-SOURCE'
+      )), false);
+    });
+  });
+}
+
 test('a gate-specific threshold failure is blocked even inside a strict envelope', async () => {
   await withCandidate(async ({ root, draft, evaluationOptions }) => {
     await mutateGateEnvelope(root, draft, 'WP3-PERF-09', (envelope) => {
@@ -260,6 +351,11 @@ test('a historical candidate SHA cannot pass against the current repository HEAD
     assert.equal(decision.status, 'BLOCKED');
     assert(decision.blockers.some(({ code }) => code === 'REPOSITORY_HEAD_BEFORE_MISMATCH'));
     assert(decision.blockers.some(({ code }) => code === 'REPOSITORY_HEAD_AFTER_MISMATCH'));
+    assert(decision.blockers.some(({ code, subject, detail }) => (
+      code === 'GATE_SOURCE_SEMANTIC_INVALID'
+      && subject === 'G2-CLEAN-SOURCE'
+      && /independently captured/u.test(detail)
+    )));
   });
 });
 
@@ -270,6 +366,11 @@ test('a dirty repository before evidence evaluation is blocked', async () => {
     const decision = await evaluateAcceptanceDecision(draft, { workspaceRoot: root, now: NOW });
     assert.equal(decision.status, 'BLOCKED');
     assert(decision.blockers.some(({ code }) => code === 'REPOSITORY_DIRTY_BEFORE'));
+    assert(decision.blockers.some(({ code, subject, detail }) => (
+      code === 'GATE_SOURCE_SEMANTIC_INVALID'
+      && subject === 'G2-CLEAN-SOURCE'
+      && /independently captured/u.test(detail)
+    )));
   });
 });
 
@@ -355,7 +456,7 @@ async function withCandidate(callback) {
   }
 }
 
-async function buildCandidate(root, gitSha) {
+async function buildCandidate(root, gitSha, options = {}) {
   const artifacts = artifactRecords();
   const artifactSetDigest = computeArtifactSetDigest(artifacts);
   const sourceBindings = new Map();
@@ -443,6 +544,11 @@ async function buildCandidate(root, gitSha) {
   sourceBindings.set('WP5-CLEAN-DOWNLOAD:cleanDownloadVerification', cleanDownloadBinding);
   sourceBindings.set('WP5-CLEAN-DOWNLOAD:independentTrustedRoot', trustedRootBinding);
   sourceBindings.set('WP3-PERF-03:summary', await writeEvidence(root, 'evidence/perf03/summary.json', perf03Summary(gitSha, finalManifestBinding, cleanDownloadBinding)));
+  sourceBindings.set(
+    'G2-CLEAN-SOURCE:workspaceState',
+    options.workspaceStateBinding ?? await writeEvidence(root, 'evidence/build/workspace-state.json', cleanWorkspaceState(gitSha))
+  );
+  sourceBindings.set('WP6-DETERMINISTIC-VERIFY:verifySummary', await writeEvidence(root, 'evidence/verify/verify-summary.json', deterministicVerifySummary(gitSha)));
 
   const providerBindings = await buildProviderSmokeEvidence(root, gitSha, artifactSetDigest);
   for (const [role, binding] of providerBindings) sourceBindings.set(`WP3-PERF-08:${role}`, binding);
@@ -497,6 +603,61 @@ async function buildCandidate(root, gitSha) {
       gates,
       approvals: pendingApprovals()
     }
+  };
+}
+
+function cleanWorkspaceState(gitSha) {
+  const emptySha256 = createHash('sha256').digest('hex');
+  return {
+    schemaVersion: 1,
+    headSha: gitSha,
+    sourceIdentity: `HEAD:${gitSha}`,
+    developmentDirty: false,
+    acceptanceEligible: true,
+    patchDigest: null,
+    statusDigest: emptySha256,
+    trackedPatchSha256: emptySha256,
+    untrackedFileCount: 0,
+    untrackedBytes: 0,
+    captureMode: 'signed'
+  };
+}
+
+function deterministicVerifySummary(gitSha) {
+  return {
+    schemaVersion: '1.0.0',
+    phase: 5,
+    status: 'DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE',
+    strictPhase4Superset: true,
+    acceptance: false,
+    gitSha,
+    worktreeDirty: false,
+    gates: {
+      phase4StrictSuperset: 'PASS',
+      metricsInterface: 'SMOKE_PASS_NOT_PERFORMANCE_ACCEPTANCE',
+      processPrivacyHardening: 'PASS',
+      laneIdentityHardening: 'PASS',
+      acceptanceDecisionHardening: 'PASS',
+      environmentPreflightHardening: 'PASS',
+      formalPerf03Hardening: 'PASS',
+      providerSmokeHardening: 'PASS',
+      releaseEvidenceHardening: 'PASS',
+      dependencyAudit: 'PASS',
+      unsignedPackaging: 'PASS',
+      laneASmoke: 'SMOKE_PASS_NOT_ACCEPTANCE',
+      laneB: 'NOT_RUN',
+      resourceInterface: 'SMOKE_PASS_NOT_RESOURCE_ACCEPTANCE',
+      residualProcesses: 'PASS',
+      evidencePrivacy: 'PASS'
+    },
+    limitations: [
+      'Lane A short duration is harness smoke only.',
+      'Lane A simulated result consumption is not real UIA, DXGI or OCR acquisition.',
+      'Lane B is explicitly NOT RUN and requires a final signed RC in a dedicated interactive session.',
+      'Resource interface smoke is not the 15-minute idle or 8-hour resource gate.',
+      'Real Provider smoke, signing and release verification are separate protected/manual gates.',
+      'A zero exit code from this deterministic gate is not Phase 5 acceptance.'
+    ]
   };
 }
 
@@ -745,17 +906,29 @@ async function mutateGateEnvelope(root, draft, id, mutate) {
   await replaceGateEnvelope(root, draft, id, envelope);
 }
 
+async function mutateGateSource(root, draft, gateId, sourceRole, mutate) {
+  const envelope = await readGateEnvelope(root, draft, gateId);
+  const source = envelope.sources.find(({ role }) => role === sourceRole);
+  assert(source, `Missing ${gateId}:${sourceRole} fixture source.`);
+  const absolutePath = join(root, ...source.path.split('/'));
+  const value = JSON.parse(await readFile(absolutePath, 'utf8'));
+  mutate(value);
+  const binding = await writeEvidence(root, source.path, value);
+  source.sha256 = binding.sha256;
+  await replaceGateEnvelope(root, draft, gateId, envelope);
+}
+
 async function replaceGateEnvelope(root, draft, id, envelope) {
   const gate = gateById(draft, id);
   gate.evidence = await writeEvidence(root, gate.evidence.path, envelope);
 }
 
-async function initializeTemporaryGitRepository(root) {
+async function initializeTemporaryGitRepository(root, extraTrackedPaths = []) {
   await writeFile(join(root, '.gitignore'), 'evidence/\ndecision-*.json\n', 'utf8');
   runGit(root, ['init', '--quiet']);
   runGit(root, ['config', 'user.name', 'Phase5 Test']);
   runGit(root, ['config', 'user.email', 'phase5-test@example.invalid']);
-  runGit(root, ['add', '.gitignore']);
+  runGit(root, ['add', '.gitignore', ...extraTrackedPaths]);
   runGit(root, ['commit', '--quiet', '-m', 'fixture']);
   return runGit(root, ['rev-parse', 'HEAD']).stdout.trim().toLowerCase();
 }

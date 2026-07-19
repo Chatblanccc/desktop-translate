@@ -72,7 +72,7 @@ context 阻断；没有把工具或 runner 实现写成正式验收通过。
 | 完整 Phase 5 deterministic gate | `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE` | [`a08cc6c…` summary](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/verify-summary.json) 为 `strictPhase4Superset=true`、`worktreeDirty=false`、`acceptance=false`；只证明该 clean commit 的开发门禁 |
 | 环境 preflight | `BLOCKED` | Profile B 的 Win11 build 26200 x64、16 logical CPU、rounded 16 GiB、单物理屏 150% DPI 与 `gh 2.96.0` 能力通过；独占会话声明、Authenticode identity、runner labels、protected environments 与 Actions role context 阻断 |
 | Windows packaged UI 快检 | `MANUAL DEVELOPMENT QA PASS` | Ball、Settings、Native service 与 `0.5.0-phase5` 版本面可用；正常 UI 退出后 exact package process 为 0；发现并修正设置页 Phase 4 副标题。无 signed RC/clean VM/完整矩阵，不能升级为正式证据 |
-| 验收决议 scaffold | `SELFTEST PASS / FORMAL BLOCKED` | 43/43 gate registry；生产 source validator 为 `0/43`，全部 43 个明确 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`；非 `PENDING` 角色记录也固定返回 `APPROVAL_RECEIPT_VERIFIER_NOT_IMPLEMENTED`，因此自洽 JSON 或自报签字都不可能生成 APPROVE |
+| 验收决议 scaffold | `SELFTEST PASS / FORMAL BLOCKED` | 43/43 gate registry；生产 source validator 为 `1/43 IMPLEMENTED / 42 BLOCKED`：`G2-CLEAN-SOURCE` 将 `captureMode=signed`（signed-release capture mode，非密码学签名/receipt）的 workspace-state 与 evaluator 当前独立读取的 Git 状态交叉验证，其余 42 个明确 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`；非 `PENDING` 角色记录也固定返回 `APPROVAL_RECEIPT_VERIFIER_NOT_IMPLEMENTED`，因此自洽 JSON 或自报签字都不可能生成 APPROVE |
 
 idle/退出报告中的产品正常退出只由已绑定 UI command、exact process handle 观察到的 root exit code `0` 与
 `forcedTerminationUsed=false` 构成；失败或收尾阶段的 exact-identity harness cleanup 只证明测试环境被清理，
@@ -126,7 +126,7 @@ packaged test endpoint 与 action driver 未实现，因此 runner 正确返回 
 | clean VM 安装/升级/卸载 | `NOT RUN` | 标准用户 per-user NSIS 安装、启动、修复、覆盖升级、普通卸载保留数据、重装与显式清除 |
 | 硬件/兼容矩阵 | `NOT RUN` | A 类低配、C 类双物理屏、DPI 100/125/150/200%、任务栏四边、旋转与热插拔 |
 | 真实 Provider smoke | `FORMAL FAULT CONTROLLER NOT IMPLEMENTED` | 受控测试账号 health 之外，还必须实现能独立证明故障类型、控制窗口与恢复边界的控制器；当前 fault/aggregate 不写验收证据 |
-| 正式验收决议门禁 | `0/43 TRUSTED VALIDATORS / 43 BLOCKED` | registry/canonical payload/角色聚合 selftest 通过；所有 gate 在可信 source validator 接入前明确阻断，当前不能形成完整决议 |
+| 正式验收决议门禁 | `1/43 IMPLEMENTED / 42 BLOCKED` | registry/canonical payload/角色聚合 selftest 通过；`G2-CLEAN-SOURCE` 仅以 evaluator 独立 Git 复读确认当前 candidate/worktree cleanliness，不提供密码学 provenance；其余 gate 在可信 source validator 接入前明确阻断，当前不能形成完整决议 |
 | 四角色签字 | `BLOCKED` | 可由项目负责人以 `MERGED_PROJECT_OWNER` 合并承担角色，但当前没有 domain-separated cryptographic signature 或受保护平台 approval receipt verifier；任何非 `PENDING` 记录都会返回 `APPROVAL_RECEIPT_VERIFIER_NOT_IMPLEMENTED`，且签字不能绕过未通过 gate |
 
 ## 7. 外部与实机矩阵
@@ -155,7 +155,8 @@ packaged test endpoint 与 action driver 未实现，因此 runner 正确返回 
 [`phase5-acceptance-decision.mjs`](../../tooling/phase5-acceptance-decision.mjs) 生成并由
 [`acceptance-decision.schema.json`](../../schemas/phase5/acceptance-decision.schema.json) 复核。当前即使由同一项目负责人
 合并签署四个角色，Authenticode、artifact/final-manifest attestation、clean-download、fixed-lab、真实 Provider、
-clean VM 与硬件矩阵 gate 仍为非 PASS；同时 43 个 gate 均缺少可授予生产信任的 source validator。因此正式决议只能是
+clean VM 与硬件矩阵 gate 仍为非 PASS；同时除 `G2-CLEAN-SOURCE` 的 evaluator-time Git cleanliness 验证外，
+其余 42 个 gate 均缺少可授予生产信任的 source validator。因此正式决议只能是
 `PENDING` 或 `BLOCKED`，签字不能把这些阻断转换为 PASS。
 
 ## 9. 当前判定
@@ -167,6 +168,6 @@ Phase 2 3/3、Electron E2E 6/6、严格 Phase 4 超集与 clean unsigned Dir pac
 PERF-09 2×5、15 秒产品 idle、Provider/环境/决议 runner selftests 与 Windows UI 快检同样提供
 开发期证据，但都不是 acceptance。远程 deterministic gate、固定机 PERF-01–09、
 PERF-03 3×100、PERF-09 3×50、900 秒 idle、真实产品 Lane A 8 小时、最终签名 RC Lane B、clean VM、
-硬件/应用矩阵、真实 Provider、attestation/clean-download、43 个未实现可信 source validator、approval receipt
+硬件/应用矩阵、真实 Provider、attestation/clean-download、42 个未实现可信 source validator、approval receipt
 verifier 与 formal PERF-03 trust controller 仍未完成。
 在这些正式证据齐备前，Phase 5 不得标记为 `PASS`，也不得标记为 `PERFORMANCE ACCEPTED`。

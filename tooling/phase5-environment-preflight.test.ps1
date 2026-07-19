@@ -18,19 +18,39 @@ if (-not (Test-Path -LiteralPath $shell -PathType Leaf)) {
     throw 'No isolated PowerShell host is available for the environment preflight negative tests.'
 }
 
+function Invoke-IsolatedPowerShell {
+    param([Parameter(Mandatory = $true)][string[]]$ArgumentList)
+
+    # PowerShell 7 can promote a native process's nonzero exit into a
+    # terminating NativeCommandExitException when the caller uses Stop. The
+    # immutable-output and Formal-mode cases intentionally return nonzero, so
+    # collect the child exit code without weakening error handling elsewhere.
+    $savedErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $PSNativeCommandUseErrorActionPreference = $false
+        & $script:shell @ArgumentList | Out-Host
+        return [int]$LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $savedErrorActionPreference
+    }
+}
+
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('desktop-translate-phase5-environment-' + [guid]::NewGuid().ToString('N'))
 [IO.Directory]::CreateDirectory($testRoot) | Out-Null
 $canarySubject = 'CN=PHASE5_PREFLIGHT_PRIVATE_CANARY_DO_NOT_EMIT'
 
 try {
     $developmentOutput = Join-Path $testRoot 'development.json'
-    & $shell -NoLogo -NoProfile -File $runner `
-        -Mode Development `
-        -HardwareProfile C `
-        -RunnerRole Release `
-        -OutputPath $developmentOutput `
-        -ExpectedPublisherSubject $canarySubject
-    Assert-True ($LASTEXITCODE -eq 0) 'Development mode must emit a BLOCKED report without failing the caller.'
+    $developmentExitCode = Invoke-IsolatedPowerShell -ArgumentList @(
+        '-NoLogo', '-NoProfile', '-File', $runner,
+        '-Mode', 'Development',
+        '-HardwareProfile', 'C',
+        '-RunnerRole', 'Release',
+        '-OutputPath', $developmentOutput,
+        '-ExpectedPublisherSubject', $canarySubject
+    )
+    Assert-True ($developmentExitCode -eq 0) 'Development mode must emit a BLOCKED report without failing the caller.'
     Assert-True (Test-Path -LiteralPath $developmentOutput -PathType Leaf) 'Development mode did not emit JSON.'
     $developmentBytes = [IO.File]::ReadAllBytes($developmentOutput)
     $hasUtf8Bom = $developmentBytes.Length -ge 3 -and
@@ -58,12 +78,14 @@ try {
     }
 
     $formalOutput = Join-Path $testRoot 'formal.json'
-    & $shell -NoLogo -NoProfile -File $runner `
-        -Mode Formal `
-        -HardwareProfile B `
-        -RunnerRole Perf `
-        -OutputPath $formalOutput
-    Assert-True ($LASTEXITCODE -ne 0) 'Formal mode did not fail closed when required capabilities were absent.'
+    $formalExitCode = Invoke-IsolatedPowerShell -ArgumentList @(
+        '-NoLogo', '-NoProfile', '-File', $runner,
+        '-Mode', 'Formal',
+        '-HardwareProfile', 'B',
+        '-RunnerRole', 'Perf',
+        '-OutputPath', $formalOutput
+    )
+    Assert-True ($formalExitCode -ne 0) 'Formal mode did not fail closed when required capabilities were absent.'
     Assert-True (Test-Path -LiteralPath $formalOutput -PathType Leaf) 'Formal failure did not preserve its JSON evidence.'
     $formal = Get-Content -LiteralPath $formalOutput -Raw -Encoding utf8 | ConvertFrom-Json
     Assert-True ($formal.status -eq 'BLOCKED') 'Formal negative report status is not BLOCKED.'
@@ -75,16 +97,18 @@ try {
         'Perf incorrectly required a local Authenticode identity instead of validating the signed input bundle.'
 
     $cleanDownloadOutput = Join-Path $testRoot 'clean-download.json'
-    & $shell -NoLogo -NoProfile -File $runner `
-        -Mode Development `
-        -HardwareProfile B `
-        -RunnerRole CleanDownload `
-        -OutputPath $cleanDownloadOutput `
-        -ExpectedPublisherSubject $canarySubject `
-        -Repository 'owner/repository' `
-        -RunnerLabels windows-2022 `
-        -CurrentGitHubEnvironment phase5-release
-    Assert-True ($LASTEXITCODE -eq 0) 'Clean-download development modeling failed to preserve reporting.'
+    $cleanDownloadExitCode = Invoke-IsolatedPowerShell -ArgumentList @(
+        '-NoLogo', '-NoProfile', '-File', $runner,
+        '-Mode', 'Development',
+        '-HardwareProfile', 'B',
+        '-RunnerRole', 'CleanDownload',
+        '-OutputPath', $cleanDownloadOutput,
+        '-ExpectedPublisherSubject', $canarySubject,
+        '-Repository', 'owner/repository',
+        '-RunnerLabels', 'windows-2022',
+        '-CurrentGitHubEnvironment', 'phase5-release'
+    )
+    Assert-True ($cleanDownloadExitCode -eq 0) 'Clean-download development modeling failed to preserve reporting.'
     $cleanDownload = Get-Content -LiteralPath $cleanDownloadOutput -Raw -Encoding utf8 | ConvertFrom-Json
     $cleanAuthenticodeGate = @($cleanDownload.gates | Where-Object id -eq 'AUTHENTICODE_EXPECTED_IDENTITY')
     $cleanExclusiveGate = @($cleanDownload.gates | Where-Object id -eq 'EXCLUSIVE_INTERACTIVE_SESSION_DECLARATION')
@@ -100,12 +124,18 @@ try {
         $cleanRunnerFleetGate[0].observed.registeredRunnerRequired -eq $false) `
         'Clean-download incorrectly required a registered self-hosted runner inventory.'
 
-    & $shell -NoLogo -NoProfile -File $runner `
-        -Mode Development `
-        -HardwareProfile B `
-        -RunnerRole Perf `
-        -OutputPath $developmentOutput
-    Assert-True ($LASTEXITCODE -ne 0) 'Environment evidence output was overwritten instead of remaining append-never.'
+    $developmentHashBeforeOverwriteAttempt = (Get-FileHash -LiteralPath $developmentOutput -Algorithm SHA256).Hash
+    $immutableOutputExitCode = Invoke-IsolatedPowerShell -ArgumentList @(
+        '-NoLogo', '-NoProfile', '-File', $runner,
+        '-Mode', 'Development',
+        '-HardwareProfile', 'B',
+        '-RunnerRole', 'Perf',
+        '-OutputPath', $developmentOutput
+    )
+    Assert-True ($immutableOutputExitCode -ne 0) 'Environment evidence output was overwritten instead of remaining append-never.'
+    Assert-True ((Get-FileHash -LiteralPath $developmentOutput -Algorithm SHA256).Hash -ceq
+        $developmentHashBeforeOverwriteAttempt) `
+        'The rejected immutable-output attempt changed existing evidence bytes.'
 
     $spoofedOutput = Join-Path $testRoot 'spoofed-runner-context.json'
     $spoofedSha = 'a' * 40
@@ -128,8 +158,10 @@ try {
 & '$runner' -Mode Development -HardwareProfile B -RunnerRole Perf -Repository 'owner/repository' -RunnerLabels self-hosted,Windows,X64,phase5-lab -OutputPath '$spoofedOutput'
 exit 0
 "@
-    & $shell -NoLogo -NoProfile -Command $spoofScript
-    Assert-True ($LASTEXITCODE -eq 0) 'Spoofed development context did not preserve development-mode reporting.'
+    $spoofExitCode = Invoke-IsolatedPowerShell -ArgumentList @(
+        '-NoLogo', '-NoProfile', '-Command', $spoofScript
+    )
+    Assert-True ($spoofExitCode -eq 0) 'Spoofed development context did not preserve development-mode reporting.'
     $spoofed = Get-Content -LiteralPath $spoofedOutput -Raw -Encoding utf8 | ConvertFrom-Json
     $spoofedContextGate = @($spoofed.gates | Where-Object id -eq 'CURRENT_GITHUB_ACTIONS_ROLE_CONTEXT')
     Assert-True ($spoofedContextGate.Count -eq 1 -and $spoofedContextGate[0].status -eq 'BLOCKED') `
@@ -179,26 +211,12 @@ exit 0
 
     $workflowPath = Join-Path (Split-Path -Parent $PSScriptRoot) '.github\workflows\phase5-windows.yml'
     $workflow = Get-Content -LiteralPath $workflowPath -Raw -Encoding utf8
-    foreach ($formalRole in @('LaneA', 'Perf', 'LaneB', 'Release', 'CleanDownload')) {
-        Assert-True ($workflow.Contains("-RunnerRole $formalRole")) `
-            "The formal workflow does not invoke environment preflight for role $formalRole."
-    }
-    Assert-True (([regex]::Matches($workflow, '(?m)^\s+-Mode Formal\s+`$')).Count -eq 5) `
-        'The workflow must contain exactly five current formal preflight invocations.'
-    Assert-True (([regex]::Matches($workflow, '(?m)^\s+actions: read\s*$')).Count -ge 5) `
-        'One or more formal workflow jobs lack actions:read permission.'
-    Assert-True (([regex]::Matches($workflow, '(?m)^\s+GH_TOKEN: \$\{\{ github\.token \}\}\s*$')).Count -eq 5) `
-        'One or more formal preflight steps do not use the current GitHub token.'
-    foreach ($runnerBinding in @(
-        'PHASE5_LAB_RUNNER_ID: ${{ vars.PHASE5_LAB_RUNNER_ID }}',
-        'PHASE5_LANE_B_RUNNER_ID: ${{ secrets.PHASE5_LANE_B_RUNNER_ID }}',
-        'PHASE5_RELEASE_RUNNER_ID: ${{ secrets.PHASE5_RELEASE_RUNNER_ID }}'
-    )) {
-        Assert-True ($workflow.Contains($runnerBinding)) "The workflow lacks trusted runner binding $runnerBinding."
-    }
-    foreach ($evidenceName in @('environment/lane-a.json', 'environment/performance.json', 'environment/lane-b.json', 'environment/release.json', 'environment/clean-download.json')) {
-        Assert-True ($workflow.Contains($evidenceName)) "The workflow lacks independent preflight evidence $evidenceName."
-    }
+    $workflowAudit = Join-Path $PSScriptRoot 'phase5-workflow-preflight-audit.mjs'
+    $workflowAuditTests = Join-Path $PSScriptRoot 'phase5-workflow-preflight-audit.test.mjs'
+    & node $workflowAudit --workflow $workflowPath
+    Assert-True ($LASTEXITCODE -eq 0) 'The structural formal workflow preflight audit failed.'
+    & node --test $workflowAuditTests
+    Assert-True ($LASTEXITCODE -eq 0) 'The structural workflow adversarial fixtures failed.'
     foreach ($formalPerfInput in @(
         'PERF_PACKAGE_DIRECTORY',
         'PERF_PACKAGE_EVIDENCE_MANIFEST',

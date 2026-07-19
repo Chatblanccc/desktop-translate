@@ -28,7 +28,7 @@
 | P5-R-016 | 缺少证书却把 unsigned artifact 发布为 RC | 25 严重 | package/release workflow 对缺少受保护签名身份 fail closed；状态固定 RELEASE BLOCKED | ACTIVE BLOCKER / Release |
 | P5-R-017 | Phase 4 未测真实故障与兼容矩阵被错误继承为通过 | 20 高 | 复用 Phase 4 accepted-risk 清单，Phase 5 重新执行或明确 NOT RUN | OPEN / Quality |
 | P5-R-018 | 基线被 Phase 5 改动、不同构建模式污染，或当前环境重验失败被错误解释 | 16 高 | 独立 `4ea65dc` worktree、instrumentation-only patch、dev/package 分栏；历史验收与当前重验分别记录 | CLEAN-HEAD STRICT-SUPERSET DEVELOPMENT PASS, FROZEN BASELINE PENDING / Engineering + Quality |
-| P5-R-019 | 验收决议只验证 envelope/hash 就误批未验证的 source 语义 | 25 严重 | 43/43 registry；结构解析不授予生产信任；全部 source validator 在真实系统/密码学/运行证明接入前固定阻断 | 0 TRUSTED VALIDATORS, 43 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED` BLOCKERS / Quality + Release |
+| P5-R-019 | 验收决议只验证 envelope/hash 就误批未验证的 source 语义 | 25 严重 | 43/43 registry；`G2-CLEAN-SOURCE` 交叉绑定 exact workspace-state 与独立 Git 状态；结构解析不授予生产信任；其余 source validator 在真实系统/密码学/运行证明接入前固定阻断 | 1 IMPLEMENTED VALIDATOR, 42 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED` BLOCKERS / Quality + Release |
 | P5-R-020 | 打包清理/发布竞态导致旧树损坏或未验证树占据 canonical `dist` | 20 高 | 不递归删除/自动恢复；stable repository file lock、quarantine parent volume/file-ID lease、逐文件 no-share lease、Confirm/Exit exact-set+SHA；旧树同卷原子保留；新包在 unique staging 完成全部 gate 后发布，根 exact-set/live hash 复核失败则原子移入 `.phase5-failed-*` | CONTROLLED BY NEGATIVE SELFTEST, FINAL PACKAGE RERUN PENDING / Engineering + Release |
 | P5-R-021 | PERF-03 自报运行元数据、可抢写指标文件、自选 publisher/trusted root 或证据发布竞态形成 formal PASS | 25 严重 | development runner 保留 non-acceptance；formal entry 在受保护 job receipt、认证 transport、publisher policy 与完整 namespace trust controller 实现前无条件阻断 | `FORMAL_PERF03_TRUST_CONTROLLER_NOT_IMPLEMENTED` / Engineering + Quality + Security |
 | P5-R-022 | 四角色签字仅填写 signerId/payload hash，未验证真实签名或平台审批 | 25 严重 | 非 PENDING 角色记录在 domain-separated cryptographic signature 或 protected-platform receipt verifier 实现前无条件阻断 | `APPROVAL_RECEIPT_VERIFIER_NOT_IMPLEMENTED` / Product + Release |
@@ -84,7 +84,7 @@
 - Windows packaged UI 开发快检观察到 Ball、Settings、Native service 与 `0.5.0-phase5` 版本面可用，正常 UI
   退出后 exact package process 为 0；设置页残留的 Phase 4 副标题已修正。该会话观察不替代 signed RC、
   clean VM 或正式兼容矩阵。
-- acceptance-decision registry 覆盖 43/43 gate，当前可信生产 validator 为 0/43；全部 43 个明确阻断。
+- acceptance-decision registry 覆盖 43/43 gate，当前生产 validator 为 1/43 implemented；其余 42 个明确阻断。
   结构解析、阈值检查与自洽 hash 不能替代受保护运行、系统验签或离线 attestation 验证，selftest 通过不降低 P5-R-019。
 - 此前失败的 PERF-09/idle/package artifacts 原样保留；其 fail-closed 错误证明旧退出时序、UI 绑定与 cleanup
   竞态被捕获，后续开发 PASS 不覆盖或删除这些历史证据。

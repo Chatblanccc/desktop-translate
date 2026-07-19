@@ -22,9 +22,11 @@ Git 仓库读取 `HEAD` 与完整 worktree 状态。两次都必须等于 `candi
 跳过 Git 检查的参数。
 
 envelope 验证通过后仍不能直接形成 PASS。结构解析、source 字段重算、阈值和候选 hash 比对只能发现不一致，
-不能证明报告来自真实运行、系统验签或独立密码学验证。当前 43 个冻结 gate 的生产 source validator 均明确产生
+不能证明报告来自真实运行、系统验签或独立密码学验证。当前 43 个冻结 gate 中，仅 `G2-CLEAN-SOURCE` 已实现：
+它把 `captureMode=signed`（signed-release capture mode，非密码学签名/receipt）的 workspace-state 与 evaluator 当前
+独立读取的 candidate HEAD/worktree 状态交叉验证。其余 42 个生产 source validator 明确产生
 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`；满足 envelope claims、相互 hash 绑定甚至内容完全自洽的 synthetic JSON
-也不能被用作正式批准证据。测试专用 override 只存在于进程内单元测试，CLI 不暴露绕过参数。
+也不能被用作正式批准证据。CLI 不暴露 source validator 或 Git 状态绕过参数。
 
 未来接入 `WP3-PERF-03` 可信 validator 时，除正式 `phase5-perf03-summary-v1`、固定实验室 3×100、候选
 final manifest/clean-download hash 外，还必须独立验证终态 summary 隐私扫描、受保护运行来源和 exact artifact。
