@@ -50,6 +50,19 @@ try {
     Remove-Phase5DirectoryTree -Path $ordinary -AllowedParent $temporaryParent
     if (Test-Path -LiteralPath $ordinary) { throw 'Safe ordinary recursive deletion did not complete.' }
 
+    $nonDirectoryLeaseTarget = Join-Path $temporaryParent 'not-a-directory-lease.txt'
+    Set-Content -LiteralPath $nonDirectoryLeaseTarget -Value 'must not be leased as a directory' -Encoding UTF8
+    $nonDirectoryLeaseRejected = $false
+    try {
+        $null = [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($nonDirectoryLeaseTarget)
+    } catch {
+        $nonDirectoryLeaseRejected = $_.Exception.Message -match 'not a regular non-reparse directory'
+    }
+    if (-not $nonDirectoryLeaseRejected -or
+        -not (Test-Path -LiteralPath $nonDirectoryLeaseTarget -PathType Leaf)) {
+        throw 'Directory identity lease accepted or modified an ordinary file.'
+    }
+
     $atomicPublishParent = Join-Path $temporaryParent 'atomic-package-publish'
     $atomicPublishStaging = Join-Path $atomicPublishParent (
         '.phase5-build-' + [guid]::NewGuid().ToString('N')
@@ -157,7 +170,7 @@ try {
         '.phase5-build-' + [guid]::NewGuid().ToString('N')
     )
     New-Item -ItemType Directory -Force -Path (Join-Path $installerExactRoot 'win-unpacked') | Out-Null
-    $installerExactSetup = Join-Path $installerExactRoot 'Desktop-Translate-selftest-x64-setup.exe'
+    $installerExactSetup = Join-Path $installerExactRoot 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
     [IO.File]::WriteAllBytes($installerExactSetup, [byte[]](1, 2, 3))
     $resolvedExactInstaller = Assert-Phase5PackageOutputRootExactSet `
         -Root $installerExactRoot `
@@ -190,7 +203,7 @@ try {
         '.phase5-build-' + [guid]::NewGuid().ToString('N')
     )
     New-Item -ItemType Directory -Force -Path (Join-Path $blockmapCleanupRoot 'win-unpacked') | Out-Null
-    $blockmapCleanupSetup = Join-Path $blockmapCleanupRoot 'Desktop-Translate-cleanup-setup.exe'
+    $blockmapCleanupSetup = Join-Path $blockmapCleanupRoot 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
     [IO.File]::WriteAllBytes($blockmapCleanupSetup, [byte[]](10, 20, 30, 40))
     $blockmapCleanupSetupHash = (Get-FileHash -LiteralPath $blockmapCleanupSetup -Algorithm SHA256).Hash
     $blockmapCleanupExact = $blockmapCleanupSetup + '.blockmap'
@@ -216,10 +229,88 @@ try {
         throw 'Exact regular unpublished setup blockmap cleanup did not preserve the setup and exact root.'
     }
 
+    $blockmapLeaseRaceParent = Join-Path $temporaryParent 'installer-blockmap-lease-race'
+    $blockmapLeaseRaceRoot = Join-Path $blockmapLeaseRaceParent (
+        '.phase5-build-' + [guid]::NewGuid().ToString('N')
+    )
+    New-Item -ItemType Directory -Force -Path (Join-Path $blockmapLeaseRaceRoot 'win-unpacked') | Out-Null
+    $blockmapLeaseRaceSetup = Join-Path $blockmapLeaseRaceRoot 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
+    $blockmapLeaseRaceExact = $blockmapLeaseRaceSetup + '.blockmap'
+    [IO.File]::WriteAllBytes($blockmapLeaseRaceSetup, [byte[]](71, 72, 73))
+    [IO.File]::WriteAllBytes($blockmapLeaseRaceExact, [byte[]](74, 75, 76))
+    $blockmapLeaseRaceHash = (Get-FileHash -LiteralPath $blockmapLeaseRaceExact -Algorithm SHA256).Hash
+    $raceParentLease = $null
+    $raceRootLease = $null
+    $raceBlockmapLease = $null
+    try {
+        $raceParentLease = [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($blockmapLeaseRaceParent)
+        $raceRootLease = [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($blockmapLeaseRaceRoot)
+        $raceBlockmapLease = [Phase5.PackageOutputQuarantineNative]::OpenExactRegularFileLease($blockmapLeaseRaceExact, $true)
+        $parentRenameRejected = $false
+        $rootRenameRejected = $false
+        $blockmapRenameRejected = $false
+        $blockmapReplaceRejected = $false
+        try {
+            [IO.Directory]::Move($blockmapLeaseRaceParent, $blockmapLeaseRaceParent + '-swapped')
+        } catch { $parentRenameRejected = $true }
+        try {
+            [IO.Directory]::Move($blockmapLeaseRaceRoot, $blockmapLeaseRaceRoot + '-swapped')
+        } catch { $rootRenameRejected = $true }
+        try {
+            [IO.File]::Move($blockmapLeaseRaceExact, $blockmapLeaseRaceExact + '.swapped')
+        } catch { $blockmapRenameRejected = $true }
+        try {
+            [IO.File]::WriteAllBytes($blockmapLeaseRaceExact, [byte[]](99))
+        } catch { $blockmapReplaceRejected = $true }
+        if (-not $parentRenameRejected -or -not $rootRenameRejected -or
+            -not $blockmapRenameRejected -or -not $blockmapReplaceRejected -or
+            -not (Test-Path -LiteralPath $blockmapLeaseRaceExact -PathType Leaf)) {
+            throw 'Directory identity and no-share sidecar leases did not reject concurrent parent/root rename and sidecar rename/replace attempts.'
+        }
+    } finally {
+        if ($null -ne $raceBlockmapLease) { $raceBlockmapLease.Dispose() }
+        if ($null -ne $raceRootLease) { $raceRootLease.Dispose() }
+        if ($null -ne $raceParentLease) { $raceParentLease.Dispose() }
+    }
+    if ((Get-FileHash -LiteralPath $blockmapLeaseRaceExact -Algorithm SHA256).Hash -cne
+        $blockmapLeaseRaceHash) {
+        throw 'A concurrent sidecar replacement attempt changed content while the no-share identity lease was held.'
+    }
+    $null = Remove-Phase5UnpublishedInstallerBlockmap `
+        -Root $blockmapLeaseRaceRoot `
+        -AllowedParent $blockmapLeaseRaceParent
+    if (Test-Path -LiteralPath $blockmapLeaseRaceExact) {
+        throw 'Exact sidecar was not removable by leased-handle disposition after concurrent attacks were rejected.'
+    }
+
+    $wrongInstallerParent = Join-Path $temporaryParent 'installer-wrong-canonical-name'
+    $wrongInstallerRoot = Join-Path $wrongInstallerParent (
+        '.phase5-build-' + [guid]::NewGuid().ToString('N')
+    )
+    New-Item -ItemType Directory -Force -Path (Join-Path $wrongInstallerRoot 'win-unpacked') | Out-Null
+    $wrongInstallerSetup = Join-Path $wrongInstallerRoot 'Desktop-Translate-0.5.0-x64-setup.exe'
+    $wrongInstallerBlockmap = $wrongInstallerSetup + '.blockmap'
+    [IO.File]::WriteAllBytes($wrongInstallerSetup, [byte[]](81, 82, 83))
+    [IO.File]::WriteAllBytes($wrongInstallerBlockmap, [byte[]](84, 85, 86))
+    $wrongInstallerRejected = $false
+    try {
+        $null = Remove-Phase5UnpublishedInstallerBlockmap `
+            -Root $wrongInstallerRoot `
+            -AllowedParent $wrongInstallerParent
+    } catch {
+        $wrongInstallerRejected = $_.Exception.Data['StableErrorCode'] -eq `
+            'PACKAGE_OUTPUT_INSTALLER_SETUP_INVALID'
+    }
+    if (-not $wrongInstallerRejected -or
+        -not (Test-Path -LiteralPath $wrongInstallerSetup -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $wrongInstallerBlockmap -PathType Leaf)) {
+        throw 'A non-canonical installer name was accepted or modified.'
+    }
+
     $blockmapCanonicalParent = Join-Path $temporaryParent 'installer-blockmap-canonical'
     $blockmapCanonicalRoot = Join-Path $blockmapCanonicalParent 'dist'
     New-Item -ItemType Directory -Force -Path (Join-Path $blockmapCanonicalRoot 'win-unpacked') | Out-Null
-    $blockmapCanonicalSetup = Join-Path $blockmapCanonicalRoot 'Desktop-Translate-canonical-setup.exe'
+    $blockmapCanonicalSetup = Join-Path $blockmapCanonicalRoot 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
     [IO.File]::WriteAllBytes($blockmapCanonicalSetup, [byte[]](21, 22, 23))
     $blockmapCanonicalExact = $blockmapCanonicalSetup + '.blockmap'
     [IO.File]::WriteAllBytes($blockmapCanonicalExact, [byte[]](24, 25, 26))
@@ -243,7 +334,7 @@ try {
         '.phase5-build-' + [guid]::NewGuid().ToString('N')
     )
     New-Item -ItemType Directory -Force -Path (Join-Path $blockmapLookalikeRoot 'win-unpacked') | Out-Null
-    $blockmapLookalikeSetup = Join-Path $blockmapLookalikeRoot 'Desktop-Translate-lookalike-setup.exe'
+    $blockmapLookalikeSetup = Join-Path $blockmapLookalikeRoot 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
     [IO.File]::WriteAllBytes($blockmapLookalikeSetup, [byte[]](1, 3, 5))
     $blockmapLookalike = $blockmapLookalikeSetup + '.blockmap.bak'
     [IO.File]::WriteAllBytes($blockmapLookalike, [byte[]](2, 4, 6))
@@ -267,7 +358,7 @@ try {
         '.phase5-build-' + [guid]::NewGuid().ToString('N')
     )
     New-Item -ItemType Directory -Force -Path (Join-Path $blockmapDirectoryRoot 'win-unpacked') | Out-Null
-    $blockmapDirectorySetup = Join-Path $blockmapDirectoryRoot 'Desktop-Translate-directory-setup.exe'
+    $blockmapDirectorySetup = Join-Path $blockmapDirectoryRoot 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
     [IO.File]::WriteAllBytes($blockmapDirectorySetup, [byte[]](7, 8, 9))
     $blockmapDirectory = $blockmapDirectorySetup + '.blockmap'
     New-Item -ItemType Directory -Path $blockmapDirectory | Out-Null
@@ -294,7 +385,7 @@ try {
         (Join-Path $blockmapReparseRoot 'win-unpacked'), $blockmapReparseTarget | Out-Null
     $blockmapReparseTargetProof = Join-Path $blockmapReparseTarget 'must-survive.txt'
     Set-Content -LiteralPath $blockmapReparseTargetProof -Value 'reparse target survives' -Encoding UTF8
-    $blockmapReparseSetup = Join-Path $blockmapReparseRoot 'Desktop-Translate-reparse-setup.exe'
+    $blockmapReparseSetup = Join-Path $blockmapReparseRoot 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
     [IO.File]::WriteAllBytes($blockmapReparseSetup, [byte[]](11, 12, 13))
     $blockmapReparse = $blockmapReparseSetup + '.blockmap'
     New-Item -ItemType Junction -Path $blockmapReparse -Target $blockmapReparseTarget | Out-Null
@@ -323,8 +414,8 @@ try {
         '.phase5-build-' + [guid]::NewGuid().ToString('N')
     )
     New-Item -ItemType Directory -Force -Path (Join-Path $blockmapMultipleRoot 'win-unpacked') | Out-Null
-    $blockmapMultipleSetupA = Join-Path $blockmapMultipleRoot 'Desktop-Translate-a-setup.exe'
-    $blockmapMultipleSetupB = Join-Path $blockmapMultipleRoot 'Desktop-Translate-b-setup.exe'
+    $blockmapMultipleSetupA = Join-Path $blockmapMultipleRoot 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
+    $blockmapMultipleSetupB = Join-Path $blockmapMultipleRoot 'Desktop-Translate-extra-setup.exe'
     [IO.File]::WriteAllBytes($blockmapMultipleSetupA, [byte[]](1))
     [IO.File]::WriteAllBytes($blockmapMultipleSetupB, [byte[]](2))
     $blockmapMultipleExact = $blockmapMultipleSetupA + '.blockmap'
@@ -336,7 +427,7 @@ try {
             -AllowedParent $blockmapMultipleParent
     } catch {
         $blockmapMultipleRejected = $_.Exception.Data['StableErrorCode'] -eq `
-            'PACKAGE_OUTPUT_INSTALLER_SETUP_INVALID'
+            'PACKAGE_OUTPUT_ROOT_EXACT_SET_INVALID'
     }
     if (-not $blockmapMultipleRejected -or
         -not (Test-Path -LiteralPath $blockmapMultipleSetupA -PathType Leaf) -or
@@ -350,7 +441,7 @@ try {
         '.phase5-build-' + [guid]::NewGuid().ToString('N')
     )
     New-Item -ItemType Directory -Force -Path (Join-Path $setupDirectoryRoot 'win-unpacked') | Out-Null
-    $setupDirectory = Join-Path $setupDirectoryRoot 'Desktop-Translate-directory-setup.exe'
+    $setupDirectory = Join-Path $setupDirectoryRoot 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
     New-Item -ItemType Directory -Path $setupDirectory | Out-Null
     $setupDirectoryBlockmap = $setupDirectory + '.blockmap'
     [IO.File]::WriteAllBytes($setupDirectoryBlockmap, [byte[]](31, 32, 33))
@@ -378,7 +469,7 @@ try {
         (Join-Path $setupReparseRoot 'win-unpacked'), $setupReparseTarget | Out-Null
     $setupReparseTargetProof = Join-Path $setupReparseTarget 'must-survive.txt'
     Set-Content -LiteralPath $setupReparseTargetProof -Value 'setup reparse target survives' -Encoding UTF8
-    $setupReparse = Join-Path $setupReparseRoot 'Desktop-Translate-reparse-setup.exe'
+    $setupReparse = Join-Path $setupReparseRoot 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
     New-Item -ItemType Junction -Path $setupReparse -Target $setupReparseTarget | Out-Null
     $setupReparseBlockmap = $setupReparse + '.blockmap'
     [IO.File]::WriteAllBytes($setupReparseBlockmap, [byte[]](34, 35, 36))
@@ -587,7 +678,7 @@ try {
     # Use an installer-shaped executable outside win-unpacked so the test
     # proves the guard covers every executable under package output, not only
     # the two historically known product paths.
-    $packagePreflightExecutable = Join-Path $packagePreflightOutput 'desktop-translate-setup.exe'
+    $packagePreflightExecutable = Join-Path $packagePreflightOutput 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
     $packagePreflightSentinel = Join-Path $packagePreflightOutput 'must-remain.txt'
     $packagePreflightNestedSentinel = Join-Path $packagePreflightOutput 'nested\complete-tree.txt'
     New-Item -ItemType Directory -Force -Path `

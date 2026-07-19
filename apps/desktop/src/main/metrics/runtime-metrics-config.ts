@@ -64,36 +64,34 @@ export function resolvePackagedRuntimeMetricsUserDataDirectory(
   if (candidate === undefined) return undefined;
   const commandLineCandidate = options.commandLineUserDataDirectory;
   if (
-    commandLineCandidate.length > 0
-    && resolve(commandLineCandidate).toLowerCase() !== resolve(candidate).toLowerCase()
+    !isSafeAbsoluteDirectoryPath(candidate)
+    || !isSafeAbsoluteDirectoryPath(commandLineCandidate)
   ) return undefined;
-  if (!isSafeAbsoluteDirectoryPath(candidate)) return undefined;
   try {
     const resolvedCandidate = resolve(candidate);
+    const resolvedCommandLineCandidate = resolve(commandLineCandidate);
     const resolvedTemporaryDirectory = resolve(options.temporaryDirectory ?? tmpdir());
     const runRoot = dirname(resolvedCandidate);
-    const relativeRunRoot = relative(resolvedTemporaryDirectory, runRoot);
+    const canonicalCandidate = realpathSync.native(resolvedCandidate);
+    const canonicalCommandLineCandidate = realpathSync.native(resolvedCommandLineCandidate);
+    const canonicalRunRoot = realpathSync.native(runRoot);
+    const canonicalTemporaryDirectory = realpathSync.native(resolvedTemporaryDirectory);
+    const relativeRunRoot = relative(canonicalTemporaryDirectory, canonicalRunRoot);
     if (
-      relativeRunRoot.length === 0
+      !areEquivalentPaths(canonicalCommandLineCandidate, canonicalCandidate)
+      || !areEquivalentPaths(dirname(canonicalCandidate), canonicalRunRoot)
+      || relativeRunRoot.length === 0
       || isAbsolute(relativeRunRoot)
       || relativeRunRoot === '..'
       || relativeRunRoot.startsWith(`..${sep}`)
       || relativeRunRoot.includes(sep)
-      || !/^desktop-translate-phase5-perf03-[a-f0-9]{32}$/u.test(basename(runRoot))
-      || !/^User Data [^\\/\u0000-\u001f]{1,80}$/u.test(basename(resolvedCandidate))
+      || !/^desktop-translate-phase5-perf03-[a-f0-9]{32}$/u.test(basename(canonicalRunRoot))
+      || !/^User Data [^\\/\u0000-\u001f]{1,80}$/u.test(basename(canonicalCandidate))
     ) return undefined;
 
-    const runRootState = lstatSync(runRoot);
-    const candidateState = lstatSync(resolvedCandidate);
     if (
-      !runRootState.isDirectory()
-      || runRootState.isSymbolicLink()
-      || !candidateState.isDirectory()
-      || candidateState.isSymbolicLink()
-    ) return undefined;
-    if (
-      realpathSync.native(runRoot).toLowerCase() !== runRoot.toLowerCase()
-      || realpathSync.native(resolvedCandidate).toLowerCase() !== resolvedCandidate.toLowerCase()
+      !isDirectoryTreeWithoutSymbolicLinks(resolvedCandidate)
+      || !isDirectoryTreeWithoutSymbolicLinks(resolvedCommandLineCandidate)
     ) return undefined;
     return resolvedCandidate;
   } catch {
@@ -254,4 +252,21 @@ function isSafeAbsoluteDirectoryPath(value: string): boolean {
   if (process.platform !== 'win32') return true;
   if (!/^[a-z]:[\\/]/iu.test(value)) return false;
   return !value.replaceAll('/', '\\').slice(2).includes(':');
+}
+
+function areEquivalentPaths(left: string, right: string): boolean {
+  return process.platform === 'win32'
+    ? left.toLowerCase() === right.toLowerCase()
+    : left === right;
+}
+
+function isDirectoryTreeWithoutSymbolicLinks(directory: string): boolean {
+  let current = resolve(directory);
+  while (true) {
+    const state = lstatSync(current);
+    if (!state.isDirectory() || state.isSymbolicLink()) return false;
+    const parent = dirname(current);
+    if (parent === current) return true;
+    current = parent;
+  }
 }

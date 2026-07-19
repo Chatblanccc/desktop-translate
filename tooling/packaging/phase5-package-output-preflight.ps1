@@ -11,14 +11,17 @@ using Microsoft.Win32.SafeHandles;
 namespace Phase5 {
     public static class PackageOutputQuarantineNative {
         private const uint GENERIC_READ = 0x80000000;
+        private const uint DELETE = 0x00010000;
         private const uint FILE_READ_ATTRIBUTES = 0x00000080;
         private const uint FILE_SHARE_READ = 0x00000001;
         private const uint FILE_SHARE_WRITE = 0x00000002;
         private const uint OPEN_EXISTING = 3;
         private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
+        private const uint FILE_ATTRIBUTE_DIRECTORY = 0x00000010;
         private const uint FILE_ATTRIBUTE_REPARSE_POINT = 0x00000400;
         private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
         private const uint FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
+        private const int FILE_DISPOSITION_INFO_CLASS = 4;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct NativeFileTime {
@@ -40,6 +43,12 @@ namespace Phase5 {
             public uint FileIndexLow;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        private struct FileDispositionInformation {
+            [MarshalAs(UnmanagedType.U1)]
+            public bool DeleteFile;
+        }
+
         public sealed class DirectoryIdentityLease : IDisposable {
             internal SafeFileHandle Handle { get; private set; }
             public uint VolumeSerialNumber { get; private set; }
@@ -53,6 +62,56 @@ namespace Phase5 {
                 Handle = handle;
                 VolumeSerialNumber = volumeSerialNumber;
                 FileId = fileId;
+            }
+
+            public void Dispose() {
+                if (Handle != null) {
+                    Handle.Dispose();
+                    Handle = null;
+                }
+            }
+        }
+
+        public sealed class ExactFileIdentityLease : IDisposable {
+            internal SafeFileHandle Handle { get; private set; }
+            public uint VolumeSerialNumber { get; private set; }
+            public ulong FileId { get; private set; }
+            public bool DeleteAccess { get; private set; }
+            public bool DeleteRequested { get; private set; }
+
+            internal ExactFileIdentityLease(
+                SafeFileHandle handle,
+                uint volumeSerialNumber,
+                ulong fileId,
+                bool deleteAccess
+            ) {
+                Handle = handle;
+                VolumeSerialNumber = volumeSerialNumber;
+                FileId = fileId;
+                DeleteAccess = deleteAccess;
+                DeleteRequested = false;
+            }
+
+            public void RequestDelete() {
+                if (!DeleteAccess) {
+                    throw new InvalidOperationException("Exact file lease was not opened with DELETE access.");
+                }
+                if (Handle == null || Handle.IsInvalid || Handle.IsClosed) {
+                    throw new ObjectDisposedException("ExactFileIdentityLease");
+                }
+                var information = new FileDispositionInformation { DeleteFile = true };
+                if (!SetFileInformationByHandle(
+                    Handle,
+                    FILE_DISPOSITION_INFO_CLASS,
+                    ref information,
+                    (uint)Marshal.SizeOf(typeof(FileDispositionInformation))
+                )) {
+                    throw new Win32Exception(
+                        Marshal.GetLastWin32Error(),
+                        "Exact file could not be marked for deletion by its leased handle."
+                    );
+                }
+                DeleteRequested = true;
             }
 
             public void Dispose() {
@@ -79,6 +138,15 @@ namespace Phase5 {
         private static extern bool GetFileInformationByHandle(
             SafeFileHandle file,
             out ByHandleFileInformation information
+        );
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetFileInformationByHandle(
+            SafeFileHandle file,
+            int fileInformationClass,
+            ref FileDispositionInformation fileInformation,
+            uint bufferSize
         );
 
         private static ByHandleFileInformation ReadIdentity(SafeFileHandle handle) {
@@ -131,14 +199,56 @@ namespace Phase5 {
             }
             try {
                 var information = ReadIdentity(handle);
-                if ((information.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
-                    throw new InvalidOperationException("Quarantine parent is a reparse point.");
+                if ((information.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 ||
+                    (information.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+                    throw new InvalidOperationException("Directory identity lease target is not a regular non-reparse directory.");
                 }
                 var fileId = ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow;
                 return new DirectoryIdentityLease(
                     handle,
                     information.VolumeSerialNumber,
                     fileId
+                );
+            } catch {
+                handle.Dispose();
+                throw;
+            }
+        }
+
+        public static ExactFileIdentityLease OpenExactRegularFileLease(
+            string path,
+            bool requestDeleteAccess
+        ) {
+            var desiredAccess = GENERIC_READ | (requestDeleteAccess ? DELETE : 0);
+            var handle = CreateFileW(
+                path,
+                desiredAccess,
+                0,
+                IntPtr.Zero,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
+                IntPtr.Zero
+            );
+            if (handle.IsInvalid) {
+                var error = Marshal.GetLastWin32Error();
+                handle.Dispose();
+                throw new Win32Exception(error, "Exact regular file could not be leased without sharing.");
+            }
+            try {
+                var information = ReadIdentity(handle);
+                if ((information.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 ||
+                    (information.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+                    throw new InvalidOperationException("Exact file lease target is not a regular non-reparse file.");
+                }
+                if (information.NumberOfLinks != 1) {
+                    throw new InvalidOperationException("Exact file lease target must have exactly one hard-link name.");
+                }
+                var fileId = ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow;
+                return new ExactFileIdentityLease(
+                    handle,
+                    information.VolumeSerialNumber,
+                    fileId,
+                    requestDeleteAccess
                 );
             } catch {
                 handle.Dispose();
@@ -158,7 +268,8 @@ namespace Phase5 {
                     return false;
                 }
                 var information = ReadIdentity(current);
-                if ((information.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+                if ((information.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0 ||
+                    (information.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
                     return false;
                 }
                 var fileId = ((ulong)information.FileIndexHigh << 32) | information.FileIndexLow;
@@ -170,6 +281,8 @@ namespace Phase5 {
 }
 '@
 }
+
+$script:Phase5CanonicalInstallerName = 'Desktop-Translate-0.5.0-phase5-x64-setup.exe'
 
 function New-Phase5PackageOutputException {
     param(
@@ -276,7 +389,11 @@ function Resolve-Phase5PackageOutputProcessIdentity {
         [StringComparison]::OrdinalIgnoreCase
     )) {
         'nativeHost'
-    } elseif ([IO.Path]::GetFileName($candidatePath) -like '*-setup.exe') {
+    } elseif ([string]::Equals(
+        [IO.Path]::GetFileName($candidatePath),
+        $script:Phase5CanonicalInstallerName,
+        [StringComparison]::Ordinal
+    )) {
         'installer'
     } else {
         'packageExecutable'
@@ -510,6 +627,30 @@ function Assert-Phase5PackageOutputQuarantineIntegrity {
     }
 }
 
+function Assert-Phase5InstallerCleanupDirectoryLease {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][object]$DirectoryLease,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Code,
+        [Parameter(Mandatory = $true)][string]$Description
+    )
+
+    $matches = $false
+    try {
+        $matches = [Phase5.PackageOutputQuarantineNative]::DirectoryLeaseMatchesPath(
+            $DirectoryLease,
+            [IO.Path]::GetFullPath($Path)
+        )
+    } catch {
+        $matches = $false
+    }
+    if (-not $matches) {
+        throw (New-Phase5PackageOutputException -Code $Code `
+            -Message "$Description no longer matches its leased volume serial and file identity.")
+    }
+}
+
 function Remove-Phase5UnpublishedInstallerBlockmap {
     [CmdletBinding()]
     param(
@@ -535,71 +676,152 @@ function Remove-Phase5UnpublishedInstallerBlockmap {
             -Message 'unpublished Installer output is not an exact regular directory.')
     }
 
-    $entries = @(Get-ChildItem -LiteralPath $rootFull -Force -ErrorAction Stop)
-    $winUnpackedEntries = @($entries | Where-Object {
-        [string]::Equals($_.Name, 'win-unpacked', [StringComparison]::OrdinalIgnoreCase)
-    })
-    if ($winUnpackedEntries.Count -ne 1 -or -not $winUnpackedEntries[0].PSIsContainer -or
-        ($winUnpackedEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_ROOT_INVALID' `
-            -Message 'unpublished Installer output must contain one regular win-unpacked directory.')
-    }
-
-    # Match the setup name before considering blockmap cleanup. A directory,
-    # reparse point, or ambiguous setup set must never select a deletion target.
-    $setupEntries = @($entries | Where-Object { $_.Name -like '*-setup.exe' })
-    if ($setupEntries.Count -ne 1 -or $setupEntries[0].PSIsContainer -or
-        ($setupEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_SETUP_INVALID' `
-            -Message 'unpublished Installer output must contain exactly one regular setup executable.')
-    }
-    $setup = $setupEntries[0]
-    $blockmapFull = $setup.FullName + '.blockmap'
-    $blockmapEntries = @($entries | Where-Object {
-        [string]::Equals($_.FullName, $blockmapFull, [StringComparison]::OrdinalIgnoreCase)
-    })
-    if ($blockmapEntries.Count -gt 1 -or
-        ($blockmapEntries.Count -eq 1 -and (
-            $blockmapEntries[0].PSIsContainer -or
-            ($blockmapEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
-        ))) {
-        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_INVALID' `
-            -Message 'the exact unpublished setup blockmap is not one regular non-reparse file.')
-    }
-
-    $allowedTopLevelPaths = @(
-        $winUnpackedEntries[0].FullName,
-        $setup.FullName
-    )
-    if ($blockmapEntries.Count -eq 1) {
-        $allowedTopLevelPaths += $blockmapEntries[0].FullName
-    }
-    $unexpectedEntries = @($entries | Where-Object {
-        $entryFullName = $_.FullName
-        @($allowedTopLevelPaths | Where-Object {
-            [string]::Equals($_, $entryFullName, [StringComparison]::OrdinalIgnoreCase)
-        }).Count -eq 0
-    })
-    if ($unexpectedEntries.Count -ne 0) {
-        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_ROOT_EXACT_SET_INVALID' `
-            -Message 'unpublished Installer output contains an unexpected top-level entry before blockmap cleanup.')
-    }
-
-    if ($blockmapEntries.Count -eq 1) {
-        # Delete only electron-builder's exact setup.exe.blockmap sidecar from
-        # unpublished staging. Auto-update/publish is disabled for this project.
+    # Pin the package parent, staging root, win-unpacked directory, canonical
+    # setup, and exact sidecar by native file identity. Directory handles omit
+    # FILE_SHARE_DELETE, while file handles use no sharing. The sidecar is
+    # marked delete-pending through its already-verified handle, so there is no
+    # path-based check/delete interval in which a rename or replacement can
+    # redirect cleanup to a different object.
+    $parentDirectoryLease = $null
+    $rootDirectoryLease = $null
+    $winUnpackedDirectoryLease = $null
+    $setupFileLease = $null
+    $blockmapFileLease = $null
+    $setupFull = Join-Path $rootFull $script:Phase5CanonicalInstallerName
+    $blockmapFull = $setupFull + '.blockmap'
+    try {
         try {
-            [IO.File]::Delete($blockmapFull)
+            $parentDirectoryLease =
+                [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($allowedParentFull)
+            $rootDirectoryLease =
+                [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($rootFull)
         } catch {
-            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_CLEANUP_FAILED' `
-                -Message "the exact unpublished setup blockmap could not be removed: $($_.Exception.Message)")
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_DIRECTORY_LEASE_FAILED' `
+                -Message "the package parent and unpublished staging root could not be pinned safely: $($_.Exception.Message)")
         }
-        if (Test-Path -LiteralPath $blockmapFull) {
-            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_CLEANUP_FAILED' `
-                -Message 'the exact unpublished setup blockmap remained after cleanup.')
+        Assert-Phase5InstallerCleanupDirectoryLease `
+            -DirectoryLease $parentDirectoryLease `
+            -Path $allowedParentFull `
+            -Code 'PACKAGE_OUTPUT_INSTALLER_PARENT_IDENTITY_CHANGED' `
+            -Description 'package parent'
+        Assert-Phase5InstallerCleanupDirectoryLease `
+            -DirectoryLease $rootDirectoryLease `
+            -Path $rootFull `
+            -Code 'PACKAGE_OUTPUT_INSTALLER_ROOT_IDENTITY_CHANGED' `
+            -Description 'unpublished staging root'
+
+        $entries = @(Get-ChildItem -LiteralPath $rootFull -Force -ErrorAction Stop)
+        $winUnpackedEntries = @($entries | Where-Object { $_.Name -ceq 'win-unpacked' })
+        if ($winUnpackedEntries.Count -ne 1 -or -not $winUnpackedEntries[0].PSIsContainer -or
+            ($winUnpackedEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_ROOT_INVALID' `
+                -Message 'unpublished Installer output must contain one canonical regular win-unpacked directory.')
         }
+        try {
+            $winUnpackedDirectoryLease =
+                [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($winUnpackedEntries[0].FullName)
+        } catch {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_DIRECTORY_LEASE_FAILED' `
+                -Message "the unpublished win-unpacked directory could not be pinned safely: $($_.Exception.Message)")
+        }
+
+        $setupEntries = @($entries | Where-Object { $_.Name -ceq $script:Phase5CanonicalInstallerName })
+        if ($setupEntries.Count -ne 1 -or $setupEntries[0].PSIsContainer -or
+            ($setupEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_SETUP_INVALID' `
+                -Message "unpublished Installer output must contain exactly the canonical regular setup executable '$script:Phase5CanonicalInstallerName'.")
+        }
+        try {
+            $setupFileLease =
+                [Phase5.PackageOutputQuarantineNative]::OpenExactRegularFileLease($setupFull, $false)
+        } catch {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_SETUP_LEASE_FAILED' `
+                -Message "the canonical setup executable could not be leased without sharing: $($_.Exception.Message)")
+        }
+
+        $blockmapEntries = @($entries | Where-Object { $_.Name -ceq ($script:Phase5CanonicalInstallerName + '.blockmap') })
+        if ($blockmapEntries.Count -gt 1 -or
+            ($blockmapEntries.Count -eq 1 -and (
+                $blockmapEntries[0].PSIsContainer -or
+                ($blockmapEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+            ))) {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_INVALID' `
+                -Message 'the exact unpublished setup blockmap is not one regular non-reparse file.')
+        }
+        if ($blockmapEntries.Count -eq 1) {
+            try {
+                $blockmapFileLease =
+                    [Phase5.PackageOutputQuarantineNative]::OpenExactRegularFileLease($blockmapFull, $true)
+            } catch {
+                throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_LEASE_FAILED' `
+                    -Message "the exact unpublished setup blockmap could not be leased without sharing and with DELETE access: $($_.Exception.Message)")
+            }
+        }
+
+        Assert-Phase5InstallerCleanupDirectoryLease `
+            -DirectoryLease $parentDirectoryLease `
+            -Path $allowedParentFull `
+            -Code 'PACKAGE_OUTPUT_INSTALLER_PARENT_IDENTITY_CHANGED' `
+            -Description 'package parent'
+        Assert-Phase5InstallerCleanupDirectoryLease `
+            -DirectoryLease $rootDirectoryLease `
+            -Path $rootFull `
+            -Code 'PACKAGE_OUTPUT_INSTALLER_ROOT_IDENTITY_CHANGED' `
+            -Description 'unpublished staging root'
+        Assert-Phase5InstallerCleanupDirectoryLease `
+            -DirectoryLease $winUnpackedDirectoryLease `
+            -Path $winUnpackedEntries[0].FullName `
+            -Code 'PACKAGE_OUTPUT_INSTALLER_WIN_UNPACKED_IDENTITY_CHANGED' `
+            -Description 'unpublished win-unpacked directory'
+
+        # Re-read after every lease is held. Unexpected or replaced entries
+        # fail closed; only the exact leased sidecar can be marked for deletion.
+        $leasedEntries = @(Get-ChildItem -LiteralPath $rootFull -Force -ErrorAction Stop)
+        $allowedNames = @('win-unpacked', $script:Phase5CanonicalInstallerName)
+        if ($null -ne $blockmapFileLease) {
+            $allowedNames += $script:Phase5CanonicalInstallerName + '.blockmap'
+        }
+        $unexpectedEntries = @($leasedEntries | Where-Object {
+            $entryName = $_.Name
+            @($allowedNames | Where-Object { $_ -ceq $entryName }).Count -eq 0
+        })
+        if ($leasedEntries.Count -ne $allowedNames.Count -or $unexpectedEntries.Count -ne 0) {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_ROOT_EXACT_SET_INVALID' `
+                -Message 'unpublished Installer output changed or contains an unexpected top-level entry before blockmap cleanup.')
+        }
+
+        if ($null -ne $blockmapFileLease) {
+            try {
+                $blockmapFileLease.RequestDelete()
+                $blockmapFileLease.Dispose()
+                $blockmapFileLease = $null
+            } catch {
+                throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_CLEANUP_FAILED' `
+                    -Message "the exact leased unpublished setup blockmap could not be marked and closed for deletion: $($_.Exception.Message)")
+            }
+            if (Test-Path -LiteralPath $blockmapFull) {
+                throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_CLEANUP_FAILED' `
+                    -Message 'the exact leased unpublished setup blockmap remained or was concurrently replaced after cleanup.')
+            }
+        }
+
+        $finalEntries = @(Get-ChildItem -LiteralPath $rootFull -Force -ErrorAction Stop)
+        if ($finalEntries.Count -ne 2 -or
+            @($finalEntries | Where-Object {
+                $_.Name -cne 'win-unpacked' -and
+                $_.Name -cne $script:Phase5CanonicalInstallerName
+            }).Count -ne 0) {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_ROOT_EXACT_SET_INVALID' `
+                -Message 'unpublished Installer output changed after exact blockmap cleanup.')
+        }
+    } finally {
+        if ($null -ne $blockmapFileLease) { try { $blockmapFileLease.Dispose() } catch {} }
+        if ($null -ne $setupFileLease) { try { $setupFileLease.Dispose() } catch {} }
+        if ($null -ne $winUnpackedDirectoryLease) { try { $winUnpackedDirectoryLease.Dispose() } catch {} }
+        if ($null -ne $rootDirectoryLease) { try { $rootDirectoryLease.Dispose() } catch {} }
+        if ($null -ne $parentDirectoryLease) { try { $parentDirectoryLease.Dispose() } catch {} }
     }
-    return $setup.FullName
+    return $setupFull
 }
 
 function Assert-Phase5PackageOutputRootExactSet {
@@ -618,9 +840,7 @@ function Assert-Phase5PackageOutputRootExactSet {
             -Message 'package output root is not an exact regular directory.')
     }
     $entries = @(Get-ChildItem -LiteralPath $rootFull -Force -ErrorAction Stop)
-    $winUnpackedEntries = @($entries | Where-Object {
-        [string]::Equals($_.Name, 'win-unpacked', [StringComparison]::OrdinalIgnoreCase)
-    })
+    $winUnpackedEntries = @($entries | Where-Object { $_.Name -ceq 'win-unpacked' })
     if ($winUnpackedEntries.Count -ne 1 -or -not $winUnpackedEntries[0].PSIsContainer -or
         ($winUnpackedEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
         throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_ROOT_EXACT_SET_INVALID' `
@@ -636,7 +856,7 @@ function Assert-Phase5PackageOutputRootExactSet {
     }
 
     $installerEntries = @($entries | Where-Object {
-        -not $_.PSIsContainer -and $_.Name -like '*-setup.exe'
+        -not $_.PSIsContainer -and $_.Name -ceq $script:Phase5CanonicalInstallerName
     })
     if ($entries.Count -ne 2 -or $installerEntries.Count -ne 1 -or
         ($installerEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {

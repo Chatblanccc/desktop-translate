@@ -585,7 +585,7 @@ jobs:
       PHASE5_GITHUB_ENVIRONMENT: phase5-release
       PHASE5_RELEASE_RUNNER_ID: ${{ secrets.PHASE5_RELEASE_RUNNER_ID }}
       PHASE5_RELEASE_EVIDENCE: artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/release
-      PHASE5_RELEASE_AUDIT: ${{ runner.temp }}/phase5-dependency-audit-${{ github.run_id }}-${{ github.run_attempt }}.json
+      PHASE5_RELEASE_AUDIT: artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/release-audit/dependency-audit.json
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:

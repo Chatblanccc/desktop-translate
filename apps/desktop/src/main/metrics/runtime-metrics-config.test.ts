@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -71,6 +72,88 @@ describe('Phase 5 runtime metrics configuration', () => {
       })
     })).toBe(userData);
   });
+
+  it.runIf(process.platform === 'win32')(
+    'accepts equivalent Windows path spellings for the same runner-owned profile',
+    async () => {
+      const directory = await temporaryDirectory();
+      const runRootName = 'desktop-translate-phase5-perf03-11111111111111111111111111111111';
+      const runRoot = join(directory, runRootName);
+      const userData = join(runRoot, 'User Data path-equivalence');
+      await mkdir(userData, { recursive: true });
+      const commandLineUserData = realpathSync.native(userData).replace(
+        runRootName,
+        runRootName.toUpperCase()
+      );
+
+      expect(commandLineUserData).not.toBe(userData);
+      expect(resolvePackagedRuntimeMetricsUserDataDirectory({
+        isPackaged: true,
+        commandLineUserDataDirectory: commandLineUserData,
+        temporaryDirectory: realpathSync.native(directory),
+        environment: environment({
+          [PHASE5_RUNTIME_METRICS_ENV.userDataDirectory]: userData,
+          [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'packaged-unsigned',
+          [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'real-acquisition',
+          [PHASE5_RUNTIME_METRICS_ENV.runId]: RUN_ID
+        })
+      })).toBe(userData);
+    }
+  );
+
+  it.runIf(hasWindowsShortTemporaryPath())(
+    'accepts the Windows 8.3 temporary path when it resolves to the same profile',
+    async () => {
+      const shortDirectory = await temporaryDirectory();
+      const runRoot = join(
+        shortDirectory,
+        'desktop-translate-phase5-perf03-22222222222222222222222222222222'
+      );
+      const shortUserData = join(runRoot, 'User Data short-path');
+      await mkdir(shortUserData, { recursive: true });
+      const canonicalDirectory = realpathSync.native(shortDirectory);
+      const canonicalUserData = realpathSync.native(shortUserData);
+
+      expect(canonicalDirectory.toLowerCase()).not.toBe(shortDirectory.toLowerCase());
+      expect(resolvePackagedRuntimeMetricsUserDataDirectory({
+        isPackaged: true,
+        commandLineUserDataDirectory: canonicalUserData,
+        temporaryDirectory: canonicalDirectory,
+        environment: environment({
+          [PHASE5_RUNTIME_METRICS_ENV.userDataDirectory]: shortUserData,
+          [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'packaged-unsigned',
+          [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'real-acquisition',
+          [PHASE5_RUNTIME_METRICS_ENV.runId]: RUN_ID
+        })
+      })).toBe(shortUserData);
+    }
+  );
+
+  it.runIf(process.platform === 'win32')(
+    'rejects a profile reached through a junction even when it resolves inside the temporary root',
+    async () => {
+      const directory = await temporaryDirectory();
+      const aliasContainer = await temporaryDirectory();
+      const runRootName = 'desktop-translate-phase5-perf03-33333333333333333333333333333333';
+      const userDataName = 'User Data junction';
+      await mkdir(join(directory, runRootName, userDataName), { recursive: true });
+      const temporaryAlias = join(aliasContainer, 'temporary-alias');
+      await symlink(directory, temporaryAlias, 'junction');
+      const aliasedUserData = join(temporaryAlias, runRootName, userDataName);
+
+      expect(resolvePackagedRuntimeMetricsUserDataDirectory({
+        isPackaged: true,
+        commandLineUserDataDirectory: aliasedUserData,
+        temporaryDirectory: directory,
+        environment: environment({
+          [PHASE5_RUNTIME_METRICS_ENV.userDataDirectory]: aliasedUserData,
+          [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'packaged-unsigned',
+          [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'real-acquisition',
+          [PHASE5_RUNTIME_METRICS_ENV.runId]: RUN_ID
+        })
+      })).toBeUndefined();
+    }
+  );
 
   it('keeps ordinary packaged launches default-off and rejects arbitrary profile paths', async () => {
     const directory = await temporaryDirectory();
@@ -315,6 +398,11 @@ async function temporaryDirectory(): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), 'desktop-translate-phase5-runtime-'));
   temporaryDirectories.push(directory);
   return directory;
+}
+
+function hasWindowsShortTemporaryPath(): boolean {
+  return process.platform === 'win32'
+    && realpathSync.native(tmpdir()).toLowerCase() !== tmpdir().toLowerCase();
 }
 
 async function packagedFixture(directory: string): Promise<{

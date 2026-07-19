@@ -12,7 +12,7 @@ const records = [
   record('application', 'package/desktop-translate.exe', 'desktop-translate.exe', 'a'),
   record('nativeHost', 'package/resources/selection-host/selection-host.exe', 'selection-host.exe', 'b'),
   record('asar', 'package/resources/app.asar', 'app.asar', 'c'),
-  record('installer', 'installer/Desktop-Translate-setup.exe', 'Desktop-Translate-setup.exe', 'd')
+  record('installer', 'installer/Desktop-Translate-0.5.0-phase5-x64-setup.exe', 'Desktop-Translate-0.5.0-phase5-x64-setup.exe', 'd')
 ];
 
 assert.doesNotThrow(() => assertExactArtifactSet(records, records, 'selftest', expectedArtifactRoles(true)));
@@ -46,7 +46,7 @@ assert.throws(
   /subject set is not exact/u
 );
 
-const signingConfig = `win:\n  executableName: desktop-translate\n  signExts:\n    - selection-host.exe\n  target:\n    - nsis\n`;
+const signingConfig = `win:\n  executableName: desktop-translate\n  signExts:\n    - selection-host.exe\n  target:\n    - nsis\n  artifactName: Desktop-Translate-0.5.0-phase5-x64-setup.exe\npublish: null\n`;
 assert.doesNotThrow(() => assertElectronBuilderSigningPolicy(signingConfig));
 assert.throws(
   () => assertElectronBuilderSigningPolicy(signingConfig.replace('  signExts:\n    - selection-host.exe\n', '')),
@@ -63,6 +63,14 @@ assert.throws(
 assert.throws(
   () => assertElectronBuilderSigningPolicy(signingConfig.replace('  target:', '  signExts:\n    - selection-host.exe\n  target:')),
   /exactly one signExts key/u
+);
+assert.throws(
+  () => assertElectronBuilderSigningPolicy(signingConfig.replace('Desktop-Translate-0.5.0-phase5-x64-setup.exe', 'Desktop-Translate-${version}-${arch}-setup.${ext}')),
+  /artifactName must be exactly/u
+);
+assert.throws(
+  () => assertElectronBuilderSigningPolicy(signingConfig.replace('publish: null', 'publish: always')),
+  /publish policy must be exactly/u
 );
 assert.throws(
   () => assertExactAttestationBundle(bundleFor([...records, records[0]].map((item) => item.sha256)), records.map((item) => item.sha256)),
