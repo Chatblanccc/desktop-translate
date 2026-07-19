@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase5/resource-summary.schema.json",
+  "title": "Phase 5 process-tree resource summary",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "scope",
+    "profile",
+    "status",
+    "acceptance",
+    "configuredDurationSeconds",
+    "actualDurationMs",
+    "sampleIntervalSeconds",
+    "logicalProcessorCount",
+    "identity",
+    "requiredRoleObservations",
+    "requiredRoleMetricObservations",
+    "sampleCount",
+    "postWarmupSampleCount",
+    "metricCollectionFailureCount",
+    "identityCollectionFailureCount",
+    "samplingCadence",
+    "metrics",
+    "failures"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.1.0" },
+    "scope": { "const": "creation-time-bound-root-process-tree" },
+    "profile": { "enum": ["smoke", "idle", "soak"] },
+    "status": { "enum": ["PASS", "FAIL", "SMOKE_PASS_NOT_ACCEPTANCE"] },
+    "acceptance": { "type": "boolean" },
+    "configuredDurationSeconds": { "type": "integer", "minimum": 1 },
+    "actualDurationMs": { "type": "integer", "minimum": 1 },
+    "sampleIntervalSeconds": { "type": "integer", "minimum": 1 },
+    "logicalProcessorCount": { "type": "integer", "minimum": 1 },
+    "identity": {
+      "type": "object",
+      "required": ["rootExecutableFileName", "rootExecutableSha256", "rootPathAndHashBound", "rootCreationTimeBound", "pidPersisted", "absolutePathPersisted"],
+      "additionalProperties": false,
+      "properties": {
+        "rootExecutableFileName": { "type": "string", "minLength": 1 },
+        "rootExecutableSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "rootPathAndHashBound": { "const": true },
+        "rootCreationTimeBound": { "const": true },
+        "pidPersisted": { "const": false },
+        "absolutePathPersisted": { "const": false }
+      }
+    },
+    "requiredRoleObservations": { "$ref": "#/$defs/roles" },
+    "requiredRoleMetricObservations": { "$ref": "#/$defs/roles" },
+    "sampleCount": { "type": "integer", "minimum": 0 },
+    "postWarmupSampleCount": { "type": "integer", "minimum": 0 },
+    "metricCollectionFailureCount": { "type": "integer", "minimum": 0 },
+    "identityCollectionFailureCount": { "type": "integer", "minimum": 0 },
+    "samplingCadence": {
+      "type": "object",
+      "required": ["observedIntervalCount", "expectedIntervalMs", "toleranceMs", "minimumObservedIntervalMs", "maximumObservedIntervalMs"],
+      "additionalProperties": false,
+      "properties": {
+        "observedIntervalCount": { "type": "integer", "minimum": 0 },
+        "expectedIntervalMs": { "type": "integer", "minimum": 1000 },
+        "toleranceMs": { "const": 1000 },
+        "minimumObservedIntervalMs": { "type": "integer", "minimum": 0 },
+        "maximumObservedIntervalMs": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "cpuCapacityAveragePercent",
+        "cpuCapacityP95Percent",
+        "privateWorkingSetMaximumBytes",
+        "privateWorkingSetGrowthBytes",
+        "privateWorkingSetGrowthRatio",
+        "privateBytesMaximum",
+        "privateBytesGrowthBytes",
+        "privateBytesGrowthRatio",
+        "handlesMaximum",
+        "handlesGrowth",
+        "handlesGrowthRatio",
+        "gdiObjectsMaximum",
+        "gdiObjectsGrowth",
+        "gdiObjectsGrowthRatio",
+        "userObjectsMaximum",
+        "userObjectsGrowth",
+        "userObjectsGrowthRatio",
+        "sustainedMonotonicGrowth60Minutes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "cpuCapacityAveragePercent": { "type": "number", "minimum": 0 },
+        "cpuCapacityP95Percent": { "type": "number", "minimum": 0 },
+        "privateWorkingSetMaximumBytes": { "type": "integer", "minimum": 0 },
+        "privateWorkingSetGrowthBytes": { "type": "integer" },
+        "privateWorkingSetGrowthRatio": { "type": "number" },
+        "privateBytesMaximum": { "type": "integer", "minimum": 0 },
+        "privateBytesGrowthBytes": { "type": "integer" },
+        "privateBytesGrowthRatio": { "type": "number" },
+        "handlesMaximum": { "type": "integer", "minimum": 0 },
+        "handlesGrowth": { "type": "integer" },
+        "handlesGrowthRatio": { "type": "number" },
+        "gdiObjectsMaximum": { "type": "integer", "minimum": 0 },
+        "gdiObjectsGrowth": { "type": "integer" },
+        "gdiObjectsGrowthRatio": { "type": "number" },
+        "userObjectsMaximum": { "type": "integer", "minimum": 0 },
+        "userObjectsGrowth": { "type": "integer" },
+        "userObjectsGrowthRatio": { "type": "number" },
+        "sustainedMonotonicGrowth60Minutes": {
+          "type": "object",
+          "required": ["privateWorkingSet", "privateBytes", "handles", "gdiObjects", "userObjects"],
+          "additionalProperties": false,
+          "properties": {
+            "privateWorkingSet": { "type": "boolean" },
+            "privateBytes": { "type": "boolean" },
+            "handles": { "type": "boolean" },
+            "gdiObjects": { "type": "boolean" },
+            "userObjects": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Z0-9_]+$" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "PASS" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "acceptance": { "const": true },
+          "metricCollectionFailureCount": { "const": 0 },
+          "identityCollectionFailureCount": { "const": 0 },
+          "requiredRoleObservations": { "$ref": "#/$defs/allRolesObserved" },
+          "requiredRoleMetricObservations": { "$ref": "#/$defs/allRolesObserved" },
+          "failures": { "type": "array", "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "SMOKE_PASS_NOT_ACCEPTANCE" } }, "required": ["status"] },
+      "then": { "properties": { "acceptance": { "const": false } } }
+    }
+  ],
+  "$defs": {
+    "roles": {
+      "type": "object",
+      "required": ["app", "main", "host"],
+      "additionalProperties": false,
+      "properties": {
+        "app": { "type": "boolean" },
+        "main": { "type": "boolean" },
+        "host": { "type": "boolean" }
+      }
+    },
+    "allRolesObserved": {
+      "type": "object",
+      "required": ["app", "main", "host"],
+      "additionalProperties": false,
+      "properties": {
+        "app": { "const": true },
+        "main": { "const": true },
+        "host": { "const": true }
+      }
+    }
+  },
+  "additionalProperties": false
+}

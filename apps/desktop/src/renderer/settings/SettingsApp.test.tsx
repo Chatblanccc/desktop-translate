@@ -27,6 +27,7 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
   readonly openProviderPrivacyPolicy: ReturnType<typeof vi.fn>;
   readonly openProviderServiceTerms: ReturnType<typeof vi.fn>;
   readonly resetBallPosition: ReturnType<typeof vi.fn>;
+  readonly clearAllLocalData: ReturnType<typeof vi.fn>;
   readonly unsubscribe: ReturnType<typeof vi.fn>;
 } {
   const setBallVisible = vi.fn().mockResolvedValue(undefined);
@@ -43,6 +44,7 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
   const openProviderPrivacyPolicy = vi.fn().mockResolvedValue(undefined);
   const openProviderServiceTerms = vi.fn().mockResolvedValue(undefined);
   const resetBallPosition = vi.fn().mockResolvedValue(undefined);
+  const clearAllLocalData = vi.fn().mockResolvedValue(undefined);
   const unsubscribe = vi.fn();
 
   return {
@@ -62,7 +64,8 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
       testTranslationProvider,
       openProviderPrivacyPolicy,
       openProviderServiceTerms,
-      resetBallPosition
+      resetBallPosition,
+      clearAllLocalData
     },
     setBallVisible,
     setEdgeSnap,
@@ -78,11 +81,49 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
     openProviderPrivacyPolicy,
     openProviderServiceTerms,
     resetBallPosition,
+    clearAllLocalData,
     unsubscribe
   };
 }
 
 describe('SettingsApp', () => {
+  it('requires a two-step exact confirmation before clearing all local data', async () => {
+    const { api, clearAllLocalData } = createSettingsApi();
+    render(<SettingsApp api={api} />);
+
+    const begin = await screen.findByRole('button', { name: '开始清除…' });
+    await waitFor(() => expect((begin as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(begin);
+
+    const finalConfirmation = screen.getByRole('button', { name: '确认清除并退出' });
+    expect((finalConfirmation as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('确认短语'), {
+      target: { value: '清除全部本地数据 ' }
+    });
+    expect((finalConfirmation as HTMLButtonElement).disabled).toBe(true);
+    expect(clearAllLocalData).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('确认短语'), {
+      target: { value: '清除全部本地数据' }
+    });
+    expect((finalConfirmation as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(finalConfirmation);
+
+    await waitFor(() => expect(clearAllLocalData).toHaveBeenCalledWith('清除全部本地数据'));
+  });
+
+  it('can cancel the destructive confirmation without invoking Main', async () => {
+    const { api, clearAllLocalData } = createSettingsApi();
+    render(<SettingsApp api={api} />);
+    const begin = await screen.findByRole('button', { name: '开始清除…' });
+    await waitFor(() => expect((begin as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(begin);
+    fireEvent.click(screen.getByRole('button', { name: '取消' }));
+
+    expect(screen.queryByLabelText('确认短语')).toBeNull();
+    expect(clearAllLocalData).not.toHaveBeenCalled();
+  });
+
   it('exposes the planned shell controls and delegates changes', async () => {
     const { api, setBallVisible, setEdgeSnap, setTheme, resetBallPosition } = createSettingsApi();
     render(<SettingsApp api={api} />);

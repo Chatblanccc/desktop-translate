@@ -107,6 +107,7 @@ vi.mock('electron', () => ({
 
 import {
   WindowManager,
+  type WindowManagerOptions,
   createBallWindowOptions,
   createCardWindowOptions,
   createSecureWebPreferences,
@@ -116,7 +117,12 @@ import {
 
 const initialBounds = { x: 100, y: 200, width: 56, height: 56 };
 
-function makeManager(initialBallVisible = true) {
+function makeManager(
+  initialBallVisible = true,
+  paintMetrics?: {
+    readonly beginCardPaintProbe: NonNullable<WindowManagerOptions['beginCardPaintProbe']>;
+  }
+) {
   const onBallMoved = vi.fn();
   const onCardDismissed = vi.fn();
   const manager = new WindowManager({
@@ -125,7 +131,13 @@ function makeManager(initialBallVisible = true) {
     initialBallBounds: initialBounds,
     initialBallVisible,
     onBallMoved,
-    onCardDismissed
+    onCardDismissed,
+    ...(paintMetrics === undefined
+      ? {}
+      : {
+          enablePaintMetrics: true,
+          beginCardPaintProbe: paintMetrics.beginCardPaintProbe
+        })
   });
   return { manager, onBallMoved, onCardDismissed };
 }
@@ -200,6 +212,11 @@ describe('secure window options', () => {
         resizable: false,
         show: false
       });
+    expect(createCardWindowOptions(
+      'C:\\card.cjs',
+      { x: 10, y: 20, width: 1, height: 1 },
+      true
+    ).webPreferences).toMatchObject({ backgroundThrottling: false });
   });
 
   it('validates Windows system colors before generating accent CSS', () => {
@@ -413,6 +430,37 @@ describe('WindowManager', () => {
     expect(card.setAlwaysOnTop).toHaveBeenCalledTimes(3);
     expect(card.focus).not.toHaveBeenCalled();
     expect(electron.BrowserWindow.instances).toHaveLength(2);
+  });
+
+  it('starts a paint probe immediately around a published card only when explicitly enabled', async () => {
+    const dispatch = vi.fn();
+    const beginCardPaintProbe = vi.fn<NonNullable<WindowManagerOptions['beginCardPaintProbe']>>(
+      () => dispatch
+    );
+    const { manager } = makeManager(true, { beginCardPaintProbe });
+    await manager.start();
+    manager.presentSelectionCard({
+      kind: 'source-only',
+      selectionId: '123e4567-e89b-42d3-a456-426614174000',
+      sourceText: 'Sixteen chars!!!',
+      source: 'uia',
+      confidence: 1
+    }, { x: 1, y: 2, width: 380, height: 320 });
+    await Promise.resolve();
+    const card = latestWindow();
+    expect((card.options.webPreferences as Record<string, unknown>).backgroundThrottling).toBe(false);
+    expect(beginCardPaintProbe).not.toHaveBeenCalled();
+
+    card.emit('ready-to-show');
+
+    expect(beginCardPaintProbe).toHaveBeenCalledWith(card.webContents, '1-16');
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(beginCardPaintProbe.mock.invocationCallOrder[0]!).toBeLessThan(
+      card.webContents.send.mock.invocationCallOrder[0]!
+    );
+    expect(card.webContents.send.mock.invocationCallOrder[0]!).toBeLessThan(
+      dispatch.mock.invocationCallOrder[0]!
+    );
   });
 
   it('dismisses cards before or after ready and reports an explicit user dismissal', async () => {

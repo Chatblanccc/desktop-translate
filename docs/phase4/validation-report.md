@@ -6,16 +6,17 @@
 
 | 项目 | 值 |
 |---|---|
-| 当前状态 | `LOCAL AUTOMATION PASS / RELEASE BLOCKED` |
+| 当前状态 | `PASS WITH ACCEPTED RISKS` |
 | 目标版本 | `0.4.0-phase4` |
 | 开发基线 | `1fe45d3c5959b1e45170df21e790d61b69f3f38b` |
-| 被测代码 | `codex/phase4-online-translation` 未提交工作区；最终提交 SHA `PENDING` |
+| 被测代码 | GitHub 合并提交 `4ea65dcd5c5ef7c56127fe419127d48e0573a65d` |
 | 验证日期 | `2026-07-18` |
 | 执行方式 | Windows 本地自动化 + 用户真实鼠标 Chrome/Notepad smoke + Main-only 脱敏传输审计 + Notepad UIA 诊断探针 |
-| 最终结论 | `NOT ACCEPTED` |
+| 最终结论 | `PASS WITH ACCEPTED RISKS` |
 
-阻断最终验收的项目：真实错误凭据/撤销凭据/断网与超时恢复场景、目标提交远程 Windows CI/artifact/
-fork 边界、剩余 DPI/多屏/兼容性矩阵、风险处置以及四方验收签字。
+Phase 4 已由项目负责人于 2026-07-18 确认验收。真实错误凭据/撤销凭据/断网与超时恢复、真实外部
+fork secret 边界以及剩余 DPI/多屏/兼容性矩阵未被伪写为已执行；这些缺口已按风险登记完成处置，
+作为接受风险继承到 Phase 5。
 
 ## 1. 已知环境与未覆盖环境
 
@@ -60,7 +61,7 @@ fork 边界、剩余 DPI/多屏/兼容性矩阵、风险处置以及四方验收
 | `git diff --check` | PASS | 当前变更无 whitespace error |
 | `pnpm audit --registry=https://registry.npmjs.org` | PASS | AJV 升级至 `8.18.0` 后全量依赖审计为 `No known vulnerabilities found` |
 | `pnpm phase4:verify` | PASS | 加入真实传输 attestation、网络观察工具和最终验收文档后的最新完整运行退出码 `0`，耗时 `185.2s`；包含 Native 强制重建、完整 E2E `6/6`、隐私扫描与结束进程残留扫描 |
-| 远程 `.github/workflows/phase4-windows.yml` | PENDING | workflow 已编写，尚无目标提交上的远程运行证据 |
+| 远程 `.github/workflows/phase4-windows.yml` | PASS | 合并提交 `4ea65dc` 的 [run 29634271260](https://github.com/Chatblanccc/desktop-translate/actions/runs/29634271260) 通过；artifact `phase4-verification-29634271260-1` 为 213,037 bytes，保留至 2026-08-01，服务端 digest `sha256:a70659c854a169c8352f4602c8840bd19fce3b582032ac8b64e7995b58862937` |
 
 Desktop Vitest 覆盖率：
 
@@ -193,9 +194,9 @@ Chrome `auto → zh-CN`、Notepad `auto → en`、真实固定探针和脱敏传
 | Native configure/build/CTest | PASS | `2/2` |
 | Phase 3 二进制读取当前数据库 | PASS（2026-07-18） | 已验收提交 `1fe45d3c...` 的 `0.3.0-phase3` 在一致性数据库副本上启动、读取旧设置并完成 source-only fake selection；零 HTTP(S)，副本与真实数据库哈希均未变化 |
 | 门禁后 Electron/Node/selection-host 残留扫描 | PASS | 2026-07-18 最新 `185.2s` 完整 `phase4:verify` 的 workspace residual scan 通过；真实审计实例结束后也为 `0` |
-| 远程 Windows CI | PENDING | 尚未提交/推送，无法提供远程 run URL |
-| CI artifact 上传与保留策略 | PENDING | 等待远程 workflow 实际运行 |
-| fork/PR 不注入真实 Provider secret | PENDING（remote evidence） | workflow 设计不使用真实 secret；尚无远程运行证据 |
+| 远程 Windows CI | PASS | 合并提交的 [Phase 4 run 29634271260](https://github.com/Chatblanccc/desktop-translate/actions/runs/29634271260) 成功；同一提交 Phase 1/2/3 workflow 也成功 |
+| CI artifact 上传与保留策略 | PASS | `phase4-verification-29634271260-1`，213,037 bytes，保留 14 天至 2026-08-01 |
+| fork/PR 不注入真实 Provider secret | ACCEPTED RISK | PR #2 为同仓库分支，未形成真实外部 fork 证据；workflow 仅授予 `contents: read` 且不使用真实 Provider secret，Phase 5 发布门禁继续验证 |
 
 ## 9. 回滚证据
 
@@ -208,20 +209,27 @@ Chrome `auto → zh-CN`、Notepad `auto → en`、真实固定探针和脱敏传
 
 ## 10. 最终结论与签字
 
-结论：`NOT ACCEPTED`。
+结论：`PASS WITH ACCEPTED RISKS`。
 
 本地自动化总门禁、Chrome/Notepad 真实百度成功路径、非中文目标、脱敏传输审计、真实 userData 隐私复核
-与 Phase 3 降级读取均已通过。仍阻断提交后最终验收声明的项目是：真实错误凭据/撤销凭据/断网与超时恢复、
-目标提交远程 CI/artifact/fork 边界、剩余 DPI/多屏/兼容性矩阵、剩余风险处置和签字。
+与 Phase 3 降级读取均已通过。PR #2 已合并为 `4ea65dc`；该提交的 Phase 1–4 Windows workflow 全部
+通过，Phase 4 artifact 已上传。真实错误凭据/撤销凭据/断网与超时恢复、真实外部 fork 以及剩余
+DPI/多屏/兼容性矩阵仍未执行，已按风险登记明确接受并继承到 Phase 5，不得解释为这些场景已经通过。
 
 Phase 3 降级实测使用系统 Temp 下的隔离 `git archive` 和数据库副本。锁文件离线冷安装因本地 store
 缺少一个 tarball 而安全失败（`downloaded 0`），随后仅链接本机与历史版本一致的 Vite `8.1.4`、
 React `19.2.7`、Playwright `1.61.1` 和 Electron `43.1.1` 完成构建；该边界不影响旧代码读取当前
-数据库的兼容性结论，但完全独立冷安装仍可由远程 CI 另行补证。
+数据库的兼容性结论。合并提交的远程 [run 29634271260](https://github.com/Chatblanccc/desktop-translate/actions/runs/29634271260)
+已在 fresh GitHub Windows runner 完成 `pnpm install --frozen-lockfile` 并补充独立冷安装证据；它仍不替代
+未来签名 installer 在 clean VM 上的安装、升级和卸载验证。
 
 | 角色 | 姓名/标识 | 结论 | 日期 |
 |---|---|---|---|
-| Product | `PENDING` | `NOT SIGNED` | `PENDING` |
-| Engineering | `PENDING` | `NOT SIGNED` | `PENDING` |
-| Security/Privacy | `PENDING` | `NOT SIGNED` | `PENDING` |
-| Quality/Release | `PENDING` | `NOT SIGNED` | `PENDING` |
+| Project owner | `本次会话确认` | `PHASE ACCEPTED WITH RISKS` | `2026-07-18` |
+| Product | `未作独立角色签字` | `ACCEPTED PROCESS RISK` | `Phase 5 RC 前复审` |
+| Engineering | `未作独立角色签字` | `ACCEPTED PROCESS RISK` | `Phase 5 RC 前复审` |
+| Security/Privacy | `未作独立角色签字` | `ACCEPTED PROCESS RISK` | `Phase 5 RC 前复审` |
+| Quality/Release | `未作独立角色签字` | `ACCEPTED PROCESS RISK` | `Phase 5 RC 前复审` |
+
+项目负责人确认的是 Phase 4 阶段整体通过，不表示已经完成相互独立的四方审查。Phase 5 的签名 RC
+必须基于同一 artifact 重新执行 Product、Engineering、Security/Privacy 与 Quality/Release 发布签字。

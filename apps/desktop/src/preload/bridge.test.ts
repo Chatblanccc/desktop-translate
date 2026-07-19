@@ -46,6 +46,7 @@ describe('renderer bridges', () => {
     await api.openProviderPrivacyPolicy();
     await api.openProviderServiceTerms();
     await api.resetBallPosition();
+    await api.clearAllLocalData('清除全部本地数据');
     expect(invoke.mock.calls).toEqual([
       [UI_SHELL_CHANNELS.setBallVisible, { value: false }],
       [UI_SHELL_CHANNELS.setEdgeSnap, { value: false }],
@@ -61,7 +62,8 @@ describe('renderer bridges', () => {
       [UI_SHELL_CHANNELS.deleteBaiduCredentials],
       [UI_SHELL_CHANNELS.openProviderPrivacyPolicy],
       [UI_SHELL_CHANNELS.openProviderServiceTerms],
-      [UI_SHELL_CHANNELS.resetBallPosition]
+      [UI_SHELL_CHANNELS.resetBallPosition],
+      [UI_SHELL_CHANNELS.clearAllLocalData, { confirmation: '清除全部本地数据' }]
     ]);
   });
 

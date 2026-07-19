@@ -1,0 +1,567 @@
+name: Phase 5 Windows
+
+on:
+  push:
+    branches: [main]
+    tags: ['phase5-rc-*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_lane_a_harness:
+        description: Run the eight-hour Lane A harness schedule on the registered lab runner (not product acceptance)
+        required: false
+        default: false
+        type: boolean
+      lane_a_test_artifact_path:
+        description: Regular-file path to the release-equivalent Lane A test artifact on the registered lab runner
+        required: false
+        type: string
+      lane_a_release_artifact_path:
+        description: Regular-file path to the distinct public release artifact on the registered lab runner
+        required: false
+        type: string
+      lane_a_test_build_manifest_path:
+        description: Independently downloaded, attested build manifest for the Lane A test artifact
+        required: false
+        type: string
+      lane_a_release_build_manifest_path:
+        description: Independently downloaded, attested build manifest for the public release artifact
+        required: false
+        type: string
+      lane_a_test_attestation_bundle_path:
+        description: GitHub artifact attestation bundle covering the test artifact and its build manifest
+        required: false
+        type: string
+      lane_a_release_attestation_bundle_path:
+        description: GitHub artifact attestation bundle covering the release artifact and its build manifest
+        required: false
+        type: string
+      lane_a_build_difference_id:
+        description: Reviewed identifier describing why the Lane A test artifact differs from the public artifact
+        required: false
+        default: FAKE-INJECTION-EXCLUDED-V1
+        type: string
+      run_lane_b_preflight:
+        description: Run only the Lane B signed-RC interactive-session preflight (never the acceptance workload)
+        required: false
+        default: false
+        type: boolean
+      lane_b_download_directory:
+        description: Separately downloaded signed RC bundle directory on the dedicated Lane B runner
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase5-windows-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  pr-deterministic:
+    name: PR deterministic unsigned gate
+    runs-on: windows-2022
+    timeout-minutes: 150
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: pnpm
+
+      - name: Prove the ordinary PR lane has no protected credentials
+        if: github.event_name == 'pull_request'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $protectedNames = @(
+            'CSC_LINK',
+            'CSC_KEY_PASSWORD',
+            'PHASE5_EXPECTED_SIGNING_SUBJECT',
+            'BAIDU_APP_ID',
+            'BAIDU_SECRET_KEY'
+          )
+          $present = @($protectedNames | Where-Object {
+            -not [string]::IsNullOrEmpty([Environment]::GetEnvironmentVariable($_, 'Process'))
+          })
+          if ($present.Count -ne 0) {
+            throw "Protected credential environment unexpectedly entered the PR lane: $($present -join ', ')"
+          }
+          Write-Host '[phase5] PR/fork lane has no signing or real-Provider credential environment.'
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit locked dependency graph advisories (fail closed)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node ./tooling/supply-chain/phase5-dependency-audit.mjs `
+            --output "artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/supply-chain/dependency-audit.json"
+
+      - name: Check the complete change range
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $allZero = $env:BASE_SHA -match '^0+$'
+          if ($env:EVENT_NAME -eq 'pull_request') {
+            git diff --check "$env:BASE_SHA...$env:HEAD_SHA"
+          } elseif ($env:BASE_SHA -and -not $allZero) {
+            git diff --check "$env:BASE_SHA..$env:HEAD_SHA"
+          } else {
+            git diff-tree --check --no-commit-id --root -r -m $env:HEAD_SHA
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'git diff whitespace check failed' }
+
+      - name: Verify Phase 5 strict superset with 15-minute deterministic short soak
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tooling/phase5-verify.ps1 `
+            -SoakDurationSeconds 900 `
+            -SelectionIntervalMs 30000 `
+            -FaultIntervalMs 300000 `
+            -LifecycleIntervalMs 300000
+
+      - name: Reject tracked-file mutations from verification
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'post-verification whitespace check failed' }
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { throw 'verification modified tracked files' }
+
+      - name: Upload unsigned Phase 5 verification evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: phase5-pr-verification-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            artifacts/phase3/**
+            artifacts/phase4/**
+            artifacts/phase5/**
+            test-results/**
+            playwright-report/**
+            apps/desktop/test-results/**
+            apps/desktop/playwright-report/**
+
+  lane-a-harness-schedule:
+    name: Lane A eight-hour harness schedule (not product acceptance)
+    if: github.event_name == 'workflow_dispatch' && inputs.run_lane_a_harness
+    runs-on: [self-hosted, Windows, X64, phase5-lab]
+    timeout-minutes: 540
+    env:
+      CI: 'true'
+      TEST_ARTIFACT_PATH: ${{ inputs.lane_a_test_artifact_path }}
+      RELEASE_ARTIFACT_PATH: ${{ inputs.lane_a_release_artifact_path }}
+      TEST_BUILD_MANIFEST_PATH: ${{ inputs.lane_a_test_build_manifest_path }}
+      RELEASE_BUILD_MANIFEST_PATH: ${{ inputs.lane_a_release_build_manifest_path }}
+      TEST_ATTESTATION_BUNDLE_PATH: ${{ inputs.lane_a_test_attestation_bundle_path }}
+      RELEASE_ATTESTATION_BUNDLE_PATH: ${{ inputs.lane_a_release_attestation_bundle_path }}
+      BUILD_DIFFERENCE_ID: ${{ inputs.lane_a_build_difference_id }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+
+      - name: Validate independently acquired artifact, manifest, and attestation inputs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $inputs = @(
+            $env:TEST_ARTIFACT_PATH,
+            $env:RELEASE_ARTIFACT_PATH,
+            $env:TEST_BUILD_MANIFEST_PATH,
+            $env:RELEASE_BUILD_MANIFEST_PATH,
+            $env:TEST_ATTESTATION_BUNDLE_PATH,
+            $env:RELEASE_ATTESTATION_BUNDLE_PATH
+          )
+          foreach ($path in $inputs) {
+            $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw "Lane A identity input must be a regular non-reparse file: $path"
+            }
+          }
+          $testPath = (Resolve-Path -LiteralPath $env:TEST_ARTIFACT_PATH).Path
+          $releasePath = (Resolve-Path -LiteralPath $env:RELEASE_ARTIFACT_PATH).Path
+          if ($testPath -eq $releasePath) {
+            throw 'Lane A test and public artifacts must be different files.'
+          }
+          Write-Host 'Exact bytes, attested manifests, source identity, toolchain, and reviewed delta are rechecked before and after the schedule.'
+
+      - name: Acquire an independent GitHub Sigstore trusted root
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh attestation trusted-root | Out-File `
+            -FilePath (Join-Path '${{ runner.temp }}' 'lane-a-independent-trusted_root.jsonl') `
+            -Encoding utf8NoBOM
+          if ($LASTEXITCODE -ne 0) { throw 'Lane A could not independently acquire the GitHub/Sigstore trusted root.' }
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run eight-hour deterministic harness schedule
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $evidence = "artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/soak/lane-a-harness"
+          node ./tooling/phase5-soak-lane-a.mjs `
+            --full-schedule `
+            --duration-hours 8 `
+            --selection-interval-ms 30000 `
+            --fault-interval-ms 1800000 `
+            --lifecycle-interval-ms 7200000 `
+            --git-sha '${{ github.sha }}' `
+            --test-artifact-path $env:TEST_ARTIFACT_PATH `
+            --release-artifact-path $env:RELEASE_ARTIFACT_PATH `
+            --test-build-manifest-path $env:TEST_BUILD_MANIFEST_PATH `
+            --release-build-manifest-path $env:RELEASE_BUILD_MANIFEST_PATH `
+            --test-attestation-bundle-path $env:TEST_ATTESTATION_BUNDLE_PATH `
+            --release-attestation-bundle-path $env:RELEASE_ATTESTATION_BUNDLE_PATH `
+            --trusted-root-path (Join-Path '${{ runner.temp }}' 'lane-a-independent-trusted_root.jsonl') `
+            --repository '${{ github.repository }}' `
+            --source-ref '${{ github.ref }}' `
+            --signer-workflow '${{ github.repository }}/.github/workflows/phase5-windows.yml' `
+            --build-difference-id $env:BUILD_DIFFERENCE_ID `
+            --output-root $evidence
+          if ($LASTEXITCODE -ne 0) { throw 'Lane A harness schedule failed.' }
+          node ./tooling/phase5-soak-validate.mjs --output-root $evidence
+          if ($LASTEXITCODE -ne 0) { throw 'Lane A harness schema validation failed.' }
+          node ./tooling/phase5-evidence-privacy-scan.mjs `
+            --root $evidence `
+            --output "$evidence/privacy-scan.json" `
+            --mode evidence
+          if ($LASTEXITCODE -ne 0) { throw 'Lane A evidence privacy scan failed.' }
+          $summary = Get-Content -LiteralPath (Join-Path $evidence 'summary.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+          if ($summary.status -ne 'HARNESS_SCHEDULE_PASS_REQUIRES_PRODUCT_AND_RESOURCE_EVIDENCE' -or
+              $summary.fullScheduleComplete -ne $true -or
+              $summary.acceptance -ne $false -or
+              $summary.identity.source -ne 'GITHUB_ATTESTED_BUILD_MANIFESTS' -or
+              $summary.counts.selections -ne 960 -or
+              $summary.counts.faultsInjected -ne 15 -or
+              $summary.counts.faultsRecovered -ne 15 -or
+              $summary.counts.lifecycleExercises -ne 3 -or
+              $summary.counts.maxSchedulingDelayMs -gt 5000) {
+            throw 'Lane A summary does not satisfy the frozen full-schedule policy.'
+          }
+          Write-Host 'This job validates the eight-hour harness schedule only.'
+          Write-Host 'It does not claim product-process, real Native, resource, WER, or signed-RC acceptance.'
+
+      - name: Upload Lane A harness evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: phase5-lane-a-harness-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 30
+          path: artifacts/phase5/**
+
+  lane-b-preflight:
+    name: Lane B signed-RC interactive preflight only
+    if: github.event_name == 'workflow_dispatch' && inputs.run_lane_b_preflight && startsWith(github.ref, 'refs/tags/phase5-rc-')
+    runs-on: [self-hosted, Windows, X64, phase5-lane-b]
+    timeout-minutes: 15
+    environment: phase5-lane-b
+    env:
+      DOWNLOAD_DIRECTORY: ${{ inputs.lane_b_download_directory }}
+      PHASE5_EXPECTED_SIGNING_SUBJECT: ${{ secrets.PHASE5_WINDOWS_SIGNING_SUBJECT }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check the real-machine Lane B entry conditions
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh attestation trusted-root | Out-File `
+            -FilePath 'lane-b-independent-trusted_root.jsonl' `
+            -Encoding utf8NoBOM
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Lane B could not independently acquire the GitHub/Sigstore trusted root.'
+          }
+          & ./tooling/phase5-lane-b-entry.ps1 `
+            -Mode Preflight `
+            -EvidenceRoot "artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/soak/lane-b" `
+            -DownloadDirectory $env:DOWNLOAD_DIRECTORY `
+            -Repository '${{ github.repository }}' `
+            -SourceRef '${{ github.ref }}' `
+            -GitSha '${{ github.sha }}' `
+            -SignerWorkflow '${{ github.repository }}/.github/workflows/phase5-windows.yml' `
+            -ExpectedPublisherSubject $env:PHASE5_EXPECTED_SIGNING_SUBJECT `
+            -IndependentTrustedRoot 'lane-b-independent-trusted_root.jsonl'
+          Write-Host 'Preflight success is READY_FOR_MANUAL_EXECUTION_NOT_ACCEPTED, never Lane B PASS.'
+
+      - name: Upload Lane B preflight evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: phase5-lane-b-preflight-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: artifacts/phase5/**
+
+  protected-release:
+    name: Protected signed RC gate
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/phase5-rc-')
+    needs: pr-deterministic
+    runs-on: [self-hosted, Windows, X64, phase5-release]
+    timeout-minutes: 180
+    environment: phase5-release
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      CI: 'true'
+      PHASE5_RELEASE_EVIDENCE: artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/release
+      PHASE5_RELEASE_AUDIT: ${{ runner.temp }}/phase5-dependency-audit-${{ github.run_id }}-${{ github.run_attempt }}.json
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+        with:
+          version: 10.32.1
+          run_install: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: pnpm
+
+      - name: Enforce protected tag and signing context
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.PHASE5_WINDOWS_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.PHASE5_WINDOWS_CERTIFICATE_PASSWORD }}
+          PHASE5_EXPECTED_SIGNING_SUBJECT: ${{ secrets.PHASE5_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ('${{ github.ref_protected }}' -ne 'true') {
+            throw 'RELEASE BLOCKED: the RC tag is not covered by a GitHub ruleset or branch protection.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:CSC_LINK) -or
+              [string]::IsNullOrWhiteSpace($env:CSC_KEY_PASSWORD) -or
+              [string]::IsNullOrWhiteSpace($env:PHASE5_EXPECTED_SIGNING_SUBJECT)) {
+            throw 'RELEASE BLOCKED: protected signing inputs are incomplete.'
+          }
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Require current GitHub attestation CLI capabilities
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $versionLine = (gh --version | Select-Object -First 1)
+          if ($versionLine -notmatch '^gh version ([0-9]+\.[0-9]+\.[0-9]+)' -or [version]$Matches[1] -lt [version]'2.93.0') {
+            throw "RELEASE BLOCKED: GitHub CLI >= 2.93.0 is required; found '$versionLine'."
+          }
+          $help = (gh attestation verify --help) -join "`n"
+          foreach ($required in @('--bundle', '--custom-trusted-root', '--source-digest', '--source-ref', '--signer-workflow')) {
+            if (-not $help.Contains($required)) {
+              throw "RELEASE BLOCKED: installed GitHub CLI lacks required attestation option $required."
+            }
+          }
+          gh attestation trusted-root --verify-only
+          if ($LASTEXITCODE -ne 0) { throw 'RELEASE BLOCKED: GitHub/Sigstore trusted-root verification failed.' }
+
+      - name: Audit locked dependency graph advisories (fail closed)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node ./tooling/supply-chain/phase5-dependency-audit.mjs `
+            --output $env:PHASE5_RELEASE_AUDIT
+
+      - name: Build the signed installer and release evidence
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.PHASE5_WINDOWS_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.PHASE5_WINDOWS_CERTIFICATE_PASSWORD }}
+          PHASE5_EXPECTED_SIGNING_SUBJECT: ${{ secrets.PHASE5_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tooling/packaging/phase5-package.ps1 `
+            -Mode Installer `
+            -SignedRelease `
+            -ExpectedPublisherSubject $env:PHASE5_EXPECTED_SIGNING_SUBJECT `
+            -EvidenceRoot $env:PHASE5_RELEASE_EVIDENCE
+          $auditDestination = Join-Path $env:PHASE5_RELEASE_EVIDENCE 'supply-chain/dependency-audit.json'
+          Copy-Item -LiteralPath $env:PHASE5_RELEASE_AUDIT -Destination $auditDestination
+
+      - name: Resolve the exact release artifact set
+        id: release-paths
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dist = Resolve-Path 'artifacts/phase5/package/dist'
+          $installers = @(Get-ChildItem -LiteralPath $dist -File -Filter '*-setup.exe')
+          if ($installers.Count -ne 1) { throw "RELEASE BLOCKED: expected exactly one installer, found $($installers.Count)." }
+          $values = [ordered]@{
+            installer = $installers[0].FullName
+            application = (Resolve-Path (Join-Path $dist 'win-unpacked/desktop-translate.exe')).Path
+            native_host = (Resolve-Path (Join-Path $dist 'win-unpacked/resources/selection-host/selection-host.exe')).Path
+            asar = (Resolve-Path (Join-Path $dist 'win-unpacked/resources/app.asar')).Path
+            package_dir = (Resolve-Path (Join-Path $dist 'win-unpacked')).Path
+          }
+          foreach ($entry in $values.GetEnumerator()) {
+            "$($entry.Key)=$($entry.Value)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          }
+
+      - name: Attest final app, Native Host, ASAR, and installer bytes
+        id: attest-artifacts
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: |
+            ${{ steps.release-paths.outputs.application }}
+            ${{ steps.release-paths.outputs.native_host }}
+            ${{ steps.release-paths.outputs.asar }}
+            ${{ steps.release-paths.outputs.installer }}
+
+      - name: Verify artifact provenance and generate the final release manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $security = Join-Path $env:PHASE5_RELEASE_EVIDENCE 'security'
+          New-Item -ItemType Directory -Force -Path $security | Out-Null
+          Copy-Item -LiteralPath '${{ steps.attest-artifacts.outputs.bundle-path }}' `
+            -Destination (Join-Path $security 'github-artifacts-attestation.json')
+          gh attestation trusted-root | Out-File `
+            -FilePath (Join-Path $security 'trusted_root.jsonl') `
+            -Encoding utf8NoBOM
+          if ($LASTEXITCODE -ne 0) { throw 'RELEASE BLOCKED: unable to acquire the current GitHub/Sigstore trusted roots.' }
+          node ./tooling/supply-chain/finalize-phase5-release.mjs `
+            --evidence-dir $env:PHASE5_RELEASE_EVIDENCE `
+            --package-dir '${{ steps.release-paths.outputs.package_dir }}' `
+            --installer '${{ steps.release-paths.outputs.installer }}' `
+            --artifact-bundle (Join-Path $security 'github-artifacts-attestation.json') `
+            --trusted-root (Join-Path $security 'trusted_root.jsonl') `
+            --repository '${{ github.repository }}' `
+            --source-ref '${{ github.ref }}' `
+            --source-digest '${{ github.sha }}' `
+            --signer-workflow '${{ github.repository }}/.github/workflows/phase5-windows.yml' `
+            --attestation-url '${{ steps.attest-artifacts.outputs.attestation-url }}'
+
+      - name: Attest the immutable final release manifest
+        id: attest-manifest
+        uses: actions/attest@f7c74d28b9d84cb8768d0b8ca14a4bac6ef463e6 # v4.2.0
+        with:
+          subject-path: ${{ env.PHASE5_RELEASE_EVIDENCE }}/release/final-release-manifest.json
+
+      - name: Prepare the exact clean-download verification bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Copy-Item -LiteralPath '${{ steps.attest-manifest.outputs.bundle-path }}' `
+            -Destination (Join-Path $env:PHASE5_RELEASE_EVIDENCE 'security/github-manifest-attestation.json')
+          & ./tooling/packaging/prepare-phase5-release-bundle.ps1 `
+            -PackageDirectory '${{ steps.release-paths.outputs.package_dir }}' `
+            -InstallerPath '${{ steps.release-paths.outputs.installer }}' `
+            -EvidenceDirectory $env:PHASE5_RELEASE_EVIDENCE `
+            -OutputDirectory 'artifacts/phase5/release-bundle'
+
+      - name: Upload protected signed RC bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: phase5-signed-rc-${{ github.sha }}-${{ github.run_attempt }}
+          if-no-files-found: error
+          retention-days: 90
+          compression-level: 0
+          path: artifacts/phase5/release-bundle
+
+      - name: Upload protected release failure evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: phase5-release-blocked-${{ github.sha }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 30
+          path: |
+            ${{ env.PHASE5_RELEASE_EVIDENCE }}/**
+            ${{ env.PHASE5_RELEASE_AUDIT }}
+
+  protected-release-clean-download:
+    name: Independent clean-download release verification
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/phase5-rc-')
+    needs: protected-release
+    runs-on: windows-2022
+    timeout-minutes: 30
+    environment: phase5-release
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Download the protected candidate into a fresh directory
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: phase5-signed-rc-${{ github.sha }}-${{ github.run_attempt }}
+          path: clean-download
+
+      - name: Verify the independently downloaded byte set
+        shell: pwsh
+        env:
+          PHASE5_EXPECTED_SIGNING_SUBJECT: ${{ secrets.PHASE5_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh attestation trusted-root | Out-File `
+            -FilePath 'independent-trusted_root.jsonl' `
+            -Encoding utf8NoBOM
+          if ($LASTEXITCODE -ne 0) { throw 'RELEASE BLOCKED: independent trusted-root acquisition failed.' }
+          & ./tooling/supply-chain/phase5-clean-download-verify.ps1 `
+            -DownloadDirectory 'clean-download' `
+            -Repository '${{ github.repository }}' `
+            -SourceRef '${{ github.ref }}' `
+            -SourceDigest '${{ github.sha }}' `
+            -SignerWorkflow '${{ github.repository }}/.github/workflows/phase5-windows.yml' `
+            -ExpectedSubject $env:PHASE5_EXPECTED_SIGNING_SUBJECT `
+            -IndependentTrustedRoot 'independent-trusted_root.jsonl' `
+            -OutputDirectory 'artifacts/phase5/clean-download-verification'
+
+      - name: Upload independent verification result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: phase5-clean-download-verification-${{ github.sha }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 90
+          path: artifacts/phase5/clean-download-verification/**

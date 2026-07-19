@@ -3,6 +3,10 @@ import {
   type SelectionCardViewModel
 } from '@desktop-translate/contracts/selection-card';
 import { SELECTION_CARD_CHANNELS } from '../shared/selection-card-channels.js';
+import {
+  isPhase5PaintTokenPayload,
+  PHASE5_METRICS_CHANNELS
+} from '../shared/phase5-metrics-channels.js';
 import type { IpcRendererBridgePort } from './bridge.js';
 
 export type SelectionCardChangedListener = (value: SelectionCardViewModel | undefined) => void;
@@ -12,6 +16,12 @@ export interface SelectionCardRendererBridge {
   dismiss(): Promise<void>;
   retry(): Promise<void>;
   onChanged(listener: SelectionCardChangedListener): () => void;
+  onPaintProbe?(listener: (token: number) => void): () => void;
+  acknowledgePaint?(token: number): void;
+}
+
+interface SelectionCardIpcPort extends IpcRendererBridgePort {
+  send(channel: string, payload: unknown): void;
 }
 
 function isOptionalCard(value: unknown): value is SelectionCardViewModel | undefined {
@@ -19,7 +29,7 @@ function isOptionalCard(value: unknown): value is SelectionCardViewModel | undef
 }
 
 export function createSelectionCardRendererBridge(
-  ipc: IpcRendererBridgePort
+  ipc: SelectionCardIpcPort
 ): SelectionCardRendererBridge {
   return Object.freeze({
     async getCurrent() {
@@ -42,6 +52,19 @@ export function createSelectionCardRendererBridge(
       };
       ipc.on(SELECTION_CARD_CHANNELS.changed, wrapped);
       return () => ipc.removeListener(SELECTION_CARD_CHANNELS.changed, wrapped);
+    },
+    onPaintProbe(listener: (token: number) => void) {
+      if (typeof listener !== 'function') throw new TypeError('Paint probe listener must be a function');
+      const wrapped = (_event: unknown, value: unknown): void => {
+        if (isPhase5PaintTokenPayload(value)) listener(value.token);
+      };
+      ipc.on(PHASE5_METRICS_CHANNELS.cardPaintProbe, wrapped);
+      return () => ipc.removeListener(PHASE5_METRICS_CHANNELS.cardPaintProbe, wrapped);
+    },
+    acknowledgePaint(token: number) {
+      const payload = { token };
+      if (!isPhase5PaintTokenPayload(payload)) throw new TypeError('Invalid paint acknowledgement token');
+      ipc.send(PHASE5_METRICS_CHANNELS.cardPaintAck, payload);
     }
   });
 }

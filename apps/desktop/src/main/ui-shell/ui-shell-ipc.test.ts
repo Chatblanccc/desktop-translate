@@ -31,7 +31,8 @@ function setup(role: 'ball' | 'settings' = 'settings') {
     testTranslationProvider: vi.fn().mockResolvedValue({ ok: true }),
     openProviderPrivacyPolicy: vi.fn().mockResolvedValue(undefined),
     openProviderServiceTerms: vi.fn().mockResolvedValue(undefined),
-    resetBallPosition: vi.fn().mockResolvedValue(undefined)
+    resetBallPosition: vi.fn().mockResolvedValue(undefined),
+    clearAllLocalData: vi.fn().mockResolvedValue(undefined)
   };
   const mainFrame = { url: `file:///desktop/${role}.html` };
   const event: InvokeEventLike = {
@@ -75,6 +76,9 @@ describe('UI shell IPC', () => {
     await requireHandler(handlers, UI_SHELL_CHANNELS.openProviderPrivacyPolicy)(event);
     await requireHandler(handlers, UI_SHELL_CHANNELS.openProviderServiceTerms)(event);
     await requireHandler(handlers, UI_SHELL_CHANNELS.resetBallPosition)(event);
+    await requireHandler(handlers, UI_SHELL_CHANNELS.clearAllLocalData)(event, {
+      confirmation: '清除全部本地数据'
+    });
     expect(actions.setBallVisible).toHaveBeenCalledWith(false);
     expect(actions.setEdgeSnap).toHaveBeenCalledWith(false);
     expect(actions.setTheme).toHaveBeenCalledWith('dark');
@@ -88,6 +92,7 @@ describe('UI shell IPC', () => {
       1
     );
     expect(actions.resetBallPosition).toHaveBeenCalledOnce();
+    expect(actions.clearAllLocalData).toHaveBeenCalledOnce();
     await expect(
       requireHandler(handlers, UI_SHELL_CHANNELS.setTheme)(event, { value: 'remote-code' })
     ).rejects.toThrow(/Invalid/u);
@@ -153,6 +158,11 @@ describe('UI shell IPC', () => {
     await expect(
       requireHandler(handlers, UI_SHELL_CHANNELS.resetBallPosition)(event, {})
     ).rejects.toThrow(/does not accept/u);
+    await expect(
+      requireHandler(handlers, UI_SHELL_CHANNELS.clearAllLocalData)(event, {
+        confirmation: '清除全部本地数据 ', extra: true
+      })
+    ).rejects.toThrow(/Invalid local-data reset confirmation/u);
   });
 
   it('rejects subframes and unexpected arguments', () => {

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase5/soak-event.schema.json",
+  "title": "Phase 5 Lane A redacted soak event",
+  "type": "object",
+  "required": ["schemaVersion", "sequence", "elapsedMs", "kind"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "elapsedMs": { "type": "integer", "minimum": 0 },
+    "kind": {
+      "enum": ["run-start", "selection-cycle", "fault-cycle", "lifecycle-cycle", "run-end"]
+    },
+    "qualification": { "enum": ["full-schedule-requested", "smoke-or-development"] },
+    "sampleId": { "type": "string", "pattern": "^sample-[0-9]{6}$" },
+    "schedulingDelayMs": { "type": "integer", "minimum": 0 },
+    "acquisition": { "enum": ["simulated-uia-result", "simulated-ocr-result"] },
+    "translation": {
+      "enum": [
+        "source-only",
+        "success",
+        "recoverable-failure-manual-retry",
+        "non-recoverable-failure"
+      ]
+    },
+    "faultCode": {
+      "enum": [
+        "PIPE_DISCONNECT",
+        "PROVIDER_TIMEOUT",
+        "PROVIDER_MALFORMED_RESPONSE",
+        "CREDENTIAL_DELETE_RESTORE",
+        "CREDENTIAL_REPLACE",
+        "TRANSLATION_DISABLE_ENABLE",
+        "DISPLAY_CHANGE",
+        "SHUTDOWN_RACE"
+      ]
+    },
+    "lifecycleCode": { "enum": ["CARD_DISMISS", "PAUSE_RESUME", "SETTINGS_OPEN_CLOSE"] },
+    "outcome": { "type": "string", "maxLength": 64 }
+  },
+  "additionalProperties": false
+}

@@ -27,7 +27,10 @@
 namespace desktop_translate::native {
 namespace {
 
-constexpr std::string_view kHostVersion = "0.3.0-phase3";
+#ifndef DT_PRODUCT_VERSION
+#error "DT_PRODUCT_VERSION must be supplied by the Native build"
+#endif
+constexpr std::string_view kHostVersion = DT_PRODUCT_VERSION;
 
 std::string UtcTimestamp() {
   SYSTEMTIME time{};

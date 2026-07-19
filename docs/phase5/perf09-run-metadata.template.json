@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "phase5-perf09-run-metadata-v1",
+  "run": {
+    "runId": "replace-run-id",
+    "workflowName": "phase5-perf09-exit",
+    "workflowRunId": "replace-workflow-run-id",
+    "operatorRole": "Quality",
+    "deviceRegistrationId": "replace-device-registration-id",
+    "buildMode": "signed-rc",
+    "evidenceLevel": "fixed-lab-benchmark",
+    "dedicatedInteractiveSession": true,
+    "foregroundInputExclusive": true,
+    "debuggerClosed": true,
+    "unrelatedForegroundTasksClosed": true
+  },
+  "environment": {
+    "osBuild": "replace-os-build",
+    "osArchitecture": "replace-os-architecture",
+    "cpuModels": [
+      "replace-cpu-model"
+    ],
+    "physicalCoreCount": 0,
+    "logicalProcessorCount": 0,
+    "ramBytes": 0,
+    "storageType": "SSD",
+    "gpuModels": [
+      "replace-gpu-model"
+    ],
+    "displays": [
+      {
+        "widthPixels": 0,
+        "heightPixels": 0,
+        "dpiPercent": 150,
+        "primary": true,
+        "physical": true,
+        "orientation": "landscape",
+        "taskbarEdge": "bottom"
+      }
+    ],
+    "powerPlanGuid": "00000000-0000-0000-0000-000000000000",
+    "powerPlanLabel": "replace-power-plan-label",
+    "acPower": true,
+    "ocrLanguagePacks": [
+      "zh-CN"
+    ],
+    "nodeVersion": "replace-node-version",
+    "electronVersion": "replace-electron-version",
+    "hostProductVersion": "replace-host-product-version",
+    "antivirusScanActivityAbsent": true,
+    "osUpdateActivityAbsent": true
+  }
+}

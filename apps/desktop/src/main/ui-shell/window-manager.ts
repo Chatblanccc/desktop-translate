@@ -5,7 +5,8 @@ import {
   nativeTheme,
   systemPreferences,
   type BrowserWindowConstructorOptions,
-  type Rectangle
+  type Rectangle,
+  type WebContents
 } from 'electron';
 import type { UiShellSnapshot } from '@desktop-translate/contracts/ui-shell';
 import type { SelectionCardViewModel } from '@desktop-translate/contracts/selection-card';
@@ -14,6 +15,7 @@ import { UI_SHELL_CHANNELS } from '../../shared/ui-shell-channels.js';
 import { BALL_SIZE_DIP } from './ball-position.js';
 import { CARD_HEIGHT_DIP, CARD_WIDTH_DIP } from './selection-card-position.js';
 import type { InvokeEventLike, WindowRole } from './ui-shell-ipc.js';
+import { bucketCharacterCount, type Phase5CharacterCountBucket } from '../metrics/phase5-metrics.js';
 
 export interface WindowManagerOptions {
   readonly appPath: string;
@@ -22,6 +24,11 @@ export interface WindowManagerOptions {
   readonly initialBallVisible: boolean;
   readonly onBallMoved: (bounds: Rectangle) => void;
   readonly onCardDismissed: () => void;
+  readonly enablePaintMetrics?: boolean;
+  readonly beginCardPaintProbe?: (
+    target: WebContents,
+    characterCountBucket: Phase5CharacterCountBucket
+  ) => (() => void) | undefined;
 }
 
 interface WindowRegistration {
@@ -80,7 +87,11 @@ export function createSettingsWindowOptions(preload: string): BrowserWindowConst
   };
 }
 
-export function createCardWindowOptions(preload: string, bounds: Rectangle): BrowserWindowConstructorOptions {
+export function createCardWindowOptions(
+  preload: string,
+  bounds: Rectangle,
+  enablePaintMetrics = false
+): BrowserWindowConstructorOptions {
   return {
     ...bounds,
     width: CARD_WIDTH_DIP,
@@ -98,7 +109,10 @@ export function createCardWindowOptions(preload: string, bounds: Rectangle): Bro
     skipTaskbar: true,
     focusable: true,
     hasShadow: false,
-    webPreferences: createSecureWebPreferences(preload)
+    webPreferences: {
+      ...createSecureWebPreferences(preload),
+      ...(enablePaintMetrics ? { backgroundThrottling: false } : {})
+    }
   };
 }
 
@@ -233,8 +247,7 @@ export class WindowManager {
     }
     if (!this.cardReady) return;
     window.setBounds(bounds, false);
-    window.webContents.send(SELECTION_CARD_CHANNELS.changed, this.currentCard);
-    this.showCardInactiveOnTop(window);
+    this.publishReadySelectionCard(window);
   }
 
   public dismissSelectionCard(notify = false): void {
@@ -303,7 +316,11 @@ export class WindowManager {
     }
     const preload = join(this.options.buildDirectory, 'card-preload.cjs');
     const html = join(this.options.appPath, '.vite', 'renderer', 'card', 'index.html');
-    const window = new BrowserWindow(createCardWindowOptions(preload, this.currentCardBounds));
+    const window = new BrowserWindow(createCardWindowOptions(
+      preload,
+      this.currentCardBounds,
+      this.options.enablePaintMetrics === true
+    ));
     const webContentsId = window.webContents.id;
     this.cardWindow = window;
     window.setAlwaysOnTop(true, 'floating');
@@ -328,8 +345,7 @@ export class WindowManager {
         window.isDestroyed()
       ) return;
       window.setBounds(this.currentCardBounds, false);
-      window.webContents.send(SELECTION_CARD_CHANNELS.changed, this.currentCard);
-      this.showCardInactiveOnTop(window);
+      this.publishReadySelectionCard(window);
     });
     await window.loadFile(html);
     await this.applySystemAccent(window);
@@ -339,6 +355,29 @@ export class WindowManager {
     window.showInactive();
     window.moveTop();
     window.setAlwaysOnTop(true, 'floating');
+  }
+
+  private publishReadySelectionCard(window: BrowserWindow): void {
+    if (this.options.enablePaintMetrics === true) {
+      // PERF-06 requires a visible, non-throttled card before the probe is sent.
+      this.showCardInactiveOnTop(window);
+      this.publishSelectionCard(window);
+      return;
+    }
+    // Preserve the default-off Phase 4 ordering exactly: update, then show.
+    this.publishSelectionCard(window);
+    this.showCardInactiveOnTop(window);
+  }
+
+  private publishSelectionCard(window: BrowserWindow): void {
+    const card = this.currentCard;
+    if (card === undefined || window.isDestroyed()) return;
+    const dispatchProbe = this.options.beginCardPaintProbe?.(
+      window.webContents,
+      bucketCharacterCount(card.sourceText.length)
+    );
+    window.webContents.send(SELECTION_CARD_CHANNELS.changed, card);
+    dispatchProbe?.();
   }
 
   private register(window: BrowserWindow, role: WindowRole, html: string): void {

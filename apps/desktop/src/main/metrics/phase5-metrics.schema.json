@@ -1,0 +1,187 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.local/schemas/phase5-metrics-v1.schema.json",
+  "title": "Desktop Translate Phase 5 privacy-safe metrics v1",
+  "oneOf": [
+    { "$ref": "#/$defs/sample" },
+    { "$ref": "#/$defs/summary" }
+  ],
+  "$defs": {
+    "metricId": {
+      "enum": [
+        "PERF-01", "PERF-02", "PERF-03", "PERF-04", "PERF-05",
+        "PERF-06", "PERF-07", "PERF-08", "PERF-09", "RES-01",
+        "RES-02", "RES-03", "RES-04", "RES-05", "RES-06",
+        "P5-METRICS-ENCODE-OVERHEAD"
+      ]
+    },
+    "measurementMode": {
+      "enum": [
+        "instrumentation-only", "deterministic-fixture", "real-acquisition", "provider-smoke"
+      ]
+    },
+    "buildMode": {
+      "enum": ["development", "packaged-unsigned", "release-equivalent", "signed-rc"]
+    },
+    "role": {
+      "enum": ["benchmark-controller", "main", "renderer", "native-host", "electron-process-tree"]
+    },
+    "scenario": {
+      "enum": [
+        "cold-start", "warm-start", "host-ready", "uia-source-card", "ocr-source-card",
+        "renderer-paint-ack", "fake-provider-translation", "provider-smoke", "shutdown",
+        "idle", "soak", "metrics-pipeline"
+      ]
+    },
+    "source": {
+      "enum": [
+        "synthetic", "electron-main", "renderer", "native-host", "fake-native",
+        "fake-provider", "windows-uia", "windows-ocr", "process-tree"
+      ]
+    },
+    "measurement": {
+      "enum": [
+        "durationMs", "privateWorkingSetBytes", "privateBytes", "cpuCapacityPercent",
+        "handleCount", "gdiObjectCount", "userObjectCount"
+      ]
+    },
+    "unit": { "enum": ["milliseconds", "bytes", "percent", "count"] },
+    "characterCountBucket": {
+      "enum": ["not-applicable", "0", "1-16", "17-64", "65-256", "257+"]
+    },
+    "errorCode": {
+      "enum": [
+        "HOST_NOT_READY", "NATIVE_DISCONNECTED", "OPERATION_TIMEOUT", "PAINT_ACK_TIMEOUT",
+        "PROCESS_EXIT_TIMEOUT", "PROVIDER_FAILURE", "INSTRUMENTATION_OPERATION_FAILED"
+      ]
+    },
+    "gitSha": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "binarySha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "recordType", "metricId", "measurementMode", "buildMode", "role",
+        "scenario", "source", "measurement", "unit", "status", "value",
+        "characterCountBucket", "gitSha"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "recordType": { "const": "metric-sample" },
+        "metricId": { "$ref": "#/$defs/metricId" },
+        "measurementMode": { "$ref": "#/$defs/measurementMode" },
+        "buildMode": { "$ref": "#/$defs/buildMode" },
+        "role": { "$ref": "#/$defs/role" },
+        "scenario": { "$ref": "#/$defs/scenario" },
+        "source": { "$ref": "#/$defs/source" },
+        "measurement": { "$ref": "#/$defs/measurement" },
+        "unit": { "$ref": "#/$defs/unit" },
+        "status": { "enum": ["success", "failure"] },
+        "value": { "type": "number", "minimum": 0 },
+        "characterCountBucket": { "$ref": "#/$defs/characterCountBucket" },
+        "gitSha": { "$ref": "#/$defs/gitSha" },
+        "binarySha256": { "$ref": "#/$defs/binarySha256" },
+        "errorCode": { "$ref": "#/$defs/errorCode" }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "measurement": { "const": "durationMs" },
+                "unit": { "const": "milliseconds" }
+              }
+            },
+            {
+              "properties": {
+                "measurement": { "enum": ["privateWorkingSetBytes", "privateBytes"] },
+                "unit": { "const": "bytes" },
+                "value": { "type": "integer" }
+              }
+            },
+            {
+              "properties": {
+                "measurement": { "const": "cpuCapacityPercent" },
+                "unit": { "const": "percent" },
+                "value": { "type": "number", "maximum": 100 }
+              }
+            },
+            {
+              "properties": {
+                "measurement": { "enum": ["handleCount", "gdiObjectCount", "userObjectCount"] },
+                "unit": { "const": "count" },
+                "value": { "type": "integer" }
+              }
+            }
+          ]
+        },
+        {
+          "oneOf": [
+            {
+              "properties": {
+                "status": { "const": "success" },
+                "errorCode": false
+              }
+            },
+            {
+              "properties": {
+                "status": { "const": "failure" },
+                "errorCode": { "$ref": "#/$defs/errorCode" }
+              },
+              "required": ["errorCode"]
+            }
+          ]
+        }
+      ]
+    },
+    "summaryGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metricId", "measurementMode", "buildMode", "role", "scenario", "source",
+        "measurement", "unit", "characterCountBucket", "gitSha", "n", "p50", "p95",
+        "max", "failureCount"
+      ],
+      "properties": {
+        "metricId": { "$ref": "#/$defs/metricId" },
+        "measurementMode": { "$ref": "#/$defs/measurementMode" },
+        "buildMode": { "$ref": "#/$defs/buildMode" },
+        "role": { "$ref": "#/$defs/role" },
+        "scenario": { "$ref": "#/$defs/scenario" },
+        "source": { "$ref": "#/$defs/source" },
+        "measurement": { "$ref": "#/$defs/measurement" },
+        "unit": { "$ref": "#/$defs/unit" },
+        "characterCountBucket": { "$ref": "#/$defs/characterCountBucket" },
+        "gitSha": { "$ref": "#/$defs/gitSha" },
+        "binarySha256": { "$ref": "#/$defs/binarySha256" },
+        "n": { "type": "integer", "minimum": 1 },
+        "p50": { "type": "number", "minimum": 0 },
+        "p95": { "type": "number", "minimum": 0 },
+        "max": { "type": "number", "minimum": 0 },
+        "failureCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion", "recordType", "statisticsMethod", "percentilePopulation",
+        "evidenceScope", "groups"
+      ],
+      "properties": {
+        "schemaVersion": { "const": 1 },
+        "recordType": { "const": "metrics-summary" },
+        "statisticsMethod": { "const": "nearest-rank" },
+        "percentilePopulation": { "const": "all-samples" },
+        "evidenceScope": {
+          "enum": ["instrumentation-only", "contains-non-instrumentation"]
+        },
+        "groups": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/summaryGroup" }
+        }
+      }
+    }
+  }
+}

@@ -21,7 +21,7 @@ if (!existsSync(executablePath)) {
 } else {
   const supervisor = new NativeHostSupervisor({
     executablePath,
-    desktopVersion: '0.3.0-phase3',
+    desktopVersion: '0.5.0-phase5',
     maxRestarts: 0,
     healthCheckIntervalMs: 60_000
   });

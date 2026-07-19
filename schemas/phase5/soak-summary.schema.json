@@ -1,0 +1,181 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase5/soak-summary.schema.json",
+  "title": "Phase 5 Lane A redacted soak summary",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "lane",
+    "scope",
+    "acquisitionEvidence",
+    "nativeEvidence",
+    "providerEvidence",
+    "status",
+    "acceptance",
+    "fullScheduleComplete",
+    "durationMs",
+    "configuredDurationMs",
+    "intervalsMs",
+    "identity",
+    "counts",
+    "distributions",
+    "assertions"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "lane": { "const": "A" },
+    "scope": { "const": "deterministic-orchestration-harness" },
+    "acquisitionEvidence": { "const": "simulated-result-consumption-only" },
+    "nativeEvidence": { "const": "not-real-native-acquisition" },
+    "providerEvidence": { "const": "fake-provider-schedule-only" },
+    "status": {
+      "enum": [
+        "FAIL",
+        "SMOKE_PASS_NOT_ACCEPTANCE",
+        "HARNESS_SCHEDULE_PASS_REQUIRES_PRODUCT_AND_RESOURCE_EVIDENCE"
+      ]
+    },
+    "acceptance": { "const": false },
+    "fullScheduleComplete": { "type": "boolean" },
+    "durationMs": { "type": "integer", "minimum": 1 },
+    "configuredDurationMs": { "type": "integer", "minimum": 1 },
+    "intervalsMs": { "type": "object" },
+    "identity": {
+      "type": "object",
+      "required": [
+        "gitSha",
+        "source",
+        "repository",
+        "sourceRef",
+        "signerWorkflow",
+        "lockfileSha256",
+        "testArtifact",
+        "releaseArtifact",
+        "testBuildManifestSha256",
+        "releaseBuildManifestSha256",
+        "trustedRootSha256",
+        "buildDifferenceId"
+      ],
+      "properties": {
+        "gitSha": { "type": "string", "pattern": "^(UNBOUND|[a-f0-9]{40})$" },
+        "source": {
+          "enum": [
+            "UNBOUND_DEVELOPMENT_SMOKE",
+            "GITHUB_ATTESTED_BUILD_MANIFESTS"
+          ]
+        },
+        "repository": { "type": "string", "minLength": 3, "maxLength": 200 },
+        "sourceRef": { "type": "string", "minLength": 3, "maxLength": 300 },
+        "signerWorkflow": { "type": "string", "minLength": 3, "maxLength": 300 },
+        "lockfileSha256": { "type": "string", "pattern": "^(UNBOUND|[a-f0-9]{64})$" },
+        "testArtifact": { "$ref": "#/$defs/artifactIdentity" },
+        "releaseArtifact": { "$ref": "#/$defs/artifactIdentity" },
+        "testBuildManifestSha256": { "type": "string", "pattern": "^(UNBOUND|[a-f0-9]{64})$" },
+        "releaseBuildManifestSha256": { "type": "string", "pattern": "^(UNBOUND|[a-f0-9]{64})$" },
+        "trustedRootSha256": { "type": "string", "pattern": "^(UNBOUND|[a-f0-9]{64})$" },
+        "buildDifferenceId": { "type": "string", "minLength": 3, "maxLength": 64 }
+      },
+      "additionalProperties": false
+    },
+    "counts": { "type": "object" },
+    "distributions": { "type": "object" },
+    "assertions": { "type": "object" }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "HARNESS_SCHEDULE_PASS_REQUIRES_PRODUCT_AND_RESOURCE_EVIDENCE"
+          }
+        },
+        "required": ["status"]
+      },
+      "then": {
+        "properties": {
+          "fullScheduleComplete": { "const": true },
+          "identity": {
+            "type": "object",
+            "properties": {
+              "source": { "const": "GITHUB_ATTESTED_BUILD_MANIFESTS" },
+              "gitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+              "lockfileSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "testBuildManifestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "releaseBuildManifestSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "trustedRootSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+              "testArtifact": {
+                "type": "object",
+                "properties": {
+                  "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+                }
+              },
+              "releaseArtifact": {
+                "type": "object",
+                "properties": {
+                  "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+                }
+              }
+            }
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "selections": { "const": 960 },
+              "faultsInjected": { "const": 15 },
+              "faultsRecovered": { "const": 15 },
+              "lifecycleExercises": { "const": 3 },
+              "invariantFailures": { "const": 0 },
+              "maxSchedulingDelayMs": { "type": "integer", "maximum": 5000 },
+              "acquisition": {
+                "type": "object",
+                "properties": {
+                  "simulated-uia-result": { "const": 672 },
+                  "simulated-ocr-result": { "const": 288 }
+                },
+                "required": ["simulated-uia-result", "simulated-ocr-result"]
+              },
+              "translation": {
+                "type": "object",
+                "properties": {
+                  "source-only": { "const": 192 },
+                  "success": { "const": 576 },
+                  "recoverable-failure-manual-retry": { "const": 144 },
+                  "non-recoverable-failure": { "const": 48 }
+                },
+                "required": [
+                  "source-only",
+                  "success",
+                  "recoverable-failure-manual-retry",
+                  "non-recoverable-failure"
+                ]
+              }
+            },
+            "required": [
+              "selections",
+              "faultsInjected",
+              "faultsRecovered",
+              "lifecycleExercises",
+              "invariantFailures",
+              "maxSchedulingDelayMs",
+              "acquisition",
+              "translation"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "artifactIdentity": {
+      "type": "object",
+      "required": ["name", "size", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "size": { "type": "integer", "minimum": 0 },
+        "sha256": { "type": "string", "pattern": "^(UNBOUND|[a-f0-9]{64})$" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

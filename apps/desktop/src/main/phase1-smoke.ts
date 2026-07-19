@@ -18,7 +18,11 @@ if (!existsSync(executablePath)) {
   console.error(`Native host is not built: ${executablePath}`);
   process.exitCode = 2;
 } else {
-  const supervisor = new NativeHostSupervisor({ executablePath, maxRestarts: 0 });
+  const supervisor = new NativeHostSupervisor({
+    executablePath,
+    desktopVersion: '0.5.0-phase5',
+    maxRestarts: 0
+  });
   try {
     const client = await supervisor.start();
     const health = await client.request('health', {});

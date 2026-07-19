@@ -6,7 +6,7 @@ import type { HostErrorEvent, SelectionResultEvent } from '@desktop-translate/co
 
 export interface NativeHostSupervisorOptions {
   executablePath: string;
-  desktopVersion?: string;
+  desktopVersion: string;
   /** Prefix arguments are used by the executable test harness; production leaves this empty. */
   executableArguments?: readonly string[];
   maxRestarts?: number;
@@ -128,7 +128,7 @@ export class NativeHostSupervisor extends EventEmitter {
         throw new Error('Native host was spawned without a process identifier');
       }
       const ready = await client.request('hello', {
-        desktopVersion: this.options.desktopVersion ?? '0.3.0-phase3',
+        desktopVersion: this.options.desktopVersion,
         supportedVersions: [1],
         sessionNonce: nonce,
         requestedCapabilities: [

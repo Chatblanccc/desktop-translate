@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0.0",
+  "lane": "B",
+  "scope": "real-native-acquisition-on-final-signed-rc",
+  "status": "NOT_RUN",
+  "acceptance": false,
+  "reasonCode": "DEDICATED_INTERACTIVE_SESSION_REQUIRED",
+  "gitSha": "UNBOUND",
+  "candidateSha256": "UNBOUND",
+  "assertions": {
+    "dedicatedInteractiveWindowsSession": false,
+    "finalSignedRcInstalled": false,
+    "fakeTransportInjected": false,
+    "realSelectionHostUsed": false,
+    "physicalOrFixtureOwnedInputUsed": false,
+    "eightHoursCompleted": false
+  },
+  "counts": {
+    "uia": 0,
+    "ocr": 0,
+    "rejected": 0
+  },
+  "requiredFollowUp": [
+    "Run Lane B preflight in a dedicated interactive Windows session.",
+    "Install and hash the final signed RC.",
+    "Run real Hook, UIA, DXGI and Windows OCR for eight hours.",
+    "Attach resource, WER, residual-process and privacy evidence."
+  ]
+}

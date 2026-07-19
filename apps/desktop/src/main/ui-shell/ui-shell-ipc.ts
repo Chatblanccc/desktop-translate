@@ -4,6 +4,7 @@ import {
   isSetThemePayload,
   isSetSelectionEnabledPayload,
   isSetOcrActivationPayload,
+  isClearAllLocalDataPayload,
   type OcrActivation,
   type ThemeMode,
   type UiShellSnapshot
@@ -54,6 +55,7 @@ export interface UiShellIpcActions {
   openProviderPrivacyPolicy(): Promise<void>;
   openProviderServiceTerms(): Promise<void>;
   resetBallPosition(): Promise<void>;
+  clearAllLocalData(): Promise<void>;
 }
 
 export interface UiShellIpcOptions {
@@ -225,6 +227,13 @@ export function registerUiShellIpc(options: UiShellIpcOptions): () => void {
     assertRole(event, resolveRole, ['settings']);
     assertNoArguments(args);
     await actions.resetBallPosition();
+  });
+  ipcMain.handle(UI_SHELL_CHANNELS.clearAllLocalData, async (event, ...args) => {
+    assertRole(event, resolveRole, ['settings']);
+    if (args.length !== 1 || !isClearAllLocalDataPayload(args[0])) {
+      throw new TypeError('Invalid local-data reset confirmation');
+    }
+    await actions.clearAllLocalData();
   });
 
   return () => {

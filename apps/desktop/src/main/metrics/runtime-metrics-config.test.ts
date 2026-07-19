@@ -1,0 +1,208 @@
+import { createHash } from 'node:crypto';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  createRuntimeMetricsFromEnvironment,
+  PHASE5_RUNTIME_METRICS_ENV
+} from './runtime-metrics-config.js';
+
+const temporaryDirectories: string[] = [];
+const RUN_ID = '123e4567-e89b-42d3-a456-426614174000';
+
+afterEach(async () => {
+  await Promise.all(temporaryDirectories.splice(0).map(async (directory) =>
+    rm(directory, { recursive: true, force: true })
+  ));
+});
+
+describe('Phase 5 runtime metrics configuration', () => {
+  it('is completely default-off and creates no evidence directory', async () => {
+    const userData = await temporaryDirectory();
+    const evidenceDirectory = join(userData, 'phase5-evidence');
+    expect(createRuntimeMetricsFromEnvironment({
+      isPackaged: true,
+      userDataDirectory: userData,
+      environment: {}
+    })).toBeUndefined();
+    await expect(access(evidenceDirectory)).rejects.toThrow();
+  });
+
+  it('allows an explicit absolute development target with complete metadata', async () => {
+    const directory = await temporaryDirectory();
+    const output = join(directory, 'evidence', 'raw.jsonl');
+    const metrics = createRuntimeMetricsFromEnvironment({
+      isPackaged: false,
+      userDataDirectory: directory,
+      environment: environment({
+        [PHASE5_RUNTIME_METRICS_ENV.developmentFile]: output,
+        [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'development',
+        [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'instrumentation-only'
+      })
+    });
+    expect(metrics?.enabled).toBe(true);
+    const startedAt = metrics!.beginDuration();
+    metrics!.recordDuration({
+      metricId: 'PERF-03',
+      role: 'main',
+      scenario: 'host-ready',
+      source: 'native-host',
+      startedAt,
+      status: 'success',
+      characterCountBucket: 'not-applicable'
+    });
+    await metrics?.close();
+    expect((await readFile(output, 'utf8')).trim()).toContain('"metricId":"PERF-03"');
+  });
+
+  it('forces packaged evidence into userData and ignores an arbitrary environment path', async () => {
+    const directory = await temporaryDirectory();
+    const userData = join(directory, 'user-data');
+    const untrusted = join(directory, 'untrusted', 'raw.jsonl');
+    const packaged = await packagedFixture(directory);
+    const metrics = createRuntimeMetricsFromEnvironment({
+      isPackaged: true,
+      userDataDirectory: userData,
+      ...packaged.options,
+      environment: environment({
+        [PHASE5_RUNTIME_METRICS_ENV.developmentFile]: untrusted,
+        [PHASE5_RUNTIME_METRICS_ENV.gitSha]: packaged.gitSha,
+        [PHASE5_RUNTIME_METRICS_ENV.binarySha256]: packaged.binarySha256,
+        [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'signed-rc',
+        [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'real-acquisition',
+        [PHASE5_RUNTIME_METRICS_ENV.runId]: RUN_ID
+      })
+    });
+    expect(metrics?.enabled).toBe(true);
+    const startedAt = metrics!.beginDuration();
+    metrics!.recordDuration({
+      metricId: 'PERF-06',
+      role: 'main',
+      scenario: 'renderer-paint-ack',
+      source: 'renderer',
+      startedAt,
+      status: 'success',
+      characterCountBucket: '1-16'
+    });
+    await metrics?.close();
+
+    await expect(access(untrusted)).rejects.toThrow();
+    const controlled = join(userData, 'phase5-evidence', 'perf', RUN_ID, 'raw.jsonl');
+    expect((await readFile(controlled, 'utf8')).trim()).toContain('"buildMode":"signed-rc"');
+    expect((await readFile(controlled, 'utf8')).trim()).toContain(
+      `"binarySha256":"${packaged.binarySha256}"`
+    );
+  });
+
+  it.each([
+    ['missing SHA', { [PHASE5_RUNTIME_METRICS_ENV.gitSha]: undefined }],
+    ['invalid SHA', { [PHASE5_RUNTIME_METRICS_ENV.gitSha]: 'invalid' }],
+    ['invalid binary hash', { [PHASE5_RUNTIME_METRICS_ENV.binarySha256]: 'invalid' }],
+    ['invalid build mode', { [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'private' }],
+    ['invalid measurement mode', { [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'private' }],
+    ['relative dev target', { [PHASE5_RUNTIME_METRICS_ENV.developmentFile]: 'relative.jsonl' }],
+    ['alternate data stream target', {
+      [PHASE5_RUNTIME_METRICS_ENV.developmentFile]: 'C:\\phase5-evidence:private\\raw.jsonl'
+    }]
+  ])('fails closed for %s', async (_name, override) => {
+    const directory = await temporaryDirectory();
+    expect(createRuntimeMetricsFromEnvironment({
+      isPackaged: false,
+      userDataDirectory: directory,
+      environment: environment(override)
+    })).toBeUndefined();
+  });
+
+  it.each([
+    ['mismatched binary hash', { [PHASE5_RUNTIME_METRICS_ENV.binarySha256]: 'b'.repeat(64) }],
+    ['development build', {
+      [PHASE5_RUNTIME_METRICS_ENV.binarySha256]: 'b'.repeat(64),
+      [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'development'
+    }],
+    ['deterministic fixture mode', {
+      [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'deterministic-fixture'
+    }],
+    ['missing run id', { [PHASE5_RUNTIME_METRICS_ENV.runId]: undefined }]
+  ])('fails closed in packaged mode for %s', async (_name, override) => {
+    const directory = await temporaryDirectory();
+    const packaged = await packagedFixture(directory);
+    expect(createRuntimeMetricsFromEnvironment({
+      isPackaged: true,
+      userDataDirectory: directory,
+      ...packaged.options,
+      environment: environment({
+        [PHASE5_RUNTIME_METRICS_ENV.gitSha]: packaged.gitSha,
+        [PHASE5_RUNTIME_METRICS_ENV.binarySha256]: packaged.binarySha256,
+        [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'signed-rc',
+        [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'real-acquisition',
+        [PHASE5_RUNTIME_METRICS_ENV.runId]: RUN_ID,
+        ...override
+      })
+    })).toBeUndefined();
+  });
+
+  it('refuses to append a packaged run into an existing evidence file', async () => {
+    const directory = await temporaryDirectory();
+    const packaged = await packagedFixture(directory);
+    const output = join(directory, 'phase5-evidence', 'perf', RUN_ID, 'raw.jsonl');
+    await mkdir(join(output, '..'), { recursive: true });
+    await writeFile(output, '{"old":true}\n');
+
+    expect(createRuntimeMetricsFromEnvironment({
+      isPackaged: true,
+      userDataDirectory: directory,
+      ...packaged.options,
+      environment: environment({
+        [PHASE5_RUNTIME_METRICS_ENV.gitSha]: packaged.gitSha,
+        [PHASE5_RUNTIME_METRICS_ENV.binarySha256]: packaged.binarySha256,
+        [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'signed-rc',
+        [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'real-acquisition',
+        [PHASE5_RUNTIME_METRICS_ENV.runId]: RUN_ID
+      })
+    })).toBeUndefined();
+    expect(await readFile(output, 'utf8')).toBe('{"old":true}\n');
+  });
+});
+
+function environment(
+  override: Readonly<Record<string, string | undefined>> = {}
+): Record<string, string | undefined> {
+  return {
+    [PHASE5_RUNTIME_METRICS_ENV.enabled]: '1',
+    [PHASE5_RUNTIME_METRICS_ENV.developmentFile]: 'C:\\phase5-evidence\\raw.jsonl',
+    [PHASE5_RUNTIME_METRICS_ENV.gitSha]: 'a'.repeat(40),
+    [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'development',
+    [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'instrumentation-only',
+    ...override
+  };
+}
+
+async function temporaryDirectory(): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), 'desktop-translate-phase5-runtime-'));
+  temporaryDirectories.push(directory);
+  return directory;
+}
+
+async function packagedFixture(directory: string): Promise<{
+  readonly options: { readonly resourcesDirectory: string; readonly appBundlePath: string };
+  readonly gitSha: string;
+  readonly binarySha256: string;
+}> {
+  const resourcesDirectory = join(directory, 'resources');
+  const manifestDirectory = join(resourcesDirectory, 'manifest');
+  const appBundlePath = join(resourcesDirectory, 'app.asar');
+  const gitSha = 'c'.repeat(40);
+  const bundle = Buffer.from('phase5-packaged-app');
+  await mkdir(manifestDirectory, { recursive: true });
+  await writeFile(
+    join(manifestDirectory, 'component-manifest.json'),
+    JSON.stringify({ schemaVersion: 1, gitSha })
+  );
+  await writeFile(appBundlePath, bundle);
+  return {
+    options: { resourcesDirectory, appBundlePath },
+    gitSha,
+    binarySha256: createHash('sha256').update(bundle).digest('hex')
+  };
+}

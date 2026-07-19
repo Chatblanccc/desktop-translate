@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase5/residual-processes.schema.json",
+  "title": "Phase 5 read-only residual process report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "scope",
+    "status",
+    "acceptance",
+    "readOnly",
+    "processIdentityPersisted",
+    "absoluteExecutablePathPersisted",
+    "rootCreationTimeBound",
+    "candidateExecutablePathCount",
+    "counts",
+    "attributionCounts",
+    "total",
+    "inspectionFailures"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.1.0" },
+    "scope": { "const": "bound-launch-tree-and-product-executable-paths" },
+    "status": { "enum": ["PASS", "FAIL"] },
+    "acceptance": { "type": "boolean" },
+    "readOnly": { "const": true },
+    "processIdentityPersisted": { "const": false },
+    "absoluteExecutablePathPersisted": { "const": false },
+    "rootCreationTimeBound": { "type": "boolean" },
+    "candidateExecutablePathCount": { "type": "integer", "minimum": 0 },
+    "counts": {
+      "type": "object",
+      "required": ["app", "electron", "crashpad", "host", "otherProductChild"],
+      "additionalProperties": false,
+      "properties": {
+        "app": { "type": "integer", "minimum": 0 },
+        "electron": { "type": "integer", "minimum": 0 },
+        "crashpad": { "type": "integer", "minimum": 0 },
+        "host": { "type": "integer", "minimum": 0 },
+        "otherProductChild": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "attributionCounts": {
+      "type": "object",
+      "required": ["launchTree", "candidatePath", "scopedDevelopmentPath"],
+      "additionalProperties": false,
+      "properties": {
+        "launchTree": { "type": "integer", "minimum": 0 },
+        "candidatePath": { "type": "integer", "minimum": 0 },
+        "scopedDevelopmentPath": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "total": { "type": "integer", "minimum": 0 },
+    "inspectionFailures": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[A-Z0-9_]+$" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "PASS" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "total": { "const": 0 },
+          "inspectionFailures": { "type": "array", "maxItems": 0 }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

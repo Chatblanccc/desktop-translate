@@ -1,8 +1,9 @@
 # Phase 4 产品规格：在线文本翻译闭环
 
-- 状态：开发基线已冻结；实现与验收进行中
+- 状态：已实现并验收，`PASS WITH ACCEPTED RISKS`（2026-07-18）
 - 目标版本：`0.4.0-phase4`
 - 开发基线：Phase 3 验收提交 `1fe45d3c5959b1e45170df21e790d61b69f3f38b`
+- 验收代码提交：`4ea65dcd5c5ef7c56127fe419127d48e0573a65d`
 - 目标平台：Windows 11 x64；Windows 10 22H2 x64 为 best-effort 兼容目标
 - 发布口径：内部开发预览，不是正式安装包
 

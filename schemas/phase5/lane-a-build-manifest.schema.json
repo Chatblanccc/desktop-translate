@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase5/lane-a-build-manifest.schema.json",
+  "title": "Phase 5 Lane A attested build manifest",
+  "type": "object",
+  "required": ["schemaVersion", "artifactRole", "source", "artifact", "toolchain", "build"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "artifactRole": { "enum": ["release-equivalent-test", "public-release"] },
+    "source": {
+      "type": "object",
+      "required": ["repository", "ref", "gitSha", "lockfileSha256", "developmentDirty"],
+      "properties": {
+        "repository": { "type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$" },
+        "ref": { "type": "string", "pattern": "^refs/" },
+        "gitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "lockfileSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "developmentDirty": { "const": false }
+      },
+      "additionalProperties": false
+    },
+    "artifact": { "$ref": "#/$defs/artifact" },
+    "toolchain": {
+      "type": "object",
+      "minProperties": 5,
+      "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "build": {
+      "type": "object",
+      "required": ["productionFlavor", "testHooksEnabled", "fakeInjectionEnabled", "buildDifferenceId"],
+      "properties": {
+        "productionFlavor": { "const": true },
+        "testHooksEnabled": { "type": "boolean" },
+        "fakeInjectionEnabled": { "type": "boolean" },
+        "buildDifferenceId": { "type": "string", "pattern": "^[A-Z0-9][A-Z0-9._-]{2,63}$" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "artifactRole": { "const": "release-equivalent-test" } } },
+      "then": {
+        "properties": {
+          "build": {
+            "properties": {
+              "testHooksEnabled": { "const": true },
+              "fakeInjectionEnabled": { "const": true }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "artifactRole": { "const": "public-release" } } },
+      "then": {
+        "properties": {
+          "build": {
+            "properties": {
+              "testHooksEnabled": { "const": false },
+              "fakeInjectionEnabled": { "const": false }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "artifact": {
+      "type": "object",
+      "required": ["name", "size", "sha256"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "size": { "type": "integer", "minimum": 1 },
+        "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

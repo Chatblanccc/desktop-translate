@@ -7,7 +7,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SelectionCardRendererBridge } from '../../preload/card-bridge.js';
 import { CardApp } from './CardApp.js';
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 const card = {
   kind: 'source-only' as const,
@@ -73,6 +76,57 @@ describe('CardApp', () => {
     await screen.findByText(card.sourceText);
     act(() => { resolveInitial?.(undefined); });
     await waitFor(() => expect(screen.getByText(card.sourceText)).toBeTruthy());
+  });
+
+  it('acknowledges a strict paint probe only after commit and two animation frames', async () => {
+    let cardListener: ((value: typeof card | undefined) => void) | undefined;
+    let paintListener: ((token: number) => void) | undefined;
+    let nextFrame = 1;
+    const frames = new Map<number, FrameRequestCallback>();
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      const id = nextFrame;
+      nextFrame += 1;
+      frames.set(id, callback);
+      return id;
+    }));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn((id: number) => { frames.delete(id); }));
+    const acknowledgePaint = vi.fn();
+    const api: SelectionCardRendererBridge = {
+      getCurrent: vi.fn().mockResolvedValue(undefined),
+      dismiss: vi.fn().mockResolvedValue(undefined),
+      retry: vi.fn().mockResolvedValue(undefined),
+      onChanged: vi.fn((listener) => {
+        cardListener = listener as typeof cardListener;
+        return vi.fn();
+      }),
+      onPaintProbe: vi.fn((listener) => {
+        paintListener = listener;
+        return vi.fn();
+      }),
+      acknowledgePaint
+    };
+    render(<CardApp api={api} />);
+    await waitFor(() => {
+      expect(cardListener).toBeTypeOf('function');
+      expect(paintListener).toBeTypeOf('function');
+    });
+
+    act(() => {
+      cardListener?.(card);
+      paintListener?.(11);
+    });
+    expect(acknowledgePaint).not.toHaveBeenCalled();
+    expect(frames.size).toBe(1);
+    const first = [...frames.entries()][0]!;
+    frames.delete(first[0]);
+    act(() => { first[1](16); });
+    expect(acknowledgePaint).not.toHaveBeenCalled();
+    expect(frames.size).toBe(1);
+    const second = [...frames.entries()][0]!;
+    frames.delete(second[0]);
+    act(() => { second[1](32); });
+    expect(acknowledgePaint).toHaveBeenCalledOnce();
+    expect(acknowledgePaint).toHaveBeenCalledWith(11);
   });
 
   it('renders hostile markup and URLs as scrollable plain text', async () => {

@@ -1,10 +1,19 @@
 # Desktop Translate 文档索引
 
-状态：Phase 4（在线文本翻译闭环开发与验收进行中；当前结论 `NOT ACCEPTED`）
+状态：Phase 4 已以 `PASS WITH ACCEPTED RISKS` 验收；Phase 5 为 `NOT YET ACCEPTED / RELEASE BLOCKED`
 目标平台：Windows 10/11 x64
-最后更新：2026-07-16
+最后更新：2026-07-19
 
-本目录是 V1 的架构与阶段验收基线。Phase 1 已确认协议、进程隔离和 Windows Native 可行性；Phase 2 已完成桌面壳层并以 `PASS WITH ACCEPTED RISKS` 验收；Phase 3 已完成 Native 划词、UIA/OCR 回退和 source-only 结果卡闭环，并以 `PASS WITH ACCEPTED RISKS` 完成本地验收。Phase 4 在此基线上接入默认关闭、BYOK、Main-only 网络的百度通用文本翻译，并要求任何失败都安全降级为原文卡。Phase 4 清单与报告中的未执行项必须保持未勾选，不能描述为已经执行。
+本目录是 V1 的架构与阶段验收基线。Phase 1 已确认协议、进程隔离和 Windows Native 可行性；Phase 2 已完成桌面壳层并以 `PASS WITH ACCEPTED RISKS` 验收；Phase 3 已完成 Native 划词、UIA/OCR 回退和 source-only 结果卡闭环，并以 `PASS WITH ACCEPTED RISKS` 完成本地验收。Phase 4 在此基线上完成默认关闭、BYOK、Main-only 网络的百度通用文本翻译，并于 2026-07-18 在 GitHub 合并提交 `4ea65dc` 上以 `PASS WITH ACCEPTED RISKS` 验收。未执行的真实故障与兼容性矩阵仍保持未勾选，作为明确接受风险继承到 Phase 5，不能描述为已经执行。
+
+Phase 5 当前已有 dirty-source deterministic/Phase 4 严格超集、unsigned package、PERF-09 2×5 和短时产品
+idle 开发通过证据；这些证据均为 non-acceptance。正式 fixed-lab、PERF-09 3×50、900 秒 idle、Lane A/B
+8 小时、签名/attestation/clean-download、clean VM、兼容矩阵、真实 Provider 与角色签字仍未完成。
+
+当前 PERF-09 与 idle 开发基准分别引用 `perf09-final-combined-2x5-20260719-0302` 和
+`product-idle-final-hardened-dev-20260719-0326`；本轮 Installer/verify 只写入
+`final-current-installer-20260719-0350` 与 `final-current-verify-20260719-0350`，结论以实际 manifest/summary
+字段为准。
 
 ## 文档
 
@@ -13,6 +22,7 @@
 - [ADR-0002：划词获取流水线](adr/0002-selection-acquisition-pipeline.md)
 - [ADR-0003：坐标、DPI 与权限边界](adr/0003-coordinate-and-privilege-boundaries.md)
 - [ADR-0004：Electron UI Shell、角色化 IPC 与窗口安全](adr/0004-electron-ui-shell-security.md)
+- [ADR-0005：Phase 5 打包、签名与更新边界](adr/0005-phase5-packaging-signing-and-update.md)
 - [Native IPC 协议](protocols/native-ipc.md)
 - [安全与隐私策略](privacy/security-and-privacy.md)
 - [V1 兼容性矩阵](compatibility/v1-matrix.md)
@@ -31,6 +41,12 @@
 - [Phase 4 风险登记](phase4/risk-register.md)
 - [Phase 4 验收清单](phase4/acceptance-checklist.md)
 - [Phase 4 验证报告](phase4/validation-report.md)
+- [Phase 5 开发与验收总计划](phase5/development-and-acceptance-plan.md)
+- [Phase 5 产品规格](phase5/product-spec.md)
+- [Phase 5 Benchmark Spec](phase5/benchmark-spec.md)
+- [Phase 5 风险登记](phase5/risk-register.md)
+- [Phase 5 验收清单](phase5/acceptance-checklist.md)
+- [Phase 5 验证报告](phase5/validation-report.md)
 
 ## 约定
 

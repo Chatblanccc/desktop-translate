@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase5/lane-a-product-summary.schema.json",
+  "title": "Phase 5 product-process Lane A summary",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "phase",
+    "lane",
+    "scope",
+    "status",
+    "acceptance",
+    "developmentSelftest",
+    "configuredDurationMs",
+    "intervalsMs",
+    "requiredSchedule",
+    "identity",
+    "controlPlane",
+    "execution",
+    "assertions",
+    "missingAssertions",
+    "blockers",
+    "acceptanceRule"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "phase": { "const": 5 },
+    "lane": { "const": "A" },
+    "scope": { "const": "attested-product-process" },
+    "status": { "enum": ["PASS", "NOT_IMPLEMENTED_BLOCKER"] },
+    "acceptance": { "type": "boolean" },
+    "developmentSelftest": { "type": "boolean" },
+    "configuredDurationMs": { "const": 28800000 },
+    "intervalsMs": { "type": "object" },
+    "requiredSchedule": { "type": "object" },
+    "identity": { "type": "object" },
+    "controlPlane": { "type": "object" },
+    "execution": { "type": "object" },
+    "assertions": {
+      "type": "object",
+      "required": [
+        "attestedIdentityVerified",
+        "fakeProductionIsolationVerified",
+        "productProcessExercised",
+        "selectionControlExecuted",
+        "translationControlExecuted",
+        "faultControlExecuted",
+        "lifecycleControlExecuted",
+        "mainResultsConfirmed",
+        "rendererResultsConfirmed",
+        "resourceGateExecuted",
+        "residualProcessGateExecuted",
+        "werGateExecuted",
+        "privacyGateExecuted",
+        "gracefulExitVerified"
+      ],
+      "properties": {
+        "attestedIdentityVerified": { "type": "boolean" },
+        "fakeProductionIsolationVerified": { "type": "boolean" },
+        "productProcessExercised": { "type": "boolean" },
+        "selectionControlExecuted": { "type": "boolean" },
+        "translationControlExecuted": { "type": "boolean" },
+        "faultControlExecuted": { "type": "boolean" },
+        "lifecycleControlExecuted": { "type": "boolean" },
+        "mainResultsConfirmed": { "type": "boolean" },
+        "rendererResultsConfirmed": { "type": "boolean" },
+        "resourceGateExecuted": { "type": "boolean" },
+        "residualProcessGateExecuted": { "type": "boolean" },
+        "werGateExecuted": { "type": "boolean" },
+        "privacyGateExecuted": { "type": "boolean" },
+        "gracefulExitVerified": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "missingAssertions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string" }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "detail"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^[A-Z0-9_]+$" },
+          "detail": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "acceptanceRule": { "type": "string", "minLength": 1 }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "PASS" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "acceptance": { "type": "boolean", "const": true },
+          "developmentSelftest": { "type": "boolean", "const": false },
+          "missingAssertions": { "type": "array", "maxItems": 0 },
+          "blockers": { "type": "array", "maxItems": 0 },
+          "assertions": {
+            "type": "object",
+            "properties": {
+              "attestedIdentityVerified": { "const": true },
+              "fakeProductionIsolationVerified": { "const": true },
+              "productProcessExercised": { "const": true },
+              "selectionControlExecuted": { "const": true },
+              "translationControlExecuted": { "const": true },
+              "faultControlExecuted": { "const": true },
+              "lifecycleControlExecuted": { "const": true },
+              "mainResultsConfirmed": { "const": true },
+              "rendererResultsConfirmed": { "const": true },
+              "resourceGateExecuted": { "const": true },
+              "residualProcessGateExecuted": { "const": true },
+              "werGateExecuted": { "const": true },
+              "privacyGateExecuted": { "const": true },
+              "gracefulExitVerified": { "const": true }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "NOT_IMPLEMENTED_BLOCKER" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "acceptance": { "type": "boolean", "const": false },
+          "blockers": { "type": "array", "minItems": 1 }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

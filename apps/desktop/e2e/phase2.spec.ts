@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from '@playwright/test';
 
@@ -11,6 +11,12 @@ const fixturePath = resolve(appPath, 'src/main/native-host/test-fixtures/fake-na
 const electronExecutablePath = createRequire(import.meta.url)('electron') as string;
 const BALL_SIZE_DIP = 56;
 const BALL_MARGIN_DIP = 12;
+const PRODUCT_EXIT_TIMEOUT_MS = 30_000;
+const HARNESS_RESIDUAL_TIMEOUT_MS = 40_000;
+const failedQuitApplications = new WeakSet<ElectronApplication>();
+const applicationProcesses = new WeakMap<ElectronApplication, ChildProcess>();
+const applicationMainProcessIds = new WeakMap<ElectronApplication, number>();
+const applicationExitTracePaths = new WeakMap<ElectronApplication, string>();
 
 interface RectangleLike {
   readonly x: number;
@@ -46,6 +52,7 @@ interface DebugState {
   readonly settingsVisible: boolean;
   readonly cardCreated: boolean;
   readonly cardVisible: boolean;
+  readonly shutdownPhase: string;
 }
 
 type FetchMode = 'block' | 'baidu-success';
@@ -70,6 +77,7 @@ function environment(
     env.DESKTOP_TRANSLATE_E2E_NATIVE_FIXTURE = fixturePath;
     env.DESKTOP_TRANSLATE_E2E_NATIVE_MODE = nativeMode;
     env.DESKTOP_TRANSLATE_E2E_NATIVE_TRACE = join(userData, 'native-methods.log');
+    env.DESKTOP_TRANSLATE_E2E_NATIVE_PROCESS_TRACE = join(userData, 'native-processes.log');
   }
   if (fetchMode) {
     env.DESKTOP_TRANSLATE_E2E_FETCH_MODE = fetchMode;
@@ -83,7 +91,27 @@ async function launch(
   nativeMode?: string,
   fetchMode?: FetchMode
 ): Promise<ElectronApplication> {
-  return electron.launch({ args: [appPath], env: environment(userData, nativeMode, fetchMode) });
+  const application = await electron.launch({
+    args: [appPath],
+    env: environment(userData, nativeMode, fetchMode),
+    timeout: 30_000
+  });
+  const childProcess = application.process();
+  const mainProcessId = await application.evaluate(() => process.pid);
+  applicationProcesses.set(application, childProcess);
+  applicationMainProcessIds.set(application, mainProcessId);
+  applicationExitTracePaths.set(
+    application,
+    join(userData, `electron-exit-events-${childProcess.pid ?? 'unknown'}.log`)
+  );
+  return application;
+}
+
+interface ElectronProcessIdentity {
+  readonly pid: number;
+  readonly type: string;
+  readonly executablePath: string;
+  readonly creationTime: number;
 }
 
 async function readJsonLines(path: string): Promise<readonly Record<string, unknown>[]> {
@@ -131,11 +159,398 @@ function corruptStoredBaiduCredentials(userData: string): void {
   }
 }
 
-async function quitApplication(application: ElectronApplication): Promise<void> {
-  if (application.process().exitCode !== null) return;
-  const closed = application.waitForEvent('close', { timeout: 30_000 });
-  await application.evaluate(() => globalThis.__desktopTranslateTestApi?.quit());
-  await closed;
+async function quitApplication(application: ElectronApplication, userData: string): Promise<void> {
+  const childProcess = applicationProcesses.get(application) ?? application.process();
+  const mainProcessId = applicationMainProcessIds.get(application);
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) return;
+  if (failedQuitApplications.has(application)) {
+    childProcess.kill();
+    await waitForChildExit(childProcess, 5_000);
+    return;
+  }
+  const exitTracePath = applicationExitTracePaths.get(application)
+    ?? join(userData, `electron-exit-events-${childProcess.pid ?? 'unknown'}.log`);
+  let electronProcessIdentities: readonly ElectronProcessIdentity[] = [];
+  let nativeHostProcessIdentities: readonly ElectronProcessIdentity[] = [];
+  try {
+    if (mainProcessId === undefined) throw new Error('Electron main-process PID was not captured.');
+    nativeHostProcessIdentities = await captureE2ENativeHostProcessIdentities(userData, mainProcessId);
+    electronProcessIdentities = await application.evaluate(({ app }, tracePath) => {
+      const identities = app.getAppMetrics().map((metric) => ({
+        pid: metric.pid,
+        type: metric.type,
+        executablePath: process.execPath,
+        creationTime: metric.creationTime
+      }));
+      const { appendFileSync } = process.getBuiltinModule('node:fs') as typeof import('node:fs');
+      const record = (event: string): void => appendFileSync(tracePath, `${event}\n`, 'utf8');
+      app.once('before-quit', () => record('before-quit'));
+      app.once('will-quit', () => record('will-quit'));
+      process.once('exit', (code) => record(`node-exit:${code}`));
+      app.once('quit', () => {
+        record('quit');
+        record('quit-listener-complete');
+      });
+      globalThis.__desktopTranslateTestApi?.quit();
+      return identities;
+    }, exitTracePath);
+    expect(electronProcessIdentities.some((identity) => identity.pid === mainProcessId)).toBe(true);
+    // Playwright's injected Node inspector can keep the Windows Main process
+    // and its GPU child alive after a complete product quit. Give every child a
+    // bounded natural-exit window, then clean up only the exact captured process
+    // identities from the parent harness. The trace proves the synchronous
+    // before-quit/will-quit/quit listener contract and Node's final exit event;
+    // all async product cleanup has already completed before finishShutdown.
+    // It is test-only Playwright/Windows cleanup, not product graceful-exit or
+    // PERF09 evidence.
+    await waitForProductExitTrace(exitTracePath, PRODUCT_EXIT_TIMEOUT_MS);
+    const lingeringNativeHosts = await waitForProcessIdentitiesContinuouslyGone(
+      nativeHostProcessIdentities,
+      5_000,
+      1_000
+    );
+    if (lingeringNativeHosts.length > 0) {
+      throw new Error(
+        `Native Host processes remained after product shutdown: ${lingeringNativeHosts.map((identity) => identity.pid).join(',')}.`
+      );
+    }
+    const childIdentities = electronProcessIdentities
+      .filter((identity) => identity.pid !== mainProcessId);
+    await waitForProcessIdentitiesContinuouslyGone(childIdentities, 5_000, 1_000);
+    const mainIdentity = electronProcessIdentities.find(
+      (identity) => identity.pid === mainProcessId
+    );
+    if (mainIdentity === undefined) throw new Error('Captured Electron Main identity is missing.');
+    for (const childIdentity of childIdentities) {
+      if (isProcessAlive(childIdentity.pid)) await stopExactWindowsProcess(childIdentity);
+    }
+    if (isProcessAlive(mainProcessId)) await stopExactWindowsProcess(mainIdentity);
+    await waitForProcessGone(mainProcessId, 5_000);
+    const lingeringChildren = await waitForProcessIdentitiesContinuouslyGone(
+      childIdentities,
+      5_000,
+      1_000
+    );
+    if (lingeringChildren.length > 0) {
+      throw new Error(
+        `Electron Chromium child processes remained after exact Main cleanup: ${lingeringChildren.map((identity) => `${identity.pid}:${identity.type}`).join(',')}.`
+      );
+    }
+    await waitForProcessIdsGone(
+      [...electronProcessIdentities, ...nativeHostProcessIdentities].map((identity) => identity.pid),
+      5_000
+    );
+    if (childProcess.exitCode === null && childProcess.signalCode === null) {
+      childProcess.kill();
+      await waitForChildExit(childProcess, 5_000);
+    }
+    await waitForUserDataLockRelease(userData, HARNESS_RESIDUAL_TIMEOUT_MS);
+  } catch (error) {
+    const nativeMethods = await readFile(join(userData, 'native-methods.log'), 'utf8')
+      .then((value) => value.trim().split(/\r?\n/u).filter(Boolean).join(','))
+      .catch(() => 'unavailable');
+    const exitEvents = await readFile(exitTracePath, 'utf8')
+      .then((value) => value.trim().split(/\r?\n/u).filter(Boolean).join(','))
+      .catch(() => 'unavailable');
+    const mainProcessAlive = mainProcessId === undefined ? 'unknown' : isProcessAlive(mainProcessId);
+    // Do not spend a second 30-second budget retrying the same failed exit from
+    // the test's finally block. Preserve the first diagnostic and clean up the
+    // exact Playwright child process directly.
+    failedQuitApplications.add(application);
+    let forcedCleanupError: unknown;
+    try {
+      const mainIdentity = electronProcessIdentities.find(
+        (identity) => identity.pid === mainProcessId
+      );
+      const childIdentities = electronProcessIdentities.filter(
+        (identity) => identity.pid !== mainProcessId
+      );
+      for (const nativeHostIdentity of nativeHostProcessIdentities) {
+        if (isProcessAlive(nativeHostIdentity.pid)) await stopExactWindowsProcess(nativeHostIdentity);
+      }
+      for (const childIdentity of childIdentities) {
+        if (isProcessAlive(childIdentity.pid)) await stopExactWindowsProcess(childIdentity);
+      }
+      if (mainIdentity !== undefined && isProcessAlive(mainIdentity.pid)) {
+        await stopExactWindowsProcess(mainIdentity);
+      }
+      await waitForProcessIdsGone(
+        [...electronProcessIdentities, ...nativeHostProcessIdentities].map((identity) => identity.pid),
+        5_000
+      );
+    } catch (cleanupError) {
+      forcedCleanupError = cleanupError;
+    }
+    childProcess.kill();
+    try {
+      await waitForChildExit(childProcess, 5_000);
+    } catch (cleanupError) {
+      forcedCleanupError = forcedCleanupError === undefined
+        ? cleanupError
+        : new AggregateError([forcedCleanupError, cleanupError], 'Harness cleanup failed.');
+    }
+    throw new Error(
+      `Electron did not close cleanly within the 30-second exit budget (wrapperPid=${childProcess.pid ?? 'unknown'}, mainPid=${mainProcessId ?? 'unknown'}, mainAlive=${mainProcessAlive}, wrapperExitCode=${childProcess.exitCode ?? 'running'}, exitEvents=${exitEvents}, nativeMethods=${nativeMethods}, forcedCleanup=${forcedCleanupError === undefined ? 'complete' : 'failed'}).`,
+      {
+        cause: forcedCleanupError === undefined
+          ? error
+          : new AggregateError([error, forcedCleanupError], 'Product exit and forced cleanup both failed.')
+      }
+    );
+  }
+}
+
+async function waitForProductExitTrace(path: string, timeoutMs: number): Promise<void> {
+  const expected = 'before-quit\nwill-quit\nnode-exit:0\nquit\nquit-listener-complete\n';
+  const deadline = Date.now() + timeoutMs;
+  let observed = '';
+  while (observed !== expected) {
+    try {
+      observed = await readFile(path, 'utf8');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    if (observed === expected) return;
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Electron product lifecycle did not complete within ${timeoutMs}ms (exitEvents=${observed.trim().replace(/\r?\n/gu, ',') || 'unavailable'}).`
+      );
+    }
+    await new Promise<void>((resolveWait) => setTimeout(resolveWait, 25));
+  }
+}
+
+async function captureE2ENativeHostProcessIdentities(
+  userData: string,
+  mainProcessId: number
+): Promise<readonly ElectronProcessIdentity[]> {
+  const tracePath = join(userData, 'native-processes.log');
+  let processIds: readonly number[];
+  try {
+    processIds = [...new Set(
+      (await readFile(tracePath, 'utf8'))
+        .trim()
+        .split(/\r?\n/u)
+        .filter(Boolean)
+        .map((value) => Number(value))
+        .filter((value) => Number.isSafeInteger(value) && value > 0)
+    )];
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw error;
+  }
+  if (processIds.length === 0) return [];
+  if (process.platform !== 'win32') {
+    throw new Error('Strict Native Host identity capture is only supported on Windows.');
+  }
+
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    '$expectedParent = [uint32]$env:DESKTOP_TRANSLATE_E2E_NATIVE_PARENT_PID',
+    '$expectedPath = [IO.Path]::GetFullPath($env:DESKTOP_TRANSLATE_E2E_NATIVE_PATH)',
+    "$ids = $env:DESKTOP_TRANSLATE_E2E_NATIVE_PIDS.Split(',', [StringSplitOptions]::RemoveEmptyEntries)",
+    'foreach ($idText in $ids) {',
+    '  $targetId = [uint32]$idText',
+    '  $cim = Get-CimInstance Win32_Process -Filter "ProcessId = $targetId" -ErrorAction SilentlyContinue',
+    '  if ($null -eq $cim) { continue }',
+    "  if ([uint32]$cim.ParentProcessId -ne $expectedParent) { throw 'Native Host parent PID mismatch.' }",
+    '  $target = Get-Process -Id $targetId -ErrorAction Stop',
+    '  $actualPath = [IO.Path]::GetFullPath($target.Path)',
+    "  if (-not [string]::Equals($actualPath, $expectedPath, [StringComparison]::OrdinalIgnoreCase)) { throw 'Native Host executable path mismatch.' }",
+    '  $creation = [DateTimeOffset]::new($target.StartTime.ToUniversalTime()).ToUnixTimeMilliseconds()',
+    "  [pscustomobject]@{ pid = [int]$targetId; type = 'native-host'; executablePath = $actualPath; creationTime = [long]$creation } | ConvertTo-Json -Compress",
+    '}'
+  ].join('; ');
+
+  return await new Promise<readonly ElectronProcessIdentity[]>((resolveCapture, rejectCapture) => {
+    const capture = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      env: {
+        ...process.env,
+        DESKTOP_TRANSLATE_E2E_NATIVE_PARENT_PID: String(mainProcessId),
+        DESKTOP_TRANSLATE_E2E_NATIVE_PATH: process.execPath,
+        DESKTOP_TRANSLATE_E2E_NATIVE_PIDS: processIds.join(',')
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true
+    });
+    let stdout = '';
+    let stderr = '';
+    capture.stdout?.setEncoding('utf8');
+    capture.stdout?.on('data', (chunk: string) => {
+      stdout = `${stdout}${chunk}`;
+    });
+    capture.stderr?.setEncoding('utf8');
+    capture.stderr?.on('data', (chunk: string) => {
+      stderr = `${stderr}${chunk}`.slice(-4_096);
+    });
+    capture.once('error', rejectCapture);
+    capture.once('exit', (code, signal) => {
+      if (code !== 0 || signal !== null) {
+        rejectCapture(new Error(
+          `Native Host identity capture failed (code=${code ?? 'null'}, signal=${signal ?? 'null'}, stderr=${stderr.trim() || 'unavailable'}).`
+        ));
+        return;
+      }
+      try {
+        resolveCapture(stdout.trim() === ''
+          ? []
+          : stdout.trim().split(/\r?\n/u).map((line) => JSON.parse(line) as ElectronProcessIdentity));
+      } catch (error) {
+        rejectCapture(new Error('Native Host identity capture returned invalid JSON.', { cause: error }));
+      }
+    });
+  });
+}
+
+async function waitForProcessIdentitiesContinuouslyGone(
+  identities: readonly ElectronProcessIdentity[],
+  timeoutMs: number,
+  stableMs: number
+): Promise<readonly ElectronProcessIdentity[]> {
+  const deadline = Date.now() + timeoutMs;
+  let zeroSince: number | undefined;
+  while (true) {
+    const alive = identities.filter((identity) => isProcessAlive(identity.pid));
+    if (alive.length === 0) {
+      zeroSince ??= Date.now();
+      if (Date.now() - zeroSince >= stableMs) return [];
+    } else {
+      zeroSince = undefined;
+    }
+    if (Date.now() >= deadline) return alive;
+    await new Promise<void>((resolveWait) => setTimeout(resolveWait, 25));
+  }
+}
+
+async function stopExactWindowsProcess(identity: ElectronProcessIdentity): Promise<void> {
+  if (process.platform !== 'win32') {
+    throw new Error('The strict Electron test-tail cleanup is only supported on Windows.');
+  }
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    '$targetId = [int]$env:DESKTOP_TRANSLATE_E2E_TARGET_PID',
+    '$expectedCreation = [long]$env:DESKTOP_TRANSLATE_E2E_TARGET_CREATION',
+    '$expectedPath = [IO.Path]::GetFullPath($env:DESKTOP_TRANSLATE_E2E_TARGET_PATH)',
+    '$target = Get-Process -Id $targetId -ErrorAction SilentlyContinue',
+    'if ($null -eq $target) { exit 0 }',
+    '$actualCreation = [DateTimeOffset]::new($target.StartTime.ToUniversalTime()).ToUnixTimeMilliseconds()',
+    '$actualPath = [IO.Path]::GetFullPath($target.Path)',
+    "if ([Math]::Abs([double]($actualCreation - $expectedCreation)) -gt 5) { throw 'Creation time mismatch.' }",
+    "if (-not [string]::Equals($actualPath, $expectedPath, [StringComparison]::OrdinalIgnoreCase)) { throw 'Executable path mismatch.' }",
+    'Stop-Process -InputObject $target -Force -ErrorAction Stop'
+  ].join('; ');
+  await new Promise<void>((resolveStop, rejectStop) => {
+    const cleanup = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      env: {
+        ...process.env,
+        DESKTOP_TRANSLATE_E2E_TARGET_PID: String(identity.pid),
+        DESKTOP_TRANSLATE_E2E_TARGET_CREATION: String(identity.creationTime),
+        DESKTOP_TRANSLATE_E2E_TARGET_PATH: identity.executablePath
+      },
+      stdio: ['ignore', 'ignore', 'pipe'],
+      windowsHide: true
+    });
+    let stderr = '';
+    cleanup.stderr?.setEncoding('utf8');
+    cleanup.stderr?.on('data', (chunk: string) => {
+      stderr = `${stderr}${chunk}`.slice(-4_096);
+    });
+    cleanup.once('error', rejectStop);
+    cleanup.once('exit', (code, signal) => {
+      if (code === 0 && signal === null) resolveStop();
+      else rejectStop(new Error(
+        `Exact process cleanup failed (pid=${identity.pid}, type=${identity.type}, code=${code ?? 'null'}, signal=${signal ?? 'null'}, stderr=${stderr.trim() || 'unavailable'}).`
+      ));
+    });
+  });
+}
+
+function isProcessAlive(processId: number): boolean {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+    throw error;
+  }
+}
+
+async function waitForProcessIdsGone(processIds: readonly number[], timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (processIds.some((processId) => isProcessAlive(processId))) {
+    if (Date.now() >= deadline) {
+      const alive = processIds.filter((processId) => isProcessAlive(processId));
+      throw new Error(`Electron harness processes remained alive: ${alive.join(',')}.`);
+    }
+    await new Promise<void>((resolveWait) => setTimeout(resolveWait, 25));
+  }
+}
+
+async function waitForChildExit(childProcess: ChildProcess, timeoutMs: number): Promise<void> {
+  if (childProcess.exitCode !== null || childProcess.signalCode !== null) return;
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    await Promise.race([
+      new Promise<void>((resolveExit) => childProcess.once('exit', () => resolveExit())),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error('Timed out waiting for killed Electron.')), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+async function waitForSecondaryInstanceExit(childProcess: ChildProcess): Promise<void> {
+  let timeout: NodeJS.Timeout | undefined;
+  try {
+    const result = await Promise.race([
+      new Promise<{ readonly code: number | null; readonly signal: NodeJS.Signals | null }>(
+        (resolveExit) => childProcess.once('exit', (code, signal) => resolveExit({ code, signal }))
+      ),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error('Second Electron instance did not exit within 30000ms.')),
+          30_000
+        );
+      })
+    ]);
+    expect(result).toEqual({ code: 0, signal: null });
+  } catch (error) {
+    childProcess.kill();
+    await waitForChildExit(childProcess, 5_000);
+    throw error;
+  } finally {
+    if (timeout !== undefined) clearTimeout(timeout);
+  }
+}
+
+async function waitForProcessGone(processId: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (isProcessAlive(processId)) {
+    if (Date.now() >= deadline) {
+      throw new Error(`Electron main process ${processId} remained alive for ${timeoutMs}ms.`);
+    }
+    await new Promise<void>((resolveWait) => setTimeout(resolveWait, 25));
+  }
+}
+
+async function waitForUserDataLockRelease(userData: string, timeoutMs: number): Promise<void> {
+  const lockPath = join(userData, 'lockfile');
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    try {
+      await rm(lockPath, { force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== 'EBUSY' && code !== 'EPERM') throw error;
+      if (Date.now() >= deadline) {
+        throw new Error(`Electron user-data lock remained held for ${timeoutMs}ms.`, { cause: error });
+      }
+      await new Promise<void>((resolveWait) => setTimeout(resolveWait, 50));
+    }
+  }
 }
 
 async function removeUserData(userData: string): Promise<void> {
@@ -288,8 +703,11 @@ test('Phase 2 shell stays usable without Native Host and persists UI settings @s
       stdio: 'ignore',
       windowsHide: true
     });
-    await new Promise<void>((resolveExit) => second.once('exit', () => resolveExit()));
-    await expect.poll(() => debugState(application!)).toMatchObject({ settingsVisible: true });
+    await waitForSecondaryInstanceExit(second);
+    await expect.poll(
+      () => debugState(application!),
+      { timeout: 10_000 }
+    ).toMatchObject({ settingsVisible: true });
 
     const downloadObserved = ball.waitForEvent('download', { timeout: 500 })
       .then(() => true, () => false);
@@ -306,7 +724,7 @@ test('Phase 2 shell stays usable without Native Host and persists UI settings @s
     await ball.evaluate((origin) => window.location.assign(`${origin}/navigation`), blockedOrigin);
     await expect.poll(() => ball.url()).toBe(originalUrl);
 
-    await quitApplication(application);
+    await quitApplication(application, userData);
     application = undefined;
 
     application = await launch(userData);
@@ -319,10 +737,11 @@ test('Phase 2 shell stays usable without Native Host and persists UI settings @s
     });
     await expectBallRendered(await findWindow(application, '桌面翻译悬浮球'));
   } finally {
-    if (application !== undefined) {
-      await quitApplication(application).catch(() => application?.process().kill());
+    try {
+      if (application !== undefined) await quitApplication(application, userData);
+    } finally {
+      await removeUserData(userData);
     }
-    await removeUserData(userData);
   }
 });
 
@@ -343,7 +762,7 @@ test('Native fixture reports degraded OCR while UIA selection remains listening 
     const settings = await findWindow(runningApplication, '桌面翻译设置');
     await expect(settings.getByText('原生服务：部分可用')).toBeVisible();
     await expect(settings.getByText('OCR 未配置')).toBeVisible();
-    await quitApplication(runningApplication);
+    await quitApplication(runningApplication, userData);
     application = undefined;
 
     const nativeMethods = (await readFile(join(userData, 'native-methods.log'), 'utf8'))
@@ -355,10 +774,11 @@ test('Native fixture reports degraded OCR while UIA selection remains listening 
     expect(nativeMethods.every((method) => ['hello', 'start', 'health', 'shutdown'].includes(method)))
       .toBe(true);
   } finally {
-    if (application !== undefined) {
-      await quitApplication(application).catch(() => application?.process().kill());
+    try {
+      if (application !== undefined) await quitApplication(application, userData);
+    } finally {
+      await removeUserData(userData);
     }
-    await removeUserData(userData);
   }
 });
 
@@ -396,7 +816,14 @@ test('Native selection event opens a sandboxed source-only card @smoke', async (
     })).toEqual({
       electron: 'undefined',
       ipcRenderer: 'undefined',
-      bridgeKeys: ['dismiss', 'getCurrent', 'onChanged', 'retry']
+      bridgeKeys: [
+        'acknowledgePaint',
+        'dismiss',
+        'getCurrent',
+        'onChanged',
+        'onPaintProbe',
+        'retry'
+      ]
     });
 
     expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
@@ -404,10 +831,11 @@ test('Native selection event opens a sandboxed source-only card @smoke', async (
     await card.getByRole('button', { name: '关闭识别结果' }).click();
     await expect.poll(() => debugState(runningApplication)).toMatchObject({ cardVisible: false });
   } finally {
-    if (application !== undefined) {
-      await quitApplication(application).catch(() => application?.process().kill());
+    try {
+      if (application !== undefined) await quitApplication(application, userData);
+    } finally {
+      await removeUserData(userData);
     }
-    await removeUserData(userData);
   }
 });
 
@@ -479,10 +907,11 @@ test('Phase 4 translation is fail-closed until credentials and consent are saved
     await expect(translationToggle).toBeDisabled();
     expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
   } finally {
-    if (application !== undefined) {
-      await quitApplication(application).catch(() => application?.process().kill());
+    try {
+      if (application !== undefined) await quitApplication(application, userData);
+    } finally {
+      await removeUserData(userData);
     }
-    await removeUserData(userData);
   }
 });
 
@@ -522,7 +951,7 @@ test('Phase 4 settings survive a full restart and credential deletion stays fail
     await expectEncryptedStorageDoesNotContain(userData, 'phase4-restart-secret');
     expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
 
-    await quitApplication(application);
+    await quitApplication(application, userData);
     application = await launch(userData, undefined, 'block');
     await waitForShell(application);
     await expect.poll(() => debugState(application!)).toMatchObject({
@@ -539,7 +968,7 @@ test('Phase 4 settings survive a full restart and credential deletion stays fail
     });
     expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
 
-    await quitApplication(application);
+    await quitApplication(application, userData);
     corruptStoredBaiduCredentials(userData);
     application = await launch(userData, undefined, 'block');
     await waitForShell(application);
@@ -583,7 +1012,7 @@ test('Phase 4 settings survive a full restart and credential deletion stays fail
     });
     expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
 
-    await quitApplication(application);
+    await quitApplication(application, userData);
     application = await launch(userData, undefined, 'block');
     await waitForShell(application);
     await expect.poll(() => debugState(application!)).toMatchObject({
@@ -600,10 +1029,11 @@ test('Phase 4 settings survive a full restart and credential deletion stays fail
     });
     expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
   } finally {
-    if (application !== undefined) {
-      await quitApplication(application).catch(() => application?.process().kill());
+    try {
+      if (application !== undefined) await quitApplication(application, userData);
+    } finally {
+      await removeUserData(userData);
     }
-    await removeUserData(userData);
   }
 });
 
@@ -680,9 +1110,10 @@ test('Phase 4 runs the translated card chain through the allowlisted Main transp
     expect(traceText).not.toContain('hello');
     expect(traceText).not.toContain('Phase 4 selection preview');
   } finally {
-    if (application !== undefined) {
-      await quitApplication(application).catch(() => application?.process().kill());
+    try {
+      if (application !== undefined) await quitApplication(application, userData);
+    } finally {
+      await removeUserData(userData);
     }
-    await removeUserData(userData);
   }
 });
