@@ -12,12 +12,15 @@
 不是新增产品功能的阶段；它把已经验收的本地取词与在线翻译闭环提升为可测量、可长时间运行、可打包、
 可审计和可签字发布的候选版本。
 
-截至 2026-07-19，Phase 4 已在 GitHub 合并 SHA `4ea65dc` 上完成历史验收。Phase 5 实现提交
-`a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea` 的 clean-HEAD `phase5:verify` 已完整退出 `0`，状态为
+截至 2026-07-19，Phase 4 已在 GitHub 合并 SHA `4ea65dc` 上完成历史验收。Phase 5 当前代码基线
+`6dae872fa7b7fbabe4e74b77b351c3390170d77a` 的 clean-HEAD `phase5:verify` 已完整退出 `0`，状态为
 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`、`strictPhase4Superset=true`、`worktreeDirty=false`、
-`acceptance=false`；同次 clean unsigned Dir package 的 build/package/startup/supply-chain 门禁通过，但应用与
-Host 均为 `NotSigned`，release 仍为 `RELEASE BLOCKED`。Desktop 308/308、Electron E2E 6/6、Native 2/2
-和 coverage 同次通过；远程 PR CI 仍待执行。
+`acceptance=false`。workspace 共发现 400 项，399 passed、1 skipped、0 failed；Desktop 34 files 共发现
+311 项，310 passed、1 skipped，Electron E2E 6/6、Native 2/2 和 coverage 同次通过。当前 clean unsigned
+Installer 已通过 package/startup/supply-chain 门禁，但应用、Native Host、Installer 均为 `NotSigned`、
+`acceptanceEligible=false`，release 仍为 `RELEASE BLOCKED`。`6dae872…` 的远程 Phase 1–5 自动门禁已在
+[Actions run 29684078146](https://github.com/Chatblanccc/desktop-translate/actions/runs/29684078146) 全部通过，
+其中 Phase 5 包含 15 分钟 deterministic short soak；该 unsigned PR lane 不替代正式验收。
 
 [PERF-09 final combined 2×5](../../artifacts/phase5/local/perf09-final-combined-2x5-20260719-0302/summary.json)、
 [15 秒产品 idle final hardened](../../artifacts/phase5/local/product-idle-final-hardened-dev-20260719-0326/summary.json)
@@ -230,11 +233,13 @@ PERF-08 的 `N=10` 时 nearest-rank p95 等于最大值，报告必须注明这�
 测试、coverage、Playwright、开发脚本、未使用 locale、绝对本地路径、真实凭据或调试截图；受控调试符号只
 能作为独立、限权 CI artifact 保存。
 
-当前 no-`SkipBuild` unsigned development package 已满足候选绝对体积：Dir installed `322.146 MiB`；Installer
-installed `322.249 MiB`、installer `87.741 MiB`；Host+non-Electron resources `0.74 MiB`。早期 Installer/Dir
-测量来自 dirty `HEAD+WORKTREE`；`a08cc6c…` 的 clean verify 已重新生成 clean unsigned Dir package，
-`developmentDirty=false`，但仍为 `acceptanceEligible=false`、`NotSigned`。这些结果只证明开发包预算与链路，
-不是最终 RC；clean signed Installer、attestation、clean-download 与 clean VM 仍未取得。
+当前 [`6dae872…` clean unsigned Dir](../../artifacts/phase5/6dae872/clean-verify-local-20260719-final1/package/release/evidence-manifest.json)
+与 [clean unsigned Installer](../../artifacts/phase5/6dae872/clean-installer-local-20260719-final1/release/evidence-manifest.json)
+均通过开发门禁。Installer canonical name 为 `Desktop-Translate-0.5.0-phase5-x64-setup.exe`，大小
+`92004551` bytes，SHA-256 为 `7886c7926d640c8e03a60350361a3f74f6dde1cae73f92ccf0a4de6d25a8a550`。
+两份 manifest 均为 `developmentDirty=false`、`acceptanceEligible=false`；应用、Native Host、Installer
+均为 `NotSigned`。这些结果只证明 clean unsigned 开发包预算与链路，不是最终 RC；签名、attestation、
+clean-download 与 clean VM 仍未取得。
 
 资源采样器以启动根进程和 Windows Job/process ancestry 跟踪完整进程树，不能靠进程名猜测或漏掉 Electron
 GPU、utility、crashpad 子进程。PID 只用于本次采样关联，写入 artifact 前删除或替换为稳定角色标识。

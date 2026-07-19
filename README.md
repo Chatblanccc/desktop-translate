@@ -3,10 +3,15 @@
 Windows 桌面划词助手。Phase 4 在线文本翻译闭环已于 2026-07-18 在合并提交
 `4ea65dcd5c5ef7c56127fe419127d48e0573a65d` 上以 `PASS WITH ACCEPTED RISKS` 验收；
 当前正在按已冻结计划执行 Phase 5 的测量、长稳、打包与发布门禁开发。仓库版本已切换为
-**`0.5.0-phase5` 开发候选**。实现提交 `a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea` 已完成 clean-HEAD
-本地 deterministic 严格超集验证，结果为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`；Desktop 308/308、
-Electron E2E 6/6、Native 2/2、coverage 及同次 clean unsigned Dir package 的构建、启动、供应链和隐私门禁通过。
-应用与 Native Host 均为 `NotSigned`，不具备发布资格；远程 PR CI 仍待执行。Phase 5 总状态仍为
+**`0.5.0-phase5` 开发候选**。当前代码基线 `6dae872fa7b7fbabe4e74b77b351c3390170d77a` 的 clean-HEAD
+本地 `phase5:verify` 已退出 `0`，结果为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`、
+`strictPhase4Superset=true`；workspace 共发现 400 项，399 passed、1 skipped、0 failed，Desktop 34 files
+共发现 311 项，310 passed、1 skipped。同一基线的 clean unsigned Installer 为
+`Desktop-Translate-0.5.0-phase5-x64-setup.exe`，大小 `92004551` bytes，SHA-256
+`7886c7926d640c8e03a60350361a3f74f6dde1cae73f92ccf0a4de6d25a8a550`；应用、Native Host 与 Installer
+均为 `NotSigned`、`acceptanceEligible=false`，不具备发布资格。`6dae872…` 的远程 Phase 1–5 自动门禁已在
+[Actions run 29684078146](https://github.com/Chatblanccc/desktop-translate/actions/runs/29684078146) 全部通过，
+其中 Phase 5 包含 15 分钟 deterministic short soak；这仍不等于正式验收。Phase 5 总状态仍为
 `NOT YET ACCEPTED / RELEASE BLOCKED`，在签名 RC、正式性能/长稳、clean VM、
 实机矩阵与发布签字完成前仍不是公开版本。
 

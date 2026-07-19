@@ -14,10 +14,11 @@
 | Phase 4 历史验收 | `HISTORICAL PASS` | 项目负责人确认已验收并在 GitHub 合并；当前环境重验不推翻历史结论 |
 | 隔离 `4ea65dc` instrumentation-only 基线 | `BASELINE GAP` | 旧的隔离重验曾在 graceful quit 阶段超时；当前 clean Phase 5 严格超集通过不替代同 buildMode、同 harness 的独立 Phase 4 性能基线 |
 | 当前 Phase 2 product-trigger smoke | `DEVELOPMENT PASS` | 2026-07-19 全套 3/3 通过；它支持当前开发回归，不替代 fixed-lab、签名包或正式 PERF-09 |
-| Desktop tests / coverage | `CLEAN-HEAD DEVELOPMENT PASS` | `a08cc6c…` clean run 中 Desktop 34 files / 308 tests 与 workspace coverage 通过 |
-| 全仓 typecheck / lint | `CLEAN-HEAD DEVELOPMENT PASS` | `a08cc6c…` clean run 中全仓 typecheck 与 lint 通过 |
+| Tests / coverage | `CLEAN-HEAD DEVELOPMENT PASS` | `6dae872…` clean run 中 workspace 400 discovered / 399 passed / 1 skipped / 0 failed；Desktop 34 files，311 discovered / 310 passed / 1 skipped；coverage 通过 |
+| 全仓 typecheck / lint | `CLEAN-HEAD DEVELOPMENT PASS` | `6dae872…` clean run 中全仓 typecheck 与 lint 通过 |
 | Native tests | `DEVELOPMENT PASS` | Native Windows tests 2/2 通过 |
-| `phase5:verify` deterministic gate | `CLEAN-HEAD PASS NOT ACCEPTANCE` | [`a08cc6c…` summary](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/verify-summary.json) 为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`、`strictPhase4Superset=true`、`worktreeDirty=false`、`acceptance=false` |
+| `phase5:verify` deterministic gate | `LOCAL + REMOTE PASS NOT ACCEPTANCE` | [`6dae872…` summary](../../artifacts/phase5/6dae872/clean-verify-local-20260719-final1/verify-summary.json) 为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`、`strictPhase4Superset=true`、`worktreeDirty=false`、`acceptance=false`；[remote run 29684078146](https://github.com/Chatblanccc/desktop-translate/actions/runs/29684078146) 的 15 分钟 deterministic short soak、mutation check 与 evidence upload 均通过 |
+| 当前 unsigned Installer | `CLEAN-HEAD DEVELOPMENT PACKAGE PASS / RELEASE BLOCKED` | [`6dae872…` manifest](../../artifacts/phase5/6dae872/clean-installer-local-20260719-final1/release/evidence-manifest.json) 绑定 canonical Installer `Desktop-Translate-0.5.0-phase5-x64-setup.exe`、`92004551` bytes、SHA-256 `7886c7926d640c8e03a60350361a3f74f6dde1cae73f92ccf0a4de6d25a8a550`；三项发布二进制均 `NotSigned`、`acceptanceEligible=false` |
 | 环境预检 | `DEVELOPMENT PREFLIGHT BLOCKED` | Profile B 的 Win11/CPU/RAM/单屏 150% DPI/`gh 2.96.0` 通过；独占会话、签名身份、self-hosted runners、protected environments 与 Actions role context 阻断 |
 | PERF-03 Host ready | `DEV 1×1 PASS / FORMAL BLOCKED` | 最新 packaged unsigned 样本 `118.648ms`，failure/forced termination 为 `0`；formal trust controller 未实现且未运行 signed fixed-lab 3×100 |
 | Provider runner | `DEVELOPMENT SELFTEST PASS / FORMAL BLOCKED` | health 路径可开发验证；fault/aggregate 在可信受控故障控制器实现前固定返回 `formal-fault-controller-not-implemented`，不会生成验收证据 |
@@ -64,13 +65,14 @@
 ## 开发期自动化（不替代正式验收）
 
 - [x] 2026-07-19 当前 Phase 2 product-trigger Playwright smoke 全套 3/3 通过。
-- [x] `a08cc6c…` clean-HEAD Desktop 34 files / 308 tests 与 workspace coverage 通过。
+- [x] `6dae872…` clean-HEAD workspace 400 discovered / 399 passed / 1 skipped / 0 failed；Desktop 34 files，
+  311 discovered / 310 passed / 1 skipped；workspace coverage 通过。
 - [x] 当前全仓 typecheck 通过。
 - [x] 当前 lint 通过。
-- [x] `a08cc6c…` 的 `phase4:verify` lint、全仓 typecheck、全部单元测试、workspace coverage 与 build 前置门禁通过。
+- [x] `6dae872…` 的 `phase4:verify` lint、全仓 typecheck、全部非失败测试、workspace coverage 与 build 前置门禁通过。
 - [x] 撤回快速 OCR availability 探测并恢复原始探测后，`dt_native_windows_tests` 独立通过，随后
   `phase4:verify` Native 2/2 通过。
-- [x] 2026-07-19 `a08cc6c…` 的 `pnpm phase4:verify` 从头完整退出 `0`；Electron E2E 6/6，Phase 2 为 3/3。
+- [x] 2026-07-19 `6dae872…` 的 `pnpm phase4:verify` 从头完整退出 `0`；Electron E2E 6/6，Phase 2 为 3/3。
 - [x] 当前产品退出实现释放 `releaseSingleInstanceLock`，进入 Electron app quit lifecycle，并由 quit listener
   调用 `app.exit` 收口退出尾部；失败证据落盘后的 harness cleanup 不计产品正常退出。
 - [x] 50 样本 metrics instrumentation smoke 通过；它只验证 instrumentation 路径，不替代 fixed-lab 三轮性能。
@@ -90,7 +92,7 @@
 - [x] [最新归档 deterministic verify](../../artifacts/phase5/local/acceptance-verify-rerun2-20260718-2300/verify-summary.json)
   未跳过 Phase 4 或 packaging，状态为 `DEVELOPMENT_GATE_PASS_NOT_ACCEPTANCE`；summary 明确记录
   `strictPhase4Superset=true`、`worktreeDirty=true`、`acceptance=false`，只支持该 dirty-source 开发快照。
-- [x] [`a08cc6c…` clean-HEAD deterministic verify](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/verify-summary.json)
+- [x] [`6dae872…` clean-HEAD deterministic verify](../../artifacts/phase5/6dae872/clean-verify-local-20260719-final1/verify-summary.json)
   完整退出 `0`，状态为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`，并明确记录
   `strictPhase4Superset=true`、`worktreeDirty=false`、`acceptance=false`。它证明该提交的 clean 本地门禁，
   不替代远程 CI 或 Phase 5 acceptance。
@@ -147,8 +149,9 @@
 - [ ] PERF-09 使用 `phase5:perf09` 对同一签名 package artifact 在登记设备完成 3×50；
   每轮 failure=0、p50 ≤2s、p95 ≤5s、max ≤10s。
 - [ ] 相同设备/模式相对基线回归不超过 10%。
-- [x] `a08cc6c…` clean worktree 的 Phase 1–4 正确率、latest-wins、取消、退出与隐私严格超集开发回归通过；
-  Electron E2E 6/6、Phase 2 3/3、Native 2/2。远程 CI 仍属发布缺口。
+- [x] `6dae872…` clean worktree 的 Phase 1–4 正确率、latest-wins、取消、退出与隐私严格超集开发回归通过；
+  Electron E2E 6/6、Phase 2 3/3、Native 2/2；[remote run 29684078146](https://github.com/Chatblanccc/desktop-translate/actions/runs/29684078146)
+  的 Phase 1–5 自动门禁全部通过。
 
 ## WP4：资源、长稳与故障
 
@@ -181,29 +184,31 @@
 - [ ] 项目自有 PE/installer Authenticode subject、chain、timestamp 一致且有效。
 - [ ] 篡改 PE/installer/manifest/checksum 被拒绝。
 - [x] 当前缺少正式证书，unsigned artifact 未被写成 RC，结论保持 `RELEASE BLOCKED`。
-- [x] no-`SkipBuild` [Dir 开发包](../../artifacts/phase5/local/acceptance-dir-rerun-20260718-2240/release/evidence-manifest.json)
-  全链通过：package/startup、packaged D8 helper、SBOM/provenance、ASAR/资源白名单、exact hash 与体积门禁
-  均为 PASS；installed `322.146 MiB`、Host+non-Electron resources `0.74 MiB`。
-- [x] no-`SkipBuild` [Installer 开发包](../../artifacts/phase5/local/acceptance-installer-rerun-20260718-2245/release/evidence-manifest.json)
-  全链通过；installed `322.249 MiB`、installer `87.741 MiB`、Host+non-Electron resources `0.74 MiB`。
-- [x] [`a08cc6c…` clean unsigned Dir package](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/package/release/evidence-manifest.json)
+- [x] [`6dae872…` clean unsigned Dir package](../../artifacts/phase5/6dae872/clean-verify-local-20260719-final1/package/release/evidence-manifest.json)
   记录 `developmentDirty=false`，build/package/startup/supply-chain PASS；应用与 Host 为 `NotSigned`，
   `acceptanceEligible=false`、release `RELEASE BLOCKED`。
+- [x] [`6dae872…` clean unsigned Installer](../../artifacts/phase5/6dae872/clean-installer-local-20260719-final1/release/evidence-manifest.json)
+  全链通过；canonical name 为 `Desktop-Translate-0.5.0-phase5-x64-setup.exe`，大小 `92004551` bytes，
+  SHA-256 为 `7886c7926d640c8e03a60350361a3f74f6dde1cae73f92ccf0a4de6d25a8a550`。应用 SHA-256 为
+  `5536f2a26226ac038ac7bcc64814aa306e66e483e90b15986a76c0afd8aaf3b7`，Native Host SHA-256 为
+  `8a8d8591524693933486f9497e4b2240b51eea0d813d1030c7fffd722ff94077`；三者均 `NotSigned`。
 - [x] prepared package 的 isolated startup/D8 smoke 连续
   [1](../../artifacts/phase5/local/clean-package-smoke-fixed-20260718-r1/package/startup-smoke.json) /
   [2](../../artifacts/phase5/local/clean-package-smoke-fixed-20260718-r2/package/startup-smoke.json) /
   [3](../../artifacts/phase5/local/clean-package-smoke-fixed-20260718-r3/package/startup-smoke.json) 三次通过；
   这些记录明确 `gracefulExitVerified=false`、`cleanVmInstallVerified=false`，不得扩大解释。
-- [ ] 将上述包提升为发布证据；早期 Installer/Dir 为 dirty，`a08cc6c…` Dir 虽为 clean source，仍
+- [ ] 将上述 clean unsigned 包提升为发布证据；`6dae872…` Dir/Installer 均
   `acceptanceEligible=false` 且 `NotSigned`，不能证明 clean VM、签名、attestation、clean-download 或发布资格。
 - [ ] 在最终候选 clean source 上重建 package/installer，并完成签名、attestation 与 clean-download 验证。
 
 ## WP6：CI 与发布门禁
 
-- [x] `a08cc6c…` 的 `pnpm phase5:verify` 是 Phase 4 严格超集并在 clean source 本地退出 `0`；
+- [x] `6dae872…` 的 `pnpm phase5:verify` 是 Phase 4 严格超集并在 clean source 本地退出 `0`；
   `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE` 不等于正式验收。
 - [x] fail-closed runner、package hardening 与报告更新形成候选后，已在 clean source 本地重跑同一完整门禁。
-- [ ] PR deterministic workflow 在 fresh runner 退出 `0`，不读取真实 Provider/签名 secret。
+- [x] `6dae872…` PR deterministic workflow 在 fresh runner 退出 `0`，不读取真实 Provider/签名 secret；
+  [run 29684078146](https://github.com/Chatblanccc/desktop-translate/actions/runs/29684078146) 的 15 分钟 short soak、
+  mutation check 与 evidence upload 均成功。该 unsigned PR lane 不替代 protected release/fixed-lab gate。
 - [ ] 真实 external fork 取得零 secret 证据。
 - [ ] fixed-lab performance/soak workflow 绑定登记设备与实际 artifact hash。
 - [ ] protected tag/release environment、required checks、tag 规则和最小权限已配置；当前 inventory 为 runners=0、

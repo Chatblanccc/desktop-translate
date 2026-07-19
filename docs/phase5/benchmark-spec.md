@@ -51,10 +51,11 @@ registry，最新 PERF-09 证据明确记录 `deviceRegistrationId=unregistered-
 - [产品 idle 15 秒 final hardened 开发自测](../../artifacts/phase5/local/product-idle-final-hardened-dev-20260719-0326/summary.json)
   记录 15 samples / 90 role rows；UI command issued、root exit `0`、forced=false，residual、WER、evidence
   privacy、final binary privacy 与 isolated cleanup 全 PASS。它不是正式 900 秒/5 秒采样证据。
-- no-`SkipBuild` unsigned package 开发测量为：Dir installed `322.146 MiB`；Installer installed
-  `322.249 MiB`、installer `87.741 MiB`；Host+non-Electron resources `0.74 MiB`。早期两份 manifest 为
-  dirty `HEAD+WORKTREE`；[`a08cc6c…` clean verify](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/package/release/evidence-manifest.json)
-  已重建 clean unsigned Dir package，但仍为 `acceptanceEligible=false`、`NotSigned`。
+- 当前 [`6dae872…` clean unsigned Dir](../../artifacts/phase5/6dae872/clean-verify-local-20260719-final1/package/release/evidence-manifest.json)
+  与 [clean unsigned Installer](../../artifacts/phase5/6dae872/clean-installer-local-20260719-final1/release/evidence-manifest.json)
+  均通过开发门禁。Installer canonical name 为 `Desktop-Translate-0.5.0-phase5-x64-setup.exe`，大小
+  `92004551` bytes，SHA-256 为 `7886c7926d640c8e03a60350361a3f74f6dde1cae73f92ccf0a4de6d25a8a550`；
+  应用、Native Host、Installer 均为 `NotSigned`、`acceptanceEligible=false`，不能作为正式 benchmark RC。
 
 以上数据只证明当前 harness 与 development artifact 的可运行性；正式结论仍要求最终候选 clean/signed/attested
 artifact、登记设备、完整 run metadata、独占交互会话及冻结样本数。当前机器只有 Profile B 的单物理屏

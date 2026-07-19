@@ -6,10 +6,13 @@
 
 本目录是 V1 的架构与阶段验收基线。Phase 1 已确认协议、进程隔离和 Windows Native 可行性；Phase 2 已完成桌面壳层并以 `PASS WITH ACCEPTED RISKS` 验收；Phase 3 已完成 Native 划词、UIA/OCR 回退和 source-only 结果卡闭环，并以 `PASS WITH ACCEPTED RISKS` 完成本地验收。Phase 4 在此基线上完成默认关闭、BYOK、Main-only 网络的百度通用文本翻译，并于 2026-07-18 在 GitHub 合并提交 `4ea65dc` 上以 `PASS WITH ACCEPTED RISKS` 验收。未执行的真实故障与兼容性矩阵仍保持未勾选，作为明确接受风险继承到 Phase 5，不能描述为已经执行。
 
-Phase 5 实现提交 `a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea` 已取得 clean-HEAD 本地 deterministic/Phase 4
-严格超集通过证据，状态为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`；Desktop 308/308、Electron E2E 6/6、
-Native 2/2、coverage 与同次 clean unsigned Dir package 通过开发门禁，但未签名且 `acceptance=false`。
-本地门禁已重跑，远程 PR CI 仍待执行。
+Phase 5 当前代码基线 `6dae872fa7b7fbabe4e74b77b351c3390170d77a` 已取得 clean-HEAD 本地
+`DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE` 证据，且 `strictPhase4Superset=true`、`acceptance=false`。
+workspace 共发现 400 项，399 passed、1 skipped、0 failed；Desktop 34 files 共发现 311 项，310 passed、
+1 skipped。当前 clean unsigned Installer 已完成 package/startup/supply-chain 门禁，但应用、Native Host 与
+Installer 均为 `NotSigned`、`acceptanceEligible=false`。`6dae872…` 的远程 Phase 1–5 自动门禁已在
+[Actions run 29684078146](https://github.com/Chatblanccc/desktop-translate/actions/runs/29684078146) 全部通过，
+其中 Phase 5 包含 15 分钟 deterministic short soak；这仍不等于正式验收。
 当前 PERF-09 2×5、15 秒产品 idle 和 PERF-03 packaged 1×1（`118.648ms`、failure/forced termination 为 `0`）
 也都只是 development/non-acceptance 证据；formal PERF-03 在可信运行/指标/发布者/证据命名空间控制器完成前
 固定阻断。正式 fixed-lab、PERF-09 3×50、PERF-03 3×100、900 秒 idle、
@@ -18,8 +21,9 @@ Lane A/B 8 小时、签名/attestation/clean-download、clean VM、兼容矩阵�
 环境预检已确认本机 Profile B 的 Windows 11、CPU/RAM、单物理屏 150% DPI 与 `gh 2.96.0` 工具能力；
 代码签名身份、自托管 runners、`phase5-lane-b`/`phase5-release` 受保护环境和正式 Actions role context 仍阻断。
 Provider 开发自测已通过，但正式 fault/aggregate 因尚无可独立验证的受控故障控制器而稳定阻断；真实百度账号也尚未形成正式证据。
-验收决议工具覆盖 43/43 冻结 gate，但当前 43 个生产 source validator 全部 fail closed；非 `PENDING`
-角色记录也因 approval receipt verifier 未实现而阻断，任何自报或相互哈希绑定的 JSON 都不能形成批准。
+验收决议工具覆盖 43/43 冻结 gate；当前生产 source validator 为 `1/43 IMPLEMENTED / 42 BLOCKED`，
+其余 42 个返回 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`。非 `PENDING` 角色记录也因 approval receipt
+verifier 未实现而阻断，任何自报或相互哈希绑定的 JSON 都不能形成批准。
 
 ## 文档
 
