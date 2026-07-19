@@ -53,7 +53,7 @@ registry，最新 PERF-09 证据明确记录 `deviceRegistrationId=unregistered-
   privacy、final binary privacy 与 isolated cleanup 全 PASS。它不是正式 900 秒/5 秒采样证据。
 - no-`SkipBuild` unsigned package 开发测量为：Dir installed `322.146 MiB`；Installer installed
   `322.249 MiB`、installer `87.741 MiB`；Host+non-Electron resources `0.74 MiB`。早期两份 manifest 为
-  dirty `HEAD+WORKTREE`；[`3443d875…` clean verify](../../artifacts/phase5/3443d87598d15b697468b0b66755c7e808b76607/clean-verify-local-20260719-rerun1/package/release/evidence-manifest.json)
+  dirty `HEAD+WORKTREE`；[`a08cc6c…` clean verify](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/package/release/evidence-manifest.json)
   已重建 clean unsigned Dir package，但仍为 `acceptanceEligible=false`、`NotSigned`。
 
 以上数据只证明当前 harness 与 development artifact 的可运行性；正式结论仍要求最终候选 clean/signed/attested

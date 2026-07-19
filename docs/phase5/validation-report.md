@@ -19,12 +19,12 @@ Phase 4 已由项目负责人确认验收通过并在 GitHub 合并，验收代�
 `4ea65dcd5c5ef7c56127fe419127d48e0573a65d`。旧 SHA 的隔离重验失败只保留为 instrumentation-only
 baseline gap，不推翻 Phase 4 历史验收，也不再阻塞当前 Phase 5 工作区的严格超集开发回归。
 
-提交 `3443d87598d15b697468b0b66755c7e808b76607` 的 clean-HEAD `pnpm phase5:verify` 已完整退出 `0`，
+实现提交 `a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea` 的 clean-HEAD `pnpm phase5:verify` 已完整退出 `0`，
 Electron E2E 6/6、Phase 2 product-trigger 3/3、Native 2/2，summary 为
 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`、`strictPhase4Superset=true`、`worktreeDirty=false`、
 `acceptance=false`。同次 clean unsigned Dir package 的 build/package/startup/supply-chain 门禁通过，但应用与
-Host 为 `NotSigned`、`acceptanceEligible=false`，release 仍为 `RELEASE BLOCKED`。该提交之后新增的实现需要在
-新提交上重新执行 clean 本地门禁与远程 CI。
+Host 为 `NotSigned`、`acceptanceEligible=false`，release 仍为 `RELEASE BLOCKED`。Desktop 308/308、coverage
+与正式 runner/hardening selftests 同次通过；远程 PR CI 仍待执行。
 
 PERF-09 2×5、15 秒产品 idle 与 PERF-03 packaged 1×1 开发运行均通过；最新 PERF-03 单样本为
 `118.648ms`、failure=0、forced termination=0。这些缩减运行均为 unsigned/non-acceptance；formal
@@ -48,16 +48,16 @@ context 阻断；没有把工具或 runner 实现写成正式验收通过。
 | Phase 4 历史验收 | `HISTORICAL PASS` | 项目负责人确认 Phase 4 已验收并在 GitHub 合并；以 [Phase 4 验证报告](../phase4/validation-report.md)及已合并记录为历史依据 |
 | 隔离旧 SHA instrumentation-only baseline | `BASELINE GAP` | 独立 checkout `4ea65dc` 的旧运行在 graceful quit 阶段超时；因此尚无同 buildMode、同 harness 的正式 Phase 4 三轮性能基线 |
 | 对历史结论的影响 | `NONE` | 本机重验阻塞是当前环境/退出时序的待调查项，不回写或撤销 Phase 4 已完成的历史验收 |
-| 对 Phase 5 的影响 | `BASELINE GAP, NOT CURRENT REGRESSION BLOCKER` | `3443d875…` clean Phase 5 严格超集已经通过；旧失败仍阻止 Phase 4→5 正式相对性能结论，但不再阻止开发回归继续 |
+| 对 Phase 5 的影响 | `BASELINE GAP, NOT CURRENT REGRESSION BLOCKER` | `a08cc6c…` clean Phase 5 严格超集已经通过；旧失败仍阻止 Phase 4→5 正式相对性能结论，但不再阻止开发回归继续 |
 
 ## 4. 当前工作区开发期验证
 
 | Gate | 当前结果 | 证据等级与限制 |
 |---|---|---|
 | 当前 Phase 2 product-trigger Playwright smoke | `DEVELOPMENT PASS` | 2026-07-19 全套 3/3 通过；随完整 `phase4:verify` 归档的 Electron E2E 总计 6/6 |
-| Desktop tests / coverage | `CLEAN-HEAD DEVELOPMENT PASS` | `3443d875…` clean run 中 Desktop 34 files / 298 tests、行覆盖率 95.53% 与 workspace coverage 通过；后续修改仍需新 clean run |
-| 全仓 typecheck | `CLEAN-HEAD DEVELOPMENT PASS` | `3443d875…` clean run 通过；后续修改仍需新 clean run |
-| Lint | `CLEAN-HEAD DEVELOPMENT PASS` | `3443d875…` clean run 通过 |
+| Desktop tests / coverage | `CLEAN-HEAD DEVELOPMENT PASS` | `a08cc6c…` clean run 中 Desktop 34 files / 308 tests 与 workspace coverage 通过 |
+| 全仓 typecheck | `CLEAN-HEAD DEVELOPMENT PASS` | `a08cc6c…` clean run 通过 |
+| Lint | `CLEAN-HEAD DEVELOPMENT PASS` | `a08cc6c…` clean run 通过 |
 | 当前 Phase 5 `phase4:verify` 前置 gates | `DEVELOPMENT PASS` | lint、全仓 typecheck、全部单元测试、workspace coverage 与 build 通过 |
 | 当前 Phase 5 `phase4:verify` Native gate | `DEVELOPMENT PASS AFTER REVERT` | 快速 OCR availability 探测在 `[windows-tests] OCR availability` 后触发 LLVM-MinGW SegFault，因此该优化已撤回并恢复原始探测；`dt_native_windows_tests` 独立通过，随后 `phase4:verify` Native 2/2 通过 |
 | 当前 Phase 5 退出路径 | `DEVELOPMENT PASS / FORMAL NOT RUN` | 产品退出实现释放 `releaseSingleInstanceLock`，进入 Electron app quit lifecycle，并在 quit listener 中调用 `app.exit` 收口尾部进程；Phase 2 3/3，PERF-09 2×5 使用 Ball 真实退出命令，10/10 成功、failure=0、forced cleanup=0。正式 signed artifact 3×50 未运行 |
@@ -68,8 +68,8 @@ context 阻断；没有把工具或 runner 实现写成正式验收通过。
 | 产品 idle runner | `DEV 15s PASS / FORMAL NOT RUN` | DPI-aware 枚举唯一 Ball，绑定同 PID popup 的 geometry/foreground/point 后用 `SendInput` click；exact process handle 读取 root exit code 并约束后置 cleanup。最新运行 UI command issued、root exit `0`、forced=false；正式口径固定为 900 秒/5 秒 |
 | Process/privacy/release hardening | `DEVELOPMENT PASS` | process/privacy 与 release hardening selftests 通过；旧 `dist` 在 stable repository lock、目录/逐文件 lease 下原子移入 quarantine 并保留；新包先在 unique staging 通过全部 gate，再经根 exact-set 发布和 live hash 复核，失败树移出 canonical 路径并保留；只证明门禁实现，不替代最终候选 clean artifact、clean VM 或签名验证 |
 | Lane identity/policy selftests | `DEVELOPMENT PASS` | 7/7 通过；证明 Lane A policy 与 attested artifact identity、Lane B clean-download preflight 的 fail-closed 实现，不能替代两条正式 lane |
-| 完整 Phase 4 strict-superset gate | `CLEAN-HEAD DEVELOPMENT PASS` | `3443d875…` clean `phase5:verify` 内完整执行；Electron E2E 6/6、Phase 2 3/3、Native 2/2。当前后续修改仍需新 clean run 与远程 CI |
-| 完整 Phase 5 deterministic gate | `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE` | [`3443d875…` summary](../../artifacts/phase5/3443d87598d15b697468b0b66755c7e808b76607/clean-verify-local-20260719-rerun1/verify-summary.json) 为 `strictPhase4Superset=true`、`worktreeDirty=false`、`acceptance=false`；只证明该 clean commit 的开发门禁 |
+| 完整 Phase 4 strict-superset gate | `CLEAN-HEAD DEVELOPMENT PASS` | `a08cc6c…` clean `phase5:verify` 内完整执行；Electron E2E 6/6、Phase 2 3/3、Native 2/2。远程 CI 仍待执行 |
+| 完整 Phase 5 deterministic gate | `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE` | [`a08cc6c…` summary](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/verify-summary.json) 为 `strictPhase4Superset=true`、`worktreeDirty=false`、`acceptance=false`；只证明该 clean commit 的开发门禁 |
 | 环境 preflight | `BLOCKED` | Profile B 的 Win11 build 26200 x64、16 logical CPU、rounded 16 GiB、单物理屏 150% DPI 与 `gh 2.96.0` 能力通过；独占会话声明、Authenticode identity、runner labels、protected environments 与 Actions role context 阻断 |
 | Windows packaged UI 快检 | `MANUAL DEVELOPMENT QA PASS` | Ball、Settings、Native service 与 `0.5.0-phase5` 版本面可用；正常 UI 退出后 exact package process 为 0；发现并修正设置页 Phase 4 副标题。无 signed RC/clean VM/完整矩阵，不能升级为正式证据 |
 | 验收决议 scaffold | `SELFTEST PASS / FORMAL BLOCKED` | 43/43 gate registry；生产 source validator 为 `0/43`，全部 43 个明确 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`；非 `PENDING` 角色记录也固定返回 `APPROVAL_RECEIPT_VERIFIER_NOT_IMPLEMENTED`，因此自洽 JSON 或自报签字都不可能生成 APPROVE |
@@ -84,8 +84,8 @@ idle/退出报告中的产品正常退出只由已绑定 UI command、exact proc
 
 | Artifact / Gate | 状态 | 可支持的结论 | 不可支持的结论 |
 |---|---|---|---|
-| [`3443d875…` clean deterministic verify](../../artifacts/phase5/3443d87598d15b697468b0b66755c7e808b76607/clean-verify-local-20260719-rerun1/verify-summary.json) | `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE` | clean HEAD、Phase 4 strict superset、unsigned package、audit、residual 与 privacy gate 通过 | Phase 5 acceptance、signed RC、formal PERF/RES、Lane 或兼容矩阵；`acceptance=false` |
-| [`3443d875…` clean unsigned Dir package](../../artifacts/phase5/3443d87598d15b697468b0b66755c7e808b76607/clean-verify-local-20260719-rerun1/package/release/evidence-manifest.json) | `DEVELOPMENT PACKAGE PASS / RELEASE BLOCKED` | `developmentDirty=false`，package/startup/supply-chain PASS | signed RC 或 clean VM；应用/Host `NotSigned`、`acceptanceEligible=false` |
+| [`a08cc6c…` clean deterministic verify](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/verify-summary.json) | `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE` | clean HEAD、Phase 4 strict superset、unsigned package、audit、residual 与 privacy gate 通过 | Phase 5 acceptance、signed RC、formal PERF/RES、Lane 或兼容矩阵；`acceptance=false` |
+| [`a08cc6c…` clean unsigned Dir package](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/package/release/evidence-manifest.json) | `DEVELOPMENT PACKAGE PASS / RELEASE BLOCKED` | `developmentDirty=false`，package/startup/supply-chain PASS；installed 322.15 MiB | signed RC 或 clean VM；应用/Host `NotSigned`、`acceptanceEligible=false` |
 | [开发期 verify summary](../../artifacts/phase5/4ea65dcd5c5ef7c56127fe419127d48e0573a65d/verify-local-20260718T080235704Z/verify-summary.json) | `DEVELOPMENT_SMOKE_PASS_NOT_ACCEPTANCE` | metrics/resource 接口、短 Lane A 调度、残留与隐私扫描链路可运行 | Phase 4 严格超集、正式 PERF/RES、Lane A 真实产品 8h 或 Phase 5 验收；该文件明确记录 `worktreeDirty=true`、`strictPhase4Superset=false`、`acceptance=false` |
 | [最新归档 deterministic verify](../../artifacts/phase5/local/acceptance-verify-rerun2-20260718-2300/verify-summary.json) | `DEVELOPMENT_GATE_PASS_NOT_ACCEPTANCE` | 未跳过 Phase 4 或 packaging；strict superset、unsigned package、audit、process/privacy、residual 与证据隐私链路退出 `0` | Phase 5 acceptance；summary 明确记录 `strictPhase4Superset=true`、`worktreeDirty=true`、`acceptance=false` |
 | [PERF-03 packaged 1×1](../../artifacts/phase5/local/perf03-host-ready-lease-dev-20260719T060500404Z/summary.json) | `DEVELOPMENT_SELFTEST_PASS_NOT_ACCEPTANCE` | p50/p95/max `118.648ms`、failure=0、forced termination=0、postflight/privacy PASS；cleanup 以同 PID Ball/菜单和 UIA Invoke 唯一 Exit 项完成 | formal PERF-03；1×1、unsigned、未登记设备且非独占会话不能代替 signed fixed-lab 3×100，且 formal trust controller 尚未实现 |
@@ -114,13 +114,13 @@ packaged test endpoint 与 action driver 未实现，因此 runner 正确返回 
 
 | 正式 gate | 状态 | 缺失证据 |
 |---|---|---|
-| Phase 4 strict-superset rerun | `CLEAN LOCAL PASS / CURRENT COMMIT + REMOTE CI PENDING` | `3443d875…` clean 本地完整退出 `0`；当前后续修改仍需新 clean run，远程无关键 skip 归档也未完成。独立 instrumentation-only Phase 4 baseline 仍是另一项 gap |
+| Phase 4 strict-superset rerun | `CLEAN LOCAL PASS / REMOTE CI PENDING` | `a08cc6c…` clean 本地完整退出 `0`；远程无关键 skip 归档尚未完成。独立 instrumentation-only Phase 4 baseline 仍是另一项 gap |
 | PERF-01–07/09 fixed-lab | `BLOCKED / NOT RUN` | PERF-03 runner 已有 1×1 开发 PASS，但 formal trust controller 未实现，3×100 未运行；其余登记设备三轮也未运行。PERF-09 最新 2×5 不能代替同一签名 artifact 的 3×50 |
 | Lane A 真实产品 8h | `BLOCKED / NOT IMPLEMENTED` | 先实现受 attestation 约束的 runtime-control contract、test-only packaged endpoint 与 action driver，再用 release-equivalent test artifact 运行真实产品进程和完整 8 小时报告 |
 | Lane B 最终签名 RC 8h | `BLOCKED` | 已批准 subject 的签名 RC、专用交互会话、真实 UIA/OCR、UIA ≥600、OCR ≥300 |
 | 900 秒 idle 资源门禁 | `NOT RUN` | 最新 15 秒开发自测通过；正式仍须产品完整进程树按 5 秒间隔采样 900 秒并满足 CPU/内存/handle 阈值 |
 | 8 小时资源趋势 | `NOT RUN` | 产品完整进程树的 8 小时 CPU/内存/handle、WER、残留与趋势报告 |
-| no-SkipBuild package | `CLEAN DIR DEVELOPMENT PASS / SIGNED INSTALLER BLOCKED` | `3443d875…` clean unsigned Dir package 通过；早期 Installer 通过开发门禁但 source dirty。最终候选 clean signed Installer、attestation、clean-download 和 clean VM 未完成 |
+| no-SkipBuild package | `CLEAN DIR DEVELOPMENT PASS / SIGNED INSTALLER BLOCKED` | `a08cc6c…` clean unsigned Dir package 通过；早期 Installer 通过开发门禁但 source dirty。最终候选 clean signed Installer、attestation、clean-download 和 clean VM 未完成 |
 | Authenticode 与发布绑定 | `BLOCKED` | 项目自有 PE/installer 的 subject、chain、timestamp、签名后 exact-set/hash 和 clean-download 验证 |
 | GitHub release infrastructure | `BLOCKED` | 本机 `gh 2.96.0` 工具能力通过，但匹配 LaneA/LaneB/Perf/Release 的 online runners 为 0；`phase5-lane-b`/`phase5-release` environments 不存在，rulesets=0 且 `main` 未保护 |
 | clean VM 安装/升级/卸载 | `NOT RUN` | 标准用户 per-user NSIS 安装、启动、修复、覆盖升级、普通卸载保留数据、重装与显式清除 |
@@ -162,11 +162,10 @@ clean VM 与硬件矩阵 gate 仍为非 PASS；同时 43 个 gate 均缺少可�
 
 当前判定为 `NOT YET ACCEPTED / RELEASE BLOCKED`。
 
-`3443d875…` clean-HEAD 的 lint、全仓 typecheck、workspace coverage、Desktop 298 tests / 95.53% 行覆盖、
-Native 2/2、Phase 2 3/3、Electron E2E 6/6、严格 Phase 4 超集与 clean unsigned Dir package 支持继续开发。
-当前工作树 Desktop 34 files / 308 tests 的定向回归也通过，仍待新 clean commit 复跑。PERF-03 1×1、
+`a08cc6c…` clean-HEAD 的 lint、全仓 typecheck、workspace coverage、Desktop 308/308、Native 2/2、
+Phase 2 3/3、Electron E2E 6/6、严格 Phase 4 超集与 clean unsigned Dir package 支持继续开发。PERF-03 1×1、
 PERF-09 2×5、15 秒产品 idle、Provider/环境/决议 runner selftests 与 Windows UI 快检同样提供
-开发期证据，但都不是 acceptance。当前后续修改的新 clean/远程 deterministic gate、固定机 PERF-01–09、
+开发期证据，但都不是 acceptance。远程 deterministic gate、固定机 PERF-01–09、
 PERF-03 3×100、PERF-09 3×50、900 秒 idle、真实产品 Lane A 8 小时、最终签名 RC Lane B、clean VM、
 硬件/应用矩阵、真实 Provider、attestation/clean-download、43 个未实现可信 source validator、approval receipt
 verifier 与 formal PERF-03 trust controller 仍未完成。

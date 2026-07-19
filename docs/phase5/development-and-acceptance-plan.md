@@ -12,12 +12,12 @@
 不是新增产品功能的阶段；它把已经验收的本地取词与在线翻译闭环提升为可测量、可长时间运行、可打包、
 可审计和可签字发布的候选版本。
 
-截至 2026-07-19，Phase 4 已在 GitHub 合并 SHA `4ea65dc` 上完成历史验收。Phase 5 提交
-`3443d87598d15b697468b0b66755c7e808b76607` 的 clean-HEAD `phase5:verify` 已完整退出 `0`，状态为
+截至 2026-07-19，Phase 4 已在 GitHub 合并 SHA `4ea65dc` 上完成历史验收。Phase 5 实现提交
+`a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea` 的 clean-HEAD `phase5:verify` 已完整退出 `0`，状态为
 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`、`strictPhase4Superset=true`、`worktreeDirty=false`、
 `acceptance=false`；同次 clean unsigned Dir package 的 build/package/startup/supply-chain 门禁通过，但应用与
-Host 均为 `NotSigned`，release 仍为 `RELEASE BLOCKED`。该提交之后新增的 PERF-03、Provider、环境预检、
-验收决议和 UI 修订仍需在新提交上重新执行 clean 本地门禁与远程 CI。
+Host 均为 `NotSigned`，release 仍为 `RELEASE BLOCKED`。Desktop 308/308、Electron E2E 6/6、Native 2/2
+和 coverage 同次通过；远程 PR CI 仍待执行。
 
 [PERF-09 final combined 2×5](../../artifacts/phase5/local/perf09-final-combined-2x5-20260719-0302/summary.json)、
 [15 秒产品 idle final hardened](../../artifacts/phase5/local/product-idle-final-hardened-dev-20260719-0326/summary.json)
@@ -232,7 +232,7 @@ PERF-08 的 `N=10` 时 nearest-rank p95 等于最大值，报告必须注明这�
 
 当前 no-`SkipBuild` unsigned development package 已满足候选绝对体积：Dir installed `322.146 MiB`；Installer
 installed `322.249 MiB`、installer `87.741 MiB`；Host+non-Electron resources `0.74 MiB`。早期 Installer/Dir
-测量来自 dirty `HEAD+WORKTREE`；`3443d875…` 的 clean verify 已重新生成 clean unsigned Dir package，
+测量来自 dirty `HEAD+WORKTREE`；`a08cc6c…` 的 clean verify 已重新生成 clean unsigned Dir package，
 `developmentDirty=false`，但仍为 `acceptanceEligible=false`、`NotSigned`。这些结果只证明开发包预算与链路，
 不是最终 RC；clean signed Installer、attestation、clean-download 与 clean VM 仍未取得。
 

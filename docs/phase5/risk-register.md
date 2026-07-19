@@ -38,14 +38,14 @@
 - Phase 4 已由项目负责人确认历史验收通过并在 GitHub 合并，验收 SHA 为 `4ea65dc`。旧 SHA 的隔离
   instrumentation-only 重验失败仍构成相对性能 baseline gap，但不推翻历史结论，也不再阻塞当前 clean
   Phase 5 严格超集开发回归。
-- 当前 lint、全仓 typecheck 与 Desktop 34 files / 308 tests 通过；`3443d875…` clean 归档的 workspace coverage
-  与行覆盖率为 95.53%，Native 2/2 通过；官方 npm audit 为 Critical=0、High=0，50 样本 metrics instrumentation smoke、
+- 当前 `a08cc6c…` clean-HEAD lint、全仓 typecheck、workspace coverage 与 Desktop 34 files / 308 tests 通过，
+  Native 2/2、Electron E2E 6/6 通过；官方 npm audit 为 Critical=0、High=0，50 样本 metrics instrumentation smoke、
   process/privacy、release hardening 与 Lane identity/policy 7/7 selftests 通过。这些均是开发期证据。
 - 快速 OCR availability 探测触发 Native Windows test SegFault，已撤回并恢复原始探测；退出侧不稳定试验也已
-  撤回。[`3443d875…` clean deterministic verify](../../artifacts/phase5/3443d87598d15b697468b0b66755c7e808b76607/clean-verify-local-20260719-rerun1/verify-summary.json)
+  撤回。[`a08cc6c…` clean deterministic verify](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/verify-summary.json)
   完整退出 `0`，Electron E2E 6/6、Phase 2 3/3、Native 2/2，状态为
   `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`、`strictPhase4Superset=true`、`worktreeDirty=false`、
-  `acceptance=false`。该提交后的修改仍需新 clean run 与远程 CI。
+  `acceptance=false`。远程 CI 仍待执行。
 - 完整 evidence roots 复扫曾暴露 canonical privacy report 的 `findingCounts.absolutePath` 自引用假阳性；scanner
   仅精确豁免 schema-valid 且内部一致的 `1.1.0` canonical 计数器，普通或伪造 `absolutePath` 仍 fail closed。
   修复后 [privacy-meta rescan](../../artifacts/phase5/local/privacy-meta-rescan-20260719-0348/privacy-evidence.json)
@@ -94,7 +94,7 @@
 - no-`SkipBuild` [Dir](../../artifacts/phase5/local/acceptance-dir-rerun-20260718-2240/release/evidence-manifest.json)
   与 [Installer](../../artifacts/phase5/local/acceptance-installer-rerun-20260718-2245/release/evidence-manifest.json)
   开发包均已通过 production build、startup/D8、SBOM/provenance、ASAR/资源白名单、exact hash 与体积门禁；
-  prepared package startup/D8 smoke 另有连续 3/3 通过。另有 [`3443d875…` clean unsigned Dir package](../../artifacts/phase5/3443d87598d15b697468b0b66755c7e808b76607/clean-verify-local-20260719-rerun1/package/release/evidence-manifest.json)
+  prepared package startup/D8 smoke 另有连续 3/3 通过。另有 [`a08cc6c…` clean unsigned Dir package](../../artifacts/phase5/a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea/clean-verify-local-20260719-final1/package/release/evidence-manifest.json)
   记录 `developmentDirty=false` 且 package/startup/supply-chain PASS；但所有当前可用包仍
   `acceptanceEligible=false`，应用/Host/installer 为 `NotSigned`，startup smoke 也不证明 graceful exit 或 clean VM。
   P5-R-005 因而只在 clean Dir/开发包范围受控；P5-R-016、最终 Installer、clean VM、attestation 和 clean-download

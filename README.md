@@ -3,11 +3,11 @@
 Windows 桌面划词助手。Phase 4 在线文本翻译闭环已于 2026-07-18 在合并提交
 `4ea65dcd5c5ef7c56127fe419127d48e0573a65d` 上以 `PASS WITH ACCEPTED RISKS` 验收；
 当前正在按已冻结计划执行 Phase 5 的测量、长稳、打包与发布门禁开发。仓库版本已切换为
-**`0.5.0-phase5` 开发候选**。提交 `3443d87598d15b697468b0b66755c7e808b76607` 已完成一次 clean-HEAD
-本地 deterministic 严格超集验证，结果为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`；同次 clean unsigned
-Dir package 的构建、启动、供应链和隐私门禁通过，但应用与 Native Host 均为 `NotSigned`，不具备发布资格。
-该提交之后新增的 PERF-03、Provider、环境预检、验收决议和 UI 修订仍需在新提交上重新执行 clean 本地门禁与
-远程 CI。Phase 5 总状态仍为 `NOT YET ACCEPTED / RELEASE BLOCKED`，在签名 RC、正式性能/长稳、clean VM、
+**`0.5.0-phase5` 开发候选**。实现提交 `a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea` 已完成 clean-HEAD
+本地 deterministic 严格超集验证，结果为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`；Desktop 308/308、
+Electron E2E 6/6、Native 2/2、coverage 及同次 clean unsigned Dir package 的构建、启动、供应链和隐私门禁通过。
+应用与 Native Host 均为 `NotSigned`，不具备发布资格；远程 PR CI 仍待执行。Phase 5 总状态仍为
+`NOT YET ACCEPTED / RELEASE BLOCKED`，在签名 RC、正式性能/长稳、clean VM、
 实机矩阵与发布签字完成前仍不是公开版本。
 
 当前开发观察还包括 PERF-09 2×5、15 秒产品 idle，以及 PERF-03 packaged 1×1：最新 PERF-03 样本为

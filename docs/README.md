@@ -6,9 +6,10 @@
 
 本目录是 V1 的架构与阶段验收基线。Phase 1 已确认协议、进程隔离和 Windows Native 可行性；Phase 2 已完成桌面壳层并以 `PASS WITH ACCEPTED RISKS` 验收；Phase 3 已完成 Native 划词、UIA/OCR 回退和 source-only 结果卡闭环，并以 `PASS WITH ACCEPTED RISKS` 完成本地验收。Phase 4 在此基线上完成默认关闭、BYOK、Main-only 网络的百度通用文本翻译，并于 2026-07-18 在 GitHub 合并提交 `4ea65dc` 上以 `PASS WITH ACCEPTED RISKS` 验收。未执行的真实故障与兼容性矩阵仍保持未勾选，作为明确接受风险继承到 Phase 5，不能描述为已经执行。
 
-Phase 5 提交 `3443d87598d15b697468b0b66755c7e808b76607` 已取得 clean-HEAD 本地 deterministic/Phase 4
-严格超集通过证据，状态为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`；同次 clean unsigned Dir package
-通过开发门禁，但未签名且 `acceptance=false`。该提交后的新增实现仍需在新提交上重新执行 clean 本地与远程 CI。
+Phase 5 实现提交 `a08cc6ca53727b446d7d10f5fbd0e1ae26e657ea` 已取得 clean-HEAD 本地 deterministic/Phase 4
+严格超集通过证据，状态为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`；Desktop 308/308、Electron E2E 6/6、
+Native 2/2、coverage 与同次 clean unsigned Dir package 通过开发门禁，但未签名且 `acceptance=false`。
+本地门禁已重跑，远程 PR CI 仍待执行。
 当前 PERF-09 2×5、15 秒产品 idle 和 PERF-03 packaged 1×1（`118.648ms`、failure/forced termination 为 `0`）
 也都只是 development/non-acceptance 证据；formal PERF-03 在可信运行/指标/发布者/证据命名空间控制器完成前
 固定阻断。正式 fixed-lab、PERF-09 3×50、PERF-03 3×100、900 秒 idle、
