@@ -7,6 +7,23 @@ $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $PSScriptRoot 'phase5-safe-filesystem.ps1')
 . (Join-Path $PSScriptRoot 'phase5-package-output-preflight.ps1')
 
+function Get-Phase5ReleaseSelftestTreeProof {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$Root)
+
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd('\')
+    return @(Get-ChildItem -LiteralPath $rootFull -Recurse -Force -ErrorAction Stop |
+        ForEach-Object {
+            [pscustomobject][ordered]@{
+                Key = ('{0}:{1}' -f $(if ($_.PSIsContainer) { 'D' } else { 'F' }),
+                    $_.FullName.Substring($rootFull.Length + 1))
+                Sha256 = if ($_.PSIsContainer) { $null } else {
+                    (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+                }
+            }
+        } | Sort-Object Key)
+}
+
 $functionOrderFailures = @()
 Get-ChildItem (Join-Path $root 'tooling\packaging'), (Join-Path $root 'tooling\supply-chain') -Filter '*.ps1' -File | ForEach-Object {
     $tokens = $null
@@ -61,6 +78,454 @@ try {
     if (-not $nonDirectoryLeaseRejected -or
         -not (Test-Path -LiteralPath $nonDirectoryLeaseTarget -PathType Leaf)) {
         throw 'Directory identity lease accepted or modified an ordinary file.'
+    }
+
+    $contentionParent = Join-Path $temporaryParent 'quarantine-contention'
+    $contentionRoot = Join-Path $contentionParent 'quarantined-package'
+    New-Item -ItemType Directory -Force -Path $contentionRoot | Out-Null
+    $contentionParentLease = $null
+    $contentionRootLease = $null
+    $transientContentionProcess = $null
+    $transientLeasePowerShell = $null
+    $transientLeaseAsync = $null
+    $nativeFinalReparsePath = $null
+    $persistentLock = $null
+    try {
+        $contentionParentLease =
+            [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($contentionParent)
+        $contentionRootLease =
+            [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($contentionRoot)
+
+        $nativeFinalReparseTarget = Join-Path $contentionParent 'native-reparse-target.bin'
+        $nativeFinalReparsePath = Join-Path $contentionRoot 'native-final-component-link.bin'
+        [IO.File]::WriteAllBytes($nativeFinalReparseTarget, [byte[]](31, 32, 33, 34))
+        $nativeFinalReparseHash = (Get-FileHash -LiteralPath $nativeFinalReparseTarget -Algorithm SHA256).Hash
+        $targetIdentityLease = [Phase5.PackageOutputQuarantineNative]::OpenExactRegularFileLease(
+            $nativeFinalReparseTarget,
+            $false
+        )
+        try {
+            $nativeFinalReparseVolume = $targetIdentityLease.VolumeSerialNumber
+            $nativeFinalReparseFileId = $targetIdentityLease.FileId
+        } finally {
+            $targetIdentityLease.Dispose()
+        }
+        New-Item -ItemType SymbolicLink -Path $nativeFinalReparsePath `
+            -Target $nativeFinalReparseTarget -ErrorAction Stop | Out-Null
+        $nativeFinalReparseRejected = $false
+        try {
+            $unexpectedNativeReparseLease = `
+                [Phase5.PackageOutputQuarantineNative]::OpenFileQuarantineLease($nativeFinalReparsePath)
+            $unexpectedNativeReparseLease.Dispose()
+        } catch {
+            $nativeFinalReparseRejected = $true
+        }
+        $nativeFinalReparseItem = Get-Item -LiteralPath $nativeFinalReparsePath -Force
+        $targetIdentityAfter = [Phase5.PackageOutputQuarantineNative]::OpenExactRegularFileLease(
+            $nativeFinalReparseTarget,
+            $false
+        )
+        try {
+            $nativeFinalReparseIdentityUnchanged =
+                $targetIdentityAfter.VolumeSerialNumber -eq $nativeFinalReparseVolume -and
+                $targetIdentityAfter.FileId -eq $nativeFinalReparseFileId
+        } finally {
+            $targetIdentityAfter.Dispose()
+        }
+        if (-not $nativeFinalReparseRejected -or
+            ($nativeFinalReparseItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0 -or
+            -not $nativeFinalReparseIdentityUnchanged -or
+            (Get-FileHash -LiteralPath $nativeFinalReparseTarget -Algorithm SHA256).Hash -cne $nativeFinalReparseHash) {
+            throw 'Native quarantine lease followed or modified a final-component file reparse point.'
+        }
+        [IO.File]::Delete($nativeFinalReparsePath)
+        $nativeFinalReparsePath = $null
+
+        $transientFile = Join-Path $contentionRoot 'transient.bin'
+        $transientReady = Join-Path $contentionParent 'transient-ready.txt'
+        $transientStart = Join-Path $contentionParent 'transient-start.txt'
+        [IO.File]::WriteAllBytes($transientFile, [byte[]](41, 42, 43, 44))
+        $transientHash = (Get-FileHash -LiteralPath $transientFile -Algorithm SHA256).Hash
+        $transientFileEscaped = $transientFile.Replace("'", "''")
+        $transientReadyEscaped = $transientReady.Replace("'", "''")
+        $transientStartEscaped = $transientStart.Replace("'", "''")
+        $transientCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes(@"
+`$ErrorActionPreference = 'Stop'
+`$stream = [IO.File]::Open('$transientFileEscaped', [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+try {
+    [IO.File]::WriteAllText('$transientReadyEscaped', 'ready')
+    `$startDeadline = [DateTime]::UtcNow.AddSeconds(10)
+    while (-not [IO.File]::Exists('$transientStartEscaped') -and [DateTime]::UtcNow -lt `$startDeadline) {
+        Start-Sleep -Milliseconds 10
+    }
+    if (-not [IO.File]::Exists('$transientStartEscaped')) { throw 'start handshake timed out' }
+    `$hold = [Diagnostics.Stopwatch]::StartNew()
+    while (`$hold.ElapsedMilliseconds -lt 500) { Start-Sleep -Milliseconds 10 }
+} finally {
+    `$stream.Dispose()
+}
+"@))
+        $transientContentionProcess = Start-Process -FilePath 'powershell' `
+            -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $transientCommand) `
+            -WindowStyle Hidden -PassThru
+        $transientReadyDeadline = [DateTime]::UtcNow.AddSeconds(5)
+        while (-not (Test-Path -LiteralPath $transientReady -PathType Leaf) -and
+            [DateTime]::UtcNow -lt $transientReadyDeadline) {
+            if ($transientContentionProcess.HasExited) {
+                throw 'Transient contention fixture exited before acquiring its shared-read handle.'
+            }
+            Start-Sleep -Milliseconds 25
+        }
+        if (-not (Test-Path -LiteralPath $transientReady -PathType Leaf)) {
+            throw 'Transient contention fixture did not signal readiness.'
+        }
+
+        $transientStopwatch = [Diagnostics.Stopwatch]::new()
+        $transientLeasePowerShell = [PowerShell]::Create()
+        $transientLeaseScript = @'
+param(
+    $SafeFilesystemScript,
+    $PackageOutputPreflightScript,
+    $Path,
+    $QuarantinePath,
+    $QuarantineParent,
+    $QuarantineDirectoryLease,
+    $QuarantineParentDirectoryLease,
+    $ContentionStopwatch
+)
+$ErrorActionPreference = 'Stop'
+. $SafeFilesystemScript
+. $PackageOutputPreflightScript
+$stream = Open-Phase5PackageQuarantineFileLeaseWithRetry `
+    -Path $Path `
+    -QuarantinePath $QuarantinePath `
+    -QuarantineParent $QuarantineParent `
+    -QuarantineDirectoryLease $QuarantineDirectoryLease `
+    -QuarantineParentDirectoryLease $QuarantineParentDirectoryLease `
+    -FileParentPath $QuarantinePath `
+    -FileParentDirectoryLease $QuarantineDirectoryLease `
+    -ContentionStopwatch $ContentionStopwatch `
+    -ContentionTimeoutMilliseconds 3000
+try {
+    [pscustomobject][ordered]@{
+        Sha256 = Get-Phase5PackageOutputStreamSha256 -Stream $stream
+        ElapsedMilliseconds = $ContentionStopwatch.ElapsedMilliseconds
+    }
+} finally {
+    $stream.Dispose()
+}
+'@
+        $null = $transientLeasePowerShell.AddScript($transientLeaseScript)
+        $null = $transientLeasePowerShell.AddArgument(
+            (Join-Path $PSScriptRoot 'phase5-safe-filesystem.ps1')
+        )
+        $null = $transientLeasePowerShell.AddArgument(
+            (Join-Path $PSScriptRoot 'phase5-package-output-preflight.ps1')
+        )
+        $null = $transientLeasePowerShell.AddArgument($transientFile)
+        $null = $transientLeasePowerShell.AddArgument($contentionRoot)
+        $null = $transientLeasePowerShell.AddArgument($contentionParent)
+        $null = $transientLeasePowerShell.AddArgument($contentionRootLease)
+        $null = $transientLeasePowerShell.AddArgument($contentionParentLease)
+        $null = $transientLeasePowerShell.AddArgument($transientStopwatch)
+        $transientLeaseAsync = $transientLeasePowerShell.BeginInvoke()
+        $retryObservedDeadline = [DateTime]::UtcNow.AddSeconds(5)
+        while (-not $transientStopwatch.IsRunning -and
+            -not $transientLeaseAsync.IsCompleted -and
+            [DateTime]::UtcNow -lt $retryObservedDeadline) {
+            Start-Sleep -Milliseconds 10
+        }
+        if (-not $transientStopwatch.IsRunning) {
+            throw 'Transient contention fixture did not observe a retryable sharing violation before release.'
+        }
+        # The holder cannot start its release timer until the production
+        # helper has actually observed contention and started its stopwatch.
+        [IO.File]::WriteAllText($transientStart, 'start')
+        if (-not $transientLeaseAsync.AsyncWaitHandle.WaitOne(5000)) {
+            throw 'Transient contention lease did not finish after the explicit release handshake.'
+        }
+        $transientResult = @($transientLeasePowerShell.EndInvoke($transientLeaseAsync))
+        $transientLeaseAsync = $null
+        if ($transientLeasePowerShell.HadErrors) {
+            throw ('Transient contention lease runspace failed: ' +
+                (($transientLeasePowerShell.Streams.Error | ForEach-Object { $_.ToString() }) -join '; '))
+        }
+        if ($transientResult.Count -ne 1 -or
+            [int64]$transientResult[0].ElapsedMilliseconds -lt 350 -or
+            [string]$transientResult[0].Sha256 -cne $transientHash.ToLowerInvariant()) {
+            throw 'A transient sharing violation was not retried to the exact unchanged file lease.'
+        }
+        $transientLeasePowerShell.Dispose()
+        $transientLeasePowerShell = $null
+        if (-not $transientContentionProcess.WaitForExit(5000) -or
+            $transientContentionProcess.ExitCode -ne 0) {
+            throw 'Transient contention fixture did not release its shared-read handle cleanly.'
+        }
+        $transientContentionProcess.Dispose()
+        $transientContentionProcess = $null
+
+        $persistentFile = Join-Path $contentionRoot 'persistent.bin'
+        [IO.File]::WriteAllBytes($persistentFile, [byte[]](51, 52, 53, 54))
+        $persistentHash = (Get-FileHash -LiteralPath $persistentFile -Algorithm SHA256).Hash
+        $persistentLock = [IO.File]::Open(
+            $persistentFile,
+            [IO.FileMode]::Open,
+            [IO.FileAccess]::Read,
+            [IO.FileShare]::Read
+        )
+        $persistentStopwatch = [Diagnostics.Stopwatch]::new()
+        $persistentContentionRejected = $false
+        try {
+            $unexpectedPersistentLease = Open-Phase5PackageQuarantineFileLeaseWithRetry `
+                -Path $persistentFile `
+                -QuarantinePath $contentionRoot `
+                -QuarantineParent $contentionParent `
+                -QuarantineDirectoryLease $contentionRootLease `
+                -QuarantineParentDirectoryLease $contentionParentLease `
+                -FileParentPath $contentionRoot `
+                -FileParentDirectoryLease $contentionRootLease `
+                -ContentionStopwatch $persistentStopwatch `
+                -ContentionTimeoutMilliseconds 300
+            $unexpectedPersistentLease.Dispose()
+        } catch {
+            $persistentContentionRejected = $_.Exception.Data['StableErrorCode'] -eq 'PACKAGE_OUTPUT_LOCKED' -and
+                $_.Exception.Data['ContentionTimedOut'] -eq $true -and
+                $_.Exception.Data['RetryableNativeError'] -eq $true
+        }
+        $persistentLock.Dispose()
+        $persistentLock = $null
+        if (-not $persistentContentionRejected -or
+            $persistentStopwatch.ElapsedMilliseconds -lt 250 -or
+            -not (Test-Path -LiteralPath $persistentFile -PathType Leaf) -or
+            (Get-FileHash -LiteralPath $persistentFile -Algorithm SHA256).Hash -cne $persistentHash) {
+            throw 'Persistent sharing contention did not time out fail-closed while retaining exact file bytes.'
+        }
+
+        $expiredDeadlineFile = Join-Path $contentionRoot 'expired-deadline.bin'
+        [IO.File]::WriteAllBytes($expiredDeadlineFile, [byte[]](61, 62, 63, 64))
+        $expiredDeadlineHash = (Get-FileHash -LiteralPath $expiredDeadlineFile -Algorithm SHA256).Hash
+        $expiredStopwatch = [Diagnostics.Stopwatch]::StartNew()
+        Start-Sleep -Milliseconds 30
+        $expiredDeadlineRejected = $false
+        try {
+            $unexpectedExpiredLease = Open-Phase5PackageQuarantineFileLeaseWithRetry `
+                -Path $expiredDeadlineFile `
+                -QuarantinePath $contentionRoot `
+                -QuarantineParent $contentionParent `
+                -QuarantineDirectoryLease $contentionRootLease `
+                -QuarantineParentDirectoryLease $contentionParentLease `
+                -FileParentPath $contentionRoot `
+                -FileParentDirectoryLease $contentionRootLease `
+                -ContentionStopwatch $expiredStopwatch `
+                -ContentionTimeoutMilliseconds 10
+            $unexpectedExpiredLease.Dispose()
+        } catch {
+            $expiredDeadlineRejected = $_.Exception.Data['StableErrorCode'] -eq 'PACKAGE_OUTPUT_LOCKED' -and
+                $_.Exception.Data['ContentionTimedOut'] -eq $true -and
+                $_.Exception.Data['RetryableNativeError'] -eq $true
+        }
+        if (-not $expiredDeadlineRejected -or
+            (Get-FileHash -LiteralPath $expiredDeadlineFile -Algorithm SHA256).Hash -cne $expiredDeadlineHash) {
+            throw 'An already-expired monotonic contention deadline still opened or changed a file.'
+        }
+    } finally {
+        if ($null -ne $persistentLock) { try { $persistentLock.Dispose() } catch {} }
+        if ($null -ne $nativeFinalReparsePath -and (Test-Path -LiteralPath $nativeFinalReparsePath)) {
+            try { [IO.File]::Delete($nativeFinalReparsePath) } catch {}
+        }
+        if ($null -ne $transientLeasePowerShell) {
+            try {
+                if ($null -ne $transientLeaseAsync -and -not $transientLeaseAsync.IsCompleted) {
+                    $transientLeasePowerShell.Stop()
+                }
+                $transientLeasePowerShell.Dispose()
+            } catch {}
+        }
+        if ($null -ne $transientContentionProcess) {
+            try {
+                if (-not $transientContentionProcess.HasExited) { $transientContentionProcess.Kill() }
+                $null = $transientContentionProcess.WaitForExit(5000)
+                $transientContentionProcess.Dispose()
+            } catch {}
+        }
+        if ($null -ne $contentionRootLease) { try { $contentionRootLease.Dispose() } catch {} }
+        if ($null -ne $contentionParentLease) { try { $contentionParentLease.Dispose() } catch {} }
+    }
+
+    $hardlinkRepository = Join-Path $temporaryParent 'quarantine-hardlink-repository'
+    $hardlinkArtifacts = Join-Path $hardlinkRepository 'artifacts\phase5'
+    $hardlinkOutput = Join-Path $hardlinkArtifacts 'package-output'
+    $hardlinkQuarantineParent = Join-Path $hardlinkRepository '.phase5-package-quarantine'
+    $hardlinkTarget = Join-Path $hardlinkRepository 'outside-target.bin'
+    $hardlinkPath = Join-Path $hardlinkOutput 'nested\linked.bin'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $hardlinkPath) | Out-Null
+    [IO.File]::WriteAllBytes($hardlinkTarget, [byte[]](71, 72, 73, 74))
+    New-Item -ItemType HardLink -Path $hardlinkPath -Target $hardlinkTarget -ErrorAction Stop | Out-Null
+    $hardlinkOriginalProof = Get-Phase5ReleaseSelftestTreeProof -Root $hardlinkOutput
+    $hardlinkTargetHash = (Get-FileHash -LiteralPath $hardlinkTarget -Algorithm SHA256).Hash
+    $hardlinkLease = $null
+    $hardlinkRejected = $false
+    $hardlinkRetainedPath = $null
+    try {
+        $hardlinkLease = Enter-Phase5PackageOutputQuarantineLease `
+            -PackageOutput $hardlinkOutput `
+            -AllowedParent $hardlinkArtifacts `
+            -RepositoryRoot $hardlinkRepository `
+            -QuarantineParent $hardlinkQuarantineParent
+    } catch {
+        $hardlinkRejected = $_.Exception.Data['StableErrorCode'] -eq 'PACKAGE_OUTPUT_LOCKED' -and
+            $_.Exception.Data['RetryableNativeError'] -eq $false -and
+            $_.Exception.Data['QuarantineRetained'] -eq $true
+        $hardlinkRetainedPath = [string]$_.Exception.Data['QuarantinePath']
+    } finally {
+        if ($null -ne $hardlinkLease) {
+            try { Exit-Phase5PackageOutputQuarantineLease -Lease $hardlinkLease } catch {}
+        }
+    }
+    if (-not $hardlinkRejected -or
+        [string]::IsNullOrWhiteSpace($hardlinkRetainedPath) -or
+        -not (Test-Path -LiteralPath $hardlinkRetainedPath -PathType Container) -or
+        (Test-Path -LiteralPath $hardlinkOutput) -or
+        (Get-FileHash -LiteralPath $hardlinkTarget -Algorithm SHA256).Hash -cne $hardlinkTargetHash -or
+        ((Get-Phase5ReleaseSelftestTreeProof -Root $hardlinkRetainedPath | ConvertTo-Json -Compress) -cne
+            ($hardlinkOriginalProof | ConvertTo-Json -Compress))) {
+        throw 'A multi-name hardlink was accepted, mutated, or not retained as a complete quarantined tree.'
+    }
+
+    $reparseRepository = Join-Path $temporaryParent 'quarantine-reparse-repository'
+    $reparseArtifacts = Join-Path $reparseRepository 'artifacts\phase5'
+    $reparseOutput = Join-Path $reparseArtifacts 'package-output'
+    $reparseQuarantineParent = Join-Path $reparseRepository '.phase5-package-quarantine'
+    $reparseTarget = Join-Path $reparseRepository 'outside-target.bin'
+    $reparsePath = Join-Path $reparseOutput 'nested\linked.bin'
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $reparsePath) | Out-Null
+    [IO.File]::WriteAllBytes($reparseTarget, [byte[]](81, 82, 83, 84))
+    New-Item -ItemType SymbolicLink -Path $reparsePath -Target $reparseTarget -ErrorAction Stop | Out-Null
+    $reparseOriginalProof = Get-Phase5ReleaseSelftestTreeProof -Root $reparseOutput
+    $reparseTargetHash = (Get-FileHash -LiteralPath $reparseTarget -Algorithm SHA256).Hash
+    $reparseLease = $null
+    $finalComponentReparseRejected = $false
+    try {
+        $reparseLease = Enter-Phase5PackageOutputQuarantineLease `
+            -PackageOutput $reparseOutput `
+            -AllowedParent $reparseArtifacts `
+            -RepositoryRoot $reparseRepository `
+            -QuarantineParent $reparseQuarantineParent
+    } catch {
+        $finalComponentReparseRejected = $_.Exception.Message -match 'reparse[ -]point'
+    } finally {
+        if ($null -ne $reparseLease) {
+            try { Exit-Phase5PackageOutputQuarantineLease -Lease $reparseLease } catch {}
+        }
+    }
+    if (-not $finalComponentReparseRejected -or
+        -not (Test-Path -LiteralPath $reparseOutput -PathType Container) -or
+        (Get-FileHash -LiteralPath $reparseTarget -Algorithm SHA256).Hash -cne $reparseTargetHash -or
+        ((Get-Phase5ReleaseSelftestTreeProof -Root $reparseOutput | ConvertTo-Json -Compress) -cne
+            ($reparseOriginalProof | ConvertTo-Json -Compress))) {
+        throw 'A final-component file reparse point was followed, mutated, or not retained as an exact source tree.'
+    }
+    [IO.File]::Delete($reparsePath)
+
+    # Isolate directory-identity protection from file no-share handles: this
+    # package contains directories only. A rename must either be denied by the
+    # native lease or be rejected by the path-to-identity checks in
+    # Confirm/Exit, while the original directory object remains recoverable.
+    $emptyDirectoryRepository = Join-Path $temporaryParent 'quarantine-empty-directory-repository'
+    $emptyDirectoryArtifacts = Join-Path $emptyDirectoryRepository 'artifacts\phase5'
+    $emptyDirectoryOutput = Join-Path $emptyDirectoryArtifacts 'package-output'
+    $emptyDirectoryNested = Join-Path $emptyDirectoryOutput 'empty-parent\empty-child\grandchild'
+    $emptyDirectoryQuarantineParent = Join-Path $emptyDirectoryRepository '.phase5-package-quarantine'
+    New-Item -ItemType Directory -Force -Path $emptyDirectoryNested | Out-Null
+    $emptyDirectoryOriginalProof = Get-Phase5ReleaseSelftestTreeProof -Root $emptyDirectoryOutput
+    $emptyDirectoryLease = $null
+    try {
+        $emptyDirectoryLease = Enter-Phase5PackageOutputQuarantineLease `
+            -PackageOutput $emptyDirectoryOutput `
+            -AllowedParent $emptyDirectoryArtifacts `
+            -RepositoryRoot $emptyDirectoryRepository `
+            -QuarantineParent $emptyDirectoryQuarantineParent
+        $emptyDirectoryQuarantineRoot = $emptyDirectoryLease.QuarantinePath
+        $emptyDirectoryQuarantinedNested = Join-Path $emptyDirectoryQuarantineRoot 'empty-parent\empty-child'
+        $emptyDirectoryRenamedRoot = $emptyDirectoryQuarantineRoot + '-replacement-attempt'
+        $emptyDirectoryRenamedNested = Join-Path $emptyDirectoryQuarantineRoot 'empty-parent\empty-child-replacement-attempt'
+
+        $rootIdentityMismatchRejected = $false
+        $rootIdentityProbe = $emptyDirectoryQuarantineRoot + '-different-identity'
+        New-Item -ItemType Directory -Path $rootIdentityProbe | Out-Null
+        try {
+            Assert-Phase5PackageQuarantineDirectoryIdentity `
+                -DirectoryLease $emptyDirectoryLease.QuarantineDirectoryLease `
+                -Path $rootIdentityProbe
+        } catch {
+            $rootIdentityMismatchRejected = $_.Exception.Data['StableErrorCode'] -eq `
+                'PACKAGE_OUTPUT_QUARANTINE_CHANGED'
+        }
+        [IO.Directory]::Delete($rootIdentityProbe)
+        if (-not $rootIdentityMismatchRejected) {
+            throw 'Quarantine-root path binding accepted a different directory identity.'
+        }
+
+        $emptyRootRebindingRejected = $false
+        try {
+            [IO.Directory]::Move($emptyDirectoryQuarantineRoot, $emptyDirectoryRenamedRoot)
+            New-Item -ItemType Directory -Path $emptyDirectoryQuarantineRoot | Out-Null
+        } catch {
+            $emptyRootRebindingRejected = $true
+        }
+        $emptyNestedRebindingRejected = $false
+        try {
+            [IO.Directory]::Move($emptyDirectoryQuarantinedNested, $emptyDirectoryRenamedNested)
+            New-Item -ItemType Directory -Path $emptyDirectoryQuarantinedNested | Out-Null
+        } catch {
+            $emptyNestedRebindingRejected = $true
+        }
+
+        if (-not $emptyRootRebindingRejected) {
+            throw 'Directory-only quarantine allowed its pinned root identity to be renamed/replaced.'
+        }
+        if ($emptyNestedRebindingRejected) {
+            Confirm-Phase5PackageOutputQuarantineLease -Lease $emptyDirectoryLease
+            Exit-Phase5PackageOutputQuarantineLease -Lease $emptyDirectoryLease
+            $emptyDirectoryLease = $null
+        } else {
+            $nestedIdentityDetected = $false
+            try {
+                Confirm-Phase5PackageOutputQuarantineLease -Lease $emptyDirectoryLease
+            } catch {
+                $nestedIdentityDetected = $_.Exception.Data['StableErrorCode'] -eq `
+                    'PACKAGE_OUTPUT_QUARANTINE_CHANGED'
+            }
+            $nestedExitDetected = $false
+            try {
+                Exit-Phase5PackageOutputQuarantineLease -Lease $emptyDirectoryLease
+            } catch {
+                $nestedExitDetected = $_.Exception.Data['StableErrorCode'] -eq `
+                    'PACKAGE_OUTPUT_QUARANTINE_CHANGED'
+            }
+            if (-not $nestedIdentityDetected -or -not $nestedExitDetected -or
+                [bool]$emptyDirectoryLease.Active -or
+                -not (Test-Path -LiteralPath (Join-Path $emptyDirectoryRenamedNested 'grandchild') -PathType Container)) {
+                throw 'Nested empty-directory replacement was not rejected by both identity validation boundaries with the original subtree retained.'
+            }
+            $emptyDirectoryLease = $null
+            [IO.Directory]::Delete($emptyDirectoryQuarantinedNested)
+            [IO.Directory]::Move($emptyDirectoryRenamedNested, $emptyDirectoryQuarantinedNested)
+        }
+
+        [IO.Directory]::Move($emptyDirectoryQuarantinedNested, $emptyDirectoryRenamedNested)
+        [IO.Directory]::Move($emptyDirectoryRenamedNested, $emptyDirectoryQuarantinedNested)
+        [IO.Directory]::Move($emptyDirectoryQuarantineRoot, $emptyDirectoryRenamedRoot)
+        [IO.Directory]::Move($emptyDirectoryRenamedRoot, $emptyDirectoryQuarantineRoot)
+        if ((Get-Phase5ReleaseSelftestTreeProof -Root $emptyDirectoryQuarantineRoot |
+                ConvertTo-Json -Compress) -cne
+            ($emptyDirectoryOriginalProof | ConvertTo-Json -Compress)) {
+            throw 'Directory-only quarantine was not retained exactly or its leases remained active after Exit.'
+        }
+    } finally {
+        if ($null -ne $emptyDirectoryLease) {
+            try { Exit-Phase5PackageOutputQuarantineLease -Lease $emptyDirectoryLease } catch {}
+        }
     }
 
     $atomicPublishParent = Join-Path $temporaryParent 'atomic-package-publish'
@@ -965,6 +1430,62 @@ try {
         -not (Test-Path -LiteralPath $packageQuarantineParent -PathType Container) -or
         (Test-Path -LiteralPath $renamedQuarantineParent)) {
         throw 'Quarantine-parent identity lease did not block parent rename/replacement.'
+    }
+
+    $leasedTreeBeforeRebinding = [pscustomobject][ordered]@{
+        EntryKeys = @($packageQuarantineLease.InitialEntryKeys)
+        Files = @($packageQuarantineLease.FileEntries | Sort-Object RelativePath | ForEach-Object {
+            [pscustomobject][ordered]@{
+                RelativePath = $_.RelativePath
+                Sha256 = Get-Phase5PackageOutputStreamSha256 -Stream $_.Stream
+            }
+        })
+    }
+    $renamedQuarantineRoot = $packageQuarantineLease.QuarantinePath + '-unexpected-rename'
+    $rootRebindingRejected = $false
+    try {
+        [IO.Directory]::Move($packageQuarantineLease.QuarantinePath, $renamedQuarantineRoot)
+        New-Item -ItemType Directory -Path $packageQuarantineLease.QuarantinePath | Out-Null
+        Set-Content -LiteralPath (Join-Path $packageQuarantineLease.QuarantinePath 'replacement.txt') `
+            -Value 'must never replace leased root' -Encoding UTF8
+    } catch {
+        $rootRebindingRejected = $true
+    }
+    if (-not $rootRebindingRejected -or
+        (Test-Path -LiteralPath $renamedQuarantineRoot) -or
+        -not (Test-Path -LiteralPath $packageQuarantineLease.QuarantinePath -PathType Container)) {
+        throw 'Pinned quarantine-root identity did not block a rename/replacement attempt.'
+    }
+
+    $leasedNestedDirectory = Join-Path $packageQuarantineLease.QuarantinePath 'nested'
+    $renamedNestedDirectory = Join-Path $packageQuarantineLease.QuarantinePath 'nested-unexpected-rename'
+    $nestedRebindingRejected = $false
+    try {
+        [IO.Directory]::Move($leasedNestedDirectory, $renamedNestedDirectory)
+        New-Item -ItemType Directory -Path $leasedNestedDirectory | Out-Null
+        Set-Content -LiteralPath (Join-Path $leasedNestedDirectory 'replacement.txt') `
+            -Value 'must never replace pinned subtree' -Encoding UTF8
+    } catch {
+        $nestedRebindingRejected = $true
+    }
+    if (-not $nestedRebindingRejected -or
+        (Test-Path -LiteralPath $renamedNestedDirectory) -or
+        -not (Test-Path -LiteralPath $leasedNestedDirectory -PathType Container)) {
+        throw 'Pinned nested-directory identity did not block a subtree path replacement attempt.'
+    }
+    Confirm-Phase5PackageOutputQuarantineLease -Lease $packageQuarantineLease
+    $leasedTreeAfterRebinding = [pscustomobject][ordered]@{
+        EntryKeys = @($packageQuarantineLease.InitialEntryKeys)
+        Files = @($packageQuarantineLease.FileEntries | Sort-Object RelativePath | ForEach-Object {
+            [pscustomobject][ordered]@{
+                RelativePath = $_.RelativePath
+                Sha256 = Get-Phase5PackageOutputStreamSha256 -Stream $_.Stream
+            }
+        })
+    }
+    if (($leasedTreeAfterRebinding | ConvertTo-Json -Depth 5 -Compress) -cne
+        ($leasedTreeBeforeRebinding | ConvertTo-Json -Depth 5 -Compress)) {
+        throw 'Root/nested path replacement attempts changed retained quarantine bytes or entry set.'
     }
 
     $injectedQuarantineFile = Join-Path $packageQuarantineLease.QuarantinePath 'unexpected-injection.txt'

@@ -179,7 +179,7 @@ namespace Phase5 {
                 0,
                 IntPtr.Zero,
                 OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL,
+                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
                 IntPtr.Zero
             );
             if (handle.IsInvalid) {
@@ -187,7 +187,20 @@ namespace Phase5 {
                 handle.Dispose();
                 throw new Win32Exception(error, "Package output file could not be leased for atomic quarantine.");
             }
-            return new FileStream(handle, FileAccess.Read, 4096, false);
+            try {
+                var information = ReadIdentity(handle);
+                if ((information.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 ||
+                    (information.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0) {
+                    throw new InvalidOperationException("Package output quarantine lease target is not a regular non-reparse file.");
+                }
+                if (information.NumberOfLinks != 1) {
+                    throw new InvalidOperationException("Package output quarantine lease target must have exactly one hard-link name.");
+                }
+                return new FileStream(handle, FileAccess.Read, 4096, false);
+            } catch {
+                handle.Dispose();
+                throw;
+            }
         }
 
         public static DirectoryIdentityLease OpenDirectoryIdentityLease(string path) {
@@ -588,6 +601,59 @@ function Assert-Phase5PackageQuarantineParentIdentity {
     }
 }
 
+function Assert-Phase5PackageQuarantineDirectoryIdentity {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][object]$DirectoryLease,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+
+    $matches = $false
+    try {
+        $matches = [Phase5.PackageOutputQuarantineNative]::DirectoryLeaseMatchesPath(
+            $DirectoryLease,
+            [IO.Path]::GetFullPath($Path)
+        )
+    } catch {
+        $matches = $false
+    }
+    if (-not $matches) {
+        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+            -Message 'the quarantined package directory no longer matches its leased volume serial and file identity.')
+    }
+}
+
+function Assert-Phase5PackageQuarantineDirectoryBindings {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$DirectoryBindings,
+        [Parameter(Mandatory = $true)][string]$QuarantinePath
+    )
+
+    $quarantineFull = [IO.Path]::GetFullPath($QuarantinePath).TrimEnd('\')
+    foreach ($binding in @($DirectoryBindings)) {
+        $relativePath = [string]$binding.RelativePath
+        $expectedPath = if ([string]::IsNullOrEmpty($relativePath)) {
+            $quarantineFull
+        } else {
+            [IO.Path]::GetFullPath((Join-Path $quarantineFull $relativePath))
+        }
+        $boundPath = [IO.Path]::GetFullPath([string]$binding.Path).TrimEnd('\')
+        if (-not [string]::Equals(
+            $boundPath,
+            $expectedPath.TrimEnd('\'),
+            [StringComparison]::OrdinalIgnoreCase
+        ) -or (-not [string]::IsNullOrEmpty($relativePath) -and
+            -not $boundPath.StartsWith($quarantineFull + '\', [StringComparison]::OrdinalIgnoreCase))) {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+                -Message 'a quarantined directory binding escaped or changed its exact relative path.')
+        }
+        Assert-Phase5PackageQuarantineDirectoryIdentity `
+            -DirectoryLease $binding.Lease `
+            -Path $boundPath
+    }
+}
+
 function Get-Phase5PackageOutputEntryKeys {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string]$Root)
@@ -607,6 +673,19 @@ function Assert-Phase5PackageOutputQuarantineIntegrity {
     Assert-Phase5PackageQuarantineParentIdentity `
         -DirectoryLease $Lease.QuarantineParentDirectoryLease `
         -Path $Lease.QuarantineParent
+    $expectedDirectoryBindings = @('') + @($Lease.InitialEntryKeys |
+        Where-Object { $_.StartsWith('D:', [StringComparison]::Ordinal) } |
+        ForEach-Object { $_.Substring(2) })
+    $actualDirectoryBindings = @($Lease.DirectoryBindings |
+        ForEach-Object { [string]$_.RelativePath })
+    if ([string]::Join("`n", @($expectedDirectoryBindings | Sort-Object)) -cne
+        [string]::Join("`n", @($actualDirectoryBindings | Sort-Object))) {
+        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+            -Message 'the quarantined package output does not retain one identity lease for every exact directory path.')
+    }
+    Assert-Phase5PackageQuarantineDirectoryBindings `
+        -DirectoryBindings @($Lease.DirectoryBindings) `
+        -QuarantinePath $Lease.QuarantinePath
     Assert-Phase5NoReparsePoint -Path $Lease.QuarantinePath -AllowedParent $Lease.QuarantineParent
     if (-not (Test-Path -LiteralPath $Lease.QuarantinePath -PathType Container)) {
         throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
@@ -623,6 +702,144 @@ function Assert-Phase5PackageOutputQuarantineIntegrity {
             (Get-Phase5PackageOutputStreamSha256 -Stream $entry.Stream) -cne $entry.InitialSha256) {
             throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
                 -Message 'the quarantined package output content hash changed while leased.')
+        }
+    }
+}
+
+function Get-Phase5PackageOutputNativeErrorCode {
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][Exception]$Exception)
+
+    $current = $Exception
+    for ($depth = 0; $depth -lt 8 -and $null -ne $current; $depth++) {
+        if ($current -is [ComponentModel.Win32Exception]) {
+            return [int]$current.NativeErrorCode
+        }
+        $current = $current.InnerException
+    }
+    return $null
+}
+
+function New-Phase5PackageOutputContentionException {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][bool]$TimedOut,
+        [Parameter(Mandatory = $true)][bool]$RetryableNativeError
+    )
+
+    $exception = New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_LOCKED' `
+        -Message $(if ($TimedOut -and $RetryableNativeError) {
+            'a quarantined file remained under external sharing/lock contention past the bounded lease deadline; the complete quarantine tree was retained.'
+        } else {
+            'a quarantined file could not be leased exclusively; the complete quarantine tree was retained.'
+        })
+    $exception.Data['ContentionTimedOut'] = [bool]($TimedOut -and $RetryableNativeError)
+    $exception.Data['RetryableNativeError'] = [bool]$RetryableNativeError
+    return $exception
+}
+
+function Open-Phase5PackageQuarantineFileLeaseWithRetry {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$QuarantinePath,
+        [Parameter(Mandatory = $true)][string]$QuarantineParent,
+        [Parameter(Mandatory = $true)][object]$QuarantineDirectoryLease,
+        [Parameter(Mandatory = $true)][object]$QuarantineParentDirectoryLease,
+        [Parameter(Mandatory = $true)][string]$FileParentPath,
+        [Parameter(Mandatory = $true)][object]$FileParentDirectoryLease,
+        [Parameter(Mandatory = $true)][Diagnostics.Stopwatch]$ContentionStopwatch,
+        [Parameter()][ValidateRange(1, 30000)][int]$ContentionTimeoutMilliseconds = 5000
+    )
+
+    $quarantineFull = [IO.Path]::GetFullPath($QuarantinePath).TrimEnd('\')
+    $pathFull = [IO.Path]::GetFullPath($Path)
+    $fileParentFull = [IO.Path]::GetFullPath($FileParentPath).TrimEnd('\')
+    if (-not $pathFull.StartsWith($quarantineFull + '\', [StringComparison]::OrdinalIgnoreCase)) {
+        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+            -Message 'a quarantine file lease target escaped the pinned quarantined package directory.')
+    }
+    if (-not [string]::Equals(
+        [IO.Path]::GetFullPath((Split-Path -Parent $pathFull)).TrimEnd('\'),
+        $fileParentFull,
+        [StringComparison]::OrdinalIgnoreCase
+    ) -or (-not [string]::Equals($fileParentFull, $quarantineFull, [StringComparison]::OrdinalIgnoreCase) -and
+        -not $fileParentFull.StartsWith($quarantineFull + '\', [StringComparison]::OrdinalIgnoreCase))) {
+        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+            -Message 'a quarantine file lease target no longer has its exact pinned parent directory.')
+    }
+
+    $retryDelayMilliseconds = 25
+    while ($true) {
+        Assert-Phase5PackageQuarantineParentIdentity `
+            -DirectoryLease $QuarantineParentDirectoryLease `
+            -Path $QuarantineParent
+        Assert-Phase5PackageQuarantineDirectoryIdentity `
+            -DirectoryLease $QuarantineDirectoryLease `
+            -Path $quarantineFull
+        Assert-Phase5PackageQuarantineDirectoryIdentity `
+            -DirectoryLease $FileParentDirectoryLease `
+            -Path $FileParentPath
+        Assert-Phase5NoReparsePoint -Path $pathFull -AllowedParent $quarantineFull
+
+        # Once the first retryable sharing violation is observed, this
+        # stopwatch remains running for the rest of the whole-tree lease
+        # acquisition. Check the same monotonic deadline immediately before
+        # every native open so ordinary hashing or another file cannot reset it.
+        if ($ContentionStopwatch.IsRunning -and
+            $ContentionStopwatch.ElapsedMilliseconds -ge $ContentionTimeoutMilliseconds) {
+            throw (New-Phase5PackageOutputContentionException `
+                -TimedOut $true -RetryableNativeError $true)
+        }
+
+        try {
+            $stream = [Phase5.PackageOutputQuarantineNative]::OpenFileQuarantineLease($pathFull)
+        } catch {
+            $nativeErrorCode = Get-Phase5PackageOutputNativeErrorCode -Exception $_.Exception
+            $retryableContention = $nativeErrorCode -in @(32, 33)
+            if ($retryableContention -and -not $ContentionStopwatch.IsRunning) {
+                $ContentionStopwatch.Start()
+            }
+            $timedOut = $ContentionStopwatch.ElapsedMilliseconds -ge $ContentionTimeoutMilliseconds
+            if (-not $retryableContention -or $timedOut) {
+                throw (New-Phase5PackageOutputContentionException `
+                    -TimedOut $timedOut -RetryableNativeError $retryableContention)
+            }
+
+            $remainingMilliseconds = $ContentionTimeoutMilliseconds -
+                [int]$ContentionStopwatch.ElapsedMilliseconds
+            $sleepMilliseconds = [Math]::Min($retryDelayMilliseconds, [Math]::Max(1, $remainingMilliseconds))
+            Start-Sleep -Milliseconds $sleepMilliseconds
+            $retryDelayMilliseconds = [Math]::Min(200, $retryDelayMilliseconds * 2)
+            continue
+        }
+
+        if ($ContentionStopwatch.IsRunning -and
+            $ContentionStopwatch.ElapsedMilliseconds -ge $ContentionTimeoutMilliseconds) {
+            $stream.Dispose()
+            throw (New-Phase5PackageOutputContentionException `
+                -TimedOut $true -RetryableNativeError $true)
+        }
+        try {
+            Assert-Phase5PackageQuarantineParentIdentity `
+                -DirectoryLease $QuarantineParentDirectoryLease `
+                -Path $QuarantineParent
+            Assert-Phase5PackageQuarantineDirectoryIdentity `
+                -DirectoryLease $QuarantineDirectoryLease `
+                -Path $quarantineFull
+            Assert-Phase5PackageQuarantineDirectoryIdentity `
+                -DirectoryLease $FileParentDirectoryLease `
+                -Path $FileParentPath
+            Assert-Phase5NoReparsePoint -Path $pathFull -AllowedParent $quarantineFull
+            if ($ContentionStopwatch.IsRunning -and
+                $ContentionStopwatch.ElapsedMilliseconds -ge $ContentionTimeoutMilliseconds) {
+                throw (New-Phase5PackageOutputContentionException `
+                    -TimedOut $true -RetryableNativeError $true)
+            }
+            return $stream
+        } catch {
+            $stream.Dispose()
+            throw
         }
     }
 }
@@ -1075,8 +1292,10 @@ function Enter-Phase5PackageOutputQuarantineLease {
     $mutexOwned = $false
     $quarantinePath = $null
     $handles = [Collections.Generic.List[IDisposable]]::new()
+    $directoryBindings = [Collections.Generic.List[object]]::new()
     $repositoryLock = $null
     $quarantineParentDirectoryLease = $null
+    $quarantineDirectoryLease = $null
     try {
         $repositoryLock = Enter-Phase5PackageRepositoryLock -RepositoryRoot $repositoryRootFull
         $mutex = [Threading.Mutex]::new($false, (Get-Phase5PackageOutputMutexName -PackageOutput $packageOutputFull))
@@ -1102,6 +1321,8 @@ function Enter-Phase5PackageOutputQuarantineLease {
                 InitialEntryKeys = @()
                 RepositoryLock = $repositoryLock
                 QuarantineParentDirectoryLease = $null
+                QuarantineDirectoryLease = $null
+                DirectoryBindings = @()
                 Mutex = $mutex
                 MutexOwned = $true
                 Preserved = $true
@@ -1191,15 +1412,100 @@ function Enter-Phase5PackageOutputQuarantineLease {
         Assert-Phase5PackageQuarantineParentIdentity `
             -DirectoryLease $quarantineParentDirectoryLease `
             -Path $quarantineParentFull
+        try {
+            $quarantineDirectoryLease = `
+                [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($quarantinePath)
+        } catch {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+                -Message 'the atomically quarantined package directory could not be pinned to a stable identity; the complete quarantine tree was retained.')
+        }
+        Assert-Phase5PackageQuarantineDirectoryIdentity `
+            -DirectoryLease $quarantineDirectoryLease `
+            -Path $quarantinePath
+        $rootDirectoryBinding = [pscustomobject][ordered]@{
+            RelativePath = ''
+            Path = $quarantinePath
+            Lease = $quarantineDirectoryLease
+        }
+        $directoryBindings.Add($rootDirectoryBinding)
 
+        # Pin every directory object before opening any file. Each native
+        # handle omits FILE_SHARE_DELETE, so neither an intermediate subtree
+        # nor its final path component can be renamed/replaced while file
+        # leases and hashes are acquired. Parents are pinned before children.
+        $directoryBindingByPath = [Collections.Generic.Dictionary[string, object]]::new(
+            [StringComparer]::OrdinalIgnoreCase
+        )
+        $directoryBindingByPath.Add(
+            [IO.Path]::GetFullPath($quarantinePath).TrimEnd('\'),
+            $rootDirectoryBinding
+        )
+        $initialDirectories = @($initialEntries | Where-Object { $_.IsDirectory } |
+            Sort-Object `
+                @{ Expression = { @($_.RelativePath -split '[\\/]').Count } }, `
+                @{ Expression = { $_.RelativePath } })
+        foreach ($directoryEntry in $initialDirectories) {
+            $directoryPath = [IO.Path]::GetFullPath((Join-Path $quarantinePath $directoryEntry.RelativePath)).TrimEnd('\')
+            if (-not $directoryPath.StartsWith(
+                ([IO.Path]::GetFullPath($quarantinePath).TrimEnd('\') + '\'),
+                [StringComparison]::OrdinalIgnoreCase
+            )) {
+                throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+                    -Message 'a quarantined child directory escaped its exact root path; the complete quarantine tree was retained.')
+            }
+            $directoryParentPath = [IO.Path]::GetFullPath((Split-Path -Parent $directoryPath)).TrimEnd('\')
+            if (-not $directoryBindingByPath.ContainsKey($directoryParentPath)) {
+                throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+                    -Message 'a quarantined directory parent was not pinned before its child; the complete quarantine tree was retained.')
+            }
+            $directoryParentBinding = $directoryBindingByPath[$directoryParentPath]
+            Assert-Phase5PackageQuarantineDirectoryIdentity `
+                -DirectoryLease $directoryParentBinding.Lease `
+                -Path $directoryParentPath
+            try {
+                $childDirectoryLease = `
+                    [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($directoryPath)
+            } catch {
+                throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+                    -Message 'a quarantined child directory could not be pinned to its exact identity; the complete quarantine tree was retained.')
+            }
+            $childDirectoryBinding = [pscustomobject][ordered]@{
+                RelativePath = $directoryEntry.RelativePath
+                Path = $directoryPath
+                Lease = $childDirectoryLease
+            }
+            $directoryBindings.Add($childDirectoryBinding)
+            $directoryBindingByPath.Add($directoryPath, $childDirectoryBinding)
+            Assert-Phase5PackageQuarantineDirectoryIdentity `
+                -DirectoryLease $childDirectoryLease `
+                -Path $directoryPath
+        }
+        Assert-Phase5PackageQuarantineDirectoryBindings `
+            -DirectoryBindings @($directoryBindings) `
+            -QuarantinePath $quarantinePath
+
+        # A Windows image scanner can briefly open a newly appeared executable
+        # after the atomic move. Retry only sharing/lock violations under one
+        # monotonic whole-tree deadline while both directory identities remain
+        # pinned. All other errors and deadline exhaustion still fail closed.
+        $contentionStopwatch = [Diagnostics.Stopwatch]::new()
         foreach ($entry in @($initialEntries | Where-Object { -not $_.IsDirectory } | Sort-Object RelativePath)) {
             $quarantinedFile = Join-Path $quarantinePath $entry.RelativePath
-            try {
-                $entry.Stream = [Phase5.PackageOutputQuarantineNative]::OpenFileQuarantineLease($quarantinedFile)
-            } catch {
-                throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_LOCKED' `
-                    -Message 'at least one quarantined file could not be held against concurrent read/write access; the complete quarantine tree was retained.')
+            $fileParentPath = [IO.Path]::GetFullPath((Split-Path -Parent $quarantinedFile)).TrimEnd('\')
+            if (-not $directoryBindingByPath.ContainsKey($fileParentPath)) {
+                throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+                    -Message 'a quarantined file parent has no pinned identity; the complete quarantine tree was retained.')
             }
+            $fileParentBinding = $directoryBindingByPath[$fileParentPath]
+            $entry.Stream = Open-Phase5PackageQuarantineFileLeaseWithRetry `
+                -Path $quarantinedFile `
+                -QuarantinePath $quarantinePath `
+                -QuarantineParent $quarantineParentFull `
+                -QuarantineDirectoryLease $quarantineDirectoryLease `
+                -QuarantineParentDirectoryLease $quarantineParentDirectoryLease `
+                -FileParentPath $fileParentPath `
+                -FileParentDirectoryLease $fileParentBinding.Lease `
+                -ContentionStopwatch $contentionStopwatch
             $handles.Add($entry.Stream)
             if ((Get-Phase5PackageOutputStreamSha256 -Stream $entry.Stream) -cne $entry.InitialSha256) {
                 throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
@@ -1226,6 +1532,8 @@ function Enter-Phase5PackageOutputQuarantineLease {
             InitialEntryKeys = $initialEntryKeys
             RepositoryLock = $repositoryLock
             QuarantineParentDirectoryLease = $quarantineParentDirectoryLease
+            QuarantineDirectoryLease = $quarantineDirectoryLease
+            DirectoryBindings = @($directoryBindings)
             Mutex = $mutex
             MutexOwned = $true
             Preserved = $false
@@ -1233,6 +1541,12 @@ function Enter-Phase5PackageOutputQuarantineLease {
         }
     } catch {
         foreach ($handle in $handles) { try { $handle.Dispose() } catch {} }
+        for ($bindingIndex = $directoryBindings.Count - 1; $bindingIndex -ge 0; $bindingIndex--) {
+            try { $directoryBindings[$bindingIndex].Lease.Dispose() } catch {}
+        }
+        if ($null -ne $quarantineDirectoryLease -and $directoryBindings.Count -eq 0) {
+            try { $quarantineDirectoryLease.Dispose() } catch {}
+        }
         if ($null -ne $quarantineParentDirectoryLease) {
             try { $quarantineParentDirectoryLease.Dispose() } catch {}
         }
@@ -1283,6 +1597,10 @@ function Exit-Phase5PackageOutputQuarantineLease {
         Assert-Phase5PackageOutputQuarantineIntegrity -Lease $Lease
     } finally {
         foreach ($handle in $Lease.Handles) { try { $handle.Dispose() } catch {} }
+        $leaseDirectoryBindings = @($Lease.DirectoryBindings)
+        for ($bindingIndex = $leaseDirectoryBindings.Count - 1; $bindingIndex -ge 0; $bindingIndex--) {
+            try { $leaseDirectoryBindings[$bindingIndex].Lease.Dispose() } catch {}
+        }
         if ($null -ne $Lease.QuarantineParentDirectoryLease) {
             try { $Lease.QuarantineParentDirectoryLease.Dispose() } catch {}
         }
