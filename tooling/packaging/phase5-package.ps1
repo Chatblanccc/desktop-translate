@@ -226,6 +226,14 @@ Copy-Item -LiteralPath $workspaceStateTemporary -Destination $workspaceStatePath
     if (-not (Test-Path -LiteralPath $candidateWinUnpacked -PathType Container)) {
         throw "electron-builder did not produce candidate win-unpacked: $candidateWinUnpacked"
     }
+    if ($Mode -eq 'Installer') {
+        # electron-builder emits setup.exe.blockmap even though this project
+        # disables publishing and auto-update. Remove only that exact regular
+        # unpublished sidecar after validating the entire candidate root.
+        $null = Remove-Phase5UnpublishedInstallerBlockmap `
+            -Root $candidatePackageOutput `
+            -AllowedParent $packageOutputParent
+    }
     $candidateInstaller = Assert-Phase5PackageOutputRootExactSet `
         -Root $candidatePackageOutput `
         -AllowedParent $packageOutputParent `

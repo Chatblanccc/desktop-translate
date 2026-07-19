@@ -510,6 +510,98 @@ function Assert-Phase5PackageOutputQuarantineIntegrity {
     }
 }
 
+function Remove-Phase5UnpublishedInstallerBlockmap {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Root,
+        [Parameter(Mandatory = $true)][string]$AllowedParent
+    )
+
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd('\')
+    $allowedParentFull = [IO.Path]::GetFullPath($AllowedParent).TrimEnd('\')
+    $rootParentFull = [IO.Path]::GetFullPath((Split-Path -Parent $rootFull)).TrimEnd('\')
+    $rootLeaf = [IO.Path]::GetFileName($rootFull)
+    if (-not [string]::Equals(
+        $rootParentFull,
+        $allowedParentFull,
+        [StringComparison]::OrdinalIgnoreCase
+    ) -or $rootLeaf -notmatch '^\.phase5-build-[a-f0-9]{32}$') {
+        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_STAGING_PATH_INVALID' `
+            -Message 'Installer blockmap cleanup is restricted to one exact unpublished sibling staging namespace.')
+    }
+    Assert-Phase5NoReparsePoint -Path $rootFull -AllowedParent $allowedParentFull
+    if (-not (Test-Path -LiteralPath $rootFull -PathType Container)) {
+        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_ROOT_INVALID' `
+            -Message 'unpublished Installer output is not an exact regular directory.')
+    }
+
+    $entries = @(Get-ChildItem -LiteralPath $rootFull -Force -ErrorAction Stop)
+    $winUnpackedEntries = @($entries | Where-Object {
+        [string]::Equals($_.Name, 'win-unpacked', [StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($winUnpackedEntries.Count -ne 1 -or -not $winUnpackedEntries[0].PSIsContainer -or
+        ($winUnpackedEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_ROOT_INVALID' `
+            -Message 'unpublished Installer output must contain one regular win-unpacked directory.')
+    }
+
+    # Match the setup name before considering blockmap cleanup. A directory,
+    # reparse point, or ambiguous setup set must never select a deletion target.
+    $setupEntries = @($entries | Where-Object { $_.Name -like '*-setup.exe' })
+    if ($setupEntries.Count -ne 1 -or $setupEntries[0].PSIsContainer -or
+        ($setupEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_SETUP_INVALID' `
+            -Message 'unpublished Installer output must contain exactly one regular setup executable.')
+    }
+    $setup = $setupEntries[0]
+    $blockmapFull = $setup.FullName + '.blockmap'
+    $blockmapEntries = @($entries | Where-Object {
+        [string]::Equals($_.FullName, $blockmapFull, [StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($blockmapEntries.Count -gt 1 -or
+        ($blockmapEntries.Count -eq 1 -and (
+            $blockmapEntries[0].PSIsContainer -or
+            ($blockmapEntries[0].Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+        ))) {
+        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_INVALID' `
+            -Message 'the exact unpublished setup blockmap is not one regular non-reparse file.')
+    }
+
+    $allowedTopLevelPaths = @(
+        $winUnpackedEntries[0].FullName,
+        $setup.FullName
+    )
+    if ($blockmapEntries.Count -eq 1) {
+        $allowedTopLevelPaths += $blockmapEntries[0].FullName
+    }
+    $unexpectedEntries = @($entries | Where-Object {
+        $entryFullName = $_.FullName
+        @($allowedTopLevelPaths | Where-Object {
+            [string]::Equals($_, $entryFullName, [StringComparison]::OrdinalIgnoreCase)
+        }).Count -eq 0
+    })
+    if ($unexpectedEntries.Count -ne 0) {
+        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_ROOT_EXACT_SET_INVALID' `
+            -Message 'unpublished Installer output contains an unexpected top-level entry before blockmap cleanup.')
+    }
+
+    if ($blockmapEntries.Count -eq 1) {
+        # Delete only electron-builder's exact setup.exe.blockmap sidecar from
+        # unpublished staging. Auto-update/publish is disabled for this project.
+        try {
+            [IO.File]::Delete($blockmapFull)
+        } catch {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_CLEANUP_FAILED' `
+                -Message "the exact unpublished setup blockmap could not be removed: $($_.Exception.Message)")
+        }
+        if (Test-Path -LiteralPath $blockmapFull) {
+            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_CLEANUP_FAILED' `
+                -Message 'the exact unpublished setup blockmap remained after cleanup.')
+        }
+    }
+    return $setup.FullName
+}
+
 function Assert-Phase5PackageOutputRootExactSet {
     [CmdletBinding()]
     param(

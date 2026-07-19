@@ -103,6 +103,9 @@
   所有 package/sign/evidence gate 通过后才发布；Dir/Installer 根 exact-set 与 live 全树 hash 会再次复核，失败发布
   原子移入 `.phase5-failed-*` 保留。Confirm/Exit 复核旧树 exact entry set 与逐文件 SHA-256；并发、删除、写入、
   执行、parent rename、注入与 retention 双错误负测通过。
+- [x] auto-update 未启用时，electron-builder 自动产生的唯一 `setup.exe.blockmap` 仅可在 unpublished
+  `.phase5-build-*` staging 内按 exact setup 名删除；canonical `dist`、lookalike、目录、reparse、多个 setup
+  与额外顶层项均失败关闭且不误删。
 - [x] Windows packaged UI 开发快检确认 Ball、Settings、Native service 与 `0.5.0-phase5` 版本面可用，正常
   UI 退出后 exact package process 为 `0`；发现并修正设置页 `Phase 4 · 内部开发预览` 残留标签，定向测试通过。
   该会话观察尚非 signed-RC/clean-VM/兼容矩阵证据。

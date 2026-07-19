@@ -185,6 +185,224 @@ try {
         throw 'Installer root exact-set gate accepted an unexpected third top-level entry.'
     }
 
+    $blockmapCleanupParent = Join-Path $temporaryParent 'installer-blockmap-cleanup'
+    $blockmapCleanupRoot = Join-Path $blockmapCleanupParent (
+        '.phase5-build-' + [guid]::NewGuid().ToString('N')
+    )
+    New-Item -ItemType Directory -Force -Path (Join-Path $blockmapCleanupRoot 'win-unpacked') | Out-Null
+    $blockmapCleanupSetup = Join-Path $blockmapCleanupRoot 'Desktop-Translate-cleanup-setup.exe'
+    [IO.File]::WriteAllBytes($blockmapCleanupSetup, [byte[]](10, 20, 30, 40))
+    $blockmapCleanupSetupHash = (Get-FileHash -LiteralPath $blockmapCleanupSetup -Algorithm SHA256).Hash
+    $blockmapCleanupExact = $blockmapCleanupSetup + '.blockmap'
+    [IO.File]::WriteAllBytes($blockmapCleanupExact, [byte[]](50, 60, 70))
+    $blockmapCleanupResolved = Remove-Phase5UnpublishedInstallerBlockmap `
+        -Root $blockmapCleanupRoot `
+        -AllowedParent $blockmapCleanupParent
+    $blockmapCleanupExactInstaller = Assert-Phase5PackageOutputRootExactSet `
+        -Root $blockmapCleanupRoot `
+        -AllowedParent $blockmapCleanupParent `
+        -Mode Installer
+    if (-not [string]::Equals(
+        $blockmapCleanupResolved,
+        $blockmapCleanupSetup,
+        [StringComparison]::OrdinalIgnoreCase
+    ) -or -not [string]::Equals(
+        $blockmapCleanupExactInstaller,
+        $blockmapCleanupSetup,
+        [StringComparison]::OrdinalIgnoreCase
+    ) -or (Test-Path -LiteralPath $blockmapCleanupExact) -or
+        (Get-FileHash -LiteralPath $blockmapCleanupSetup -Algorithm SHA256).Hash -cne
+            $blockmapCleanupSetupHash) {
+        throw 'Exact regular unpublished setup blockmap cleanup did not preserve the setup and exact root.'
+    }
+
+    $blockmapCanonicalParent = Join-Path $temporaryParent 'installer-blockmap-canonical'
+    $blockmapCanonicalRoot = Join-Path $blockmapCanonicalParent 'dist'
+    New-Item -ItemType Directory -Force -Path (Join-Path $blockmapCanonicalRoot 'win-unpacked') | Out-Null
+    $blockmapCanonicalSetup = Join-Path $blockmapCanonicalRoot 'Desktop-Translate-canonical-setup.exe'
+    [IO.File]::WriteAllBytes($blockmapCanonicalSetup, [byte[]](21, 22, 23))
+    $blockmapCanonicalExact = $blockmapCanonicalSetup + '.blockmap'
+    [IO.File]::WriteAllBytes($blockmapCanonicalExact, [byte[]](24, 25, 26))
+    $blockmapCanonicalRejected = $false
+    try {
+        $null = Remove-Phase5UnpublishedInstallerBlockmap `
+            -Root $blockmapCanonicalRoot `
+            -AllowedParent $blockmapCanonicalParent
+    } catch {
+        $blockmapCanonicalRejected = $_.Exception.Data['StableErrorCode'] -eq `
+            'PACKAGE_OUTPUT_INSTALLER_STAGING_PATH_INVALID'
+    }
+    if (-not $blockmapCanonicalRejected -or
+        -not (Test-Path -LiteralPath $blockmapCanonicalSetup -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $blockmapCanonicalExact -PathType Leaf)) {
+        throw 'Installer blockmap cleanup did not reject and preserve canonical dist.'
+    }
+
+    $blockmapLookalikeParent = Join-Path $temporaryParent 'installer-blockmap-lookalike'
+    $blockmapLookalikeRoot = Join-Path $blockmapLookalikeParent (
+        '.phase5-build-' + [guid]::NewGuid().ToString('N')
+    )
+    New-Item -ItemType Directory -Force -Path (Join-Path $blockmapLookalikeRoot 'win-unpacked') | Out-Null
+    $blockmapLookalikeSetup = Join-Path $blockmapLookalikeRoot 'Desktop-Translate-lookalike-setup.exe'
+    [IO.File]::WriteAllBytes($blockmapLookalikeSetup, [byte[]](1, 3, 5))
+    $blockmapLookalike = $blockmapLookalikeSetup + '.blockmap.bak'
+    [IO.File]::WriteAllBytes($blockmapLookalike, [byte[]](2, 4, 6))
+    $blockmapLookalikeRejected = $false
+    try {
+        $null = Remove-Phase5UnpublishedInstallerBlockmap `
+            -Root $blockmapLookalikeRoot `
+            -AllowedParent $blockmapLookalikeParent
+    } catch {
+        $blockmapLookalikeRejected = $_.Exception.Data['StableErrorCode'] -eq `
+            'PACKAGE_OUTPUT_ROOT_EXACT_SET_INVALID'
+    }
+    if (-not $blockmapLookalikeRejected -or
+        -not (Test-Path -LiteralPath $blockmapLookalike -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $blockmapLookalikeSetup -PathType Leaf)) {
+        throw 'A blockmap lookalike was deleted or did not fail closed.'
+    }
+
+    $blockmapDirectoryParent = Join-Path $temporaryParent 'installer-blockmap-directory'
+    $blockmapDirectoryRoot = Join-Path $blockmapDirectoryParent (
+        '.phase5-build-' + [guid]::NewGuid().ToString('N')
+    )
+    New-Item -ItemType Directory -Force -Path (Join-Path $blockmapDirectoryRoot 'win-unpacked') | Out-Null
+    $blockmapDirectorySetup = Join-Path $blockmapDirectoryRoot 'Desktop-Translate-directory-setup.exe'
+    [IO.File]::WriteAllBytes($blockmapDirectorySetup, [byte[]](7, 8, 9))
+    $blockmapDirectory = $blockmapDirectorySetup + '.blockmap'
+    New-Item -ItemType Directory -Path $blockmapDirectory | Out-Null
+    $blockmapDirectoryRejected = $false
+    try {
+        $null = Remove-Phase5UnpublishedInstallerBlockmap `
+            -Root $blockmapDirectoryRoot `
+            -AllowedParent $blockmapDirectoryParent
+    } catch {
+        $blockmapDirectoryRejected = $_.Exception.Data['StableErrorCode'] -eq `
+            'PACKAGE_OUTPUT_INSTALLER_BLOCKMAP_INVALID'
+    }
+    if (-not $blockmapDirectoryRejected -or
+        -not (Test-Path -LiteralPath $blockmapDirectory -PathType Container)) {
+        throw 'A setup blockmap directory was deleted or did not fail closed.'
+    }
+
+    $blockmapReparseParent = Join-Path $temporaryParent 'installer-blockmap-reparse'
+    $blockmapReparseRoot = Join-Path $blockmapReparseParent (
+        '.phase5-build-' + [guid]::NewGuid().ToString('N')
+    )
+    $blockmapReparseTarget = Join-Path $blockmapReparseParent 'outside-target'
+    New-Item -ItemType Directory -Force -Path `
+        (Join-Path $blockmapReparseRoot 'win-unpacked'), $blockmapReparseTarget | Out-Null
+    $blockmapReparseTargetProof = Join-Path $blockmapReparseTarget 'must-survive.txt'
+    Set-Content -LiteralPath $blockmapReparseTargetProof -Value 'reparse target survives' -Encoding UTF8
+    $blockmapReparseSetup = Join-Path $blockmapReparseRoot 'Desktop-Translate-reparse-setup.exe'
+    [IO.File]::WriteAllBytes($blockmapReparseSetup, [byte[]](11, 12, 13))
+    $blockmapReparse = $blockmapReparseSetup + '.blockmap'
+    New-Item -ItemType Junction -Path $blockmapReparse -Target $blockmapReparseTarget | Out-Null
+    try {
+        $blockmapReparseRejected = $false
+        try {
+            $null = Remove-Phase5UnpublishedInstallerBlockmap `
+                -Root $blockmapReparseRoot `
+                -AllowedParent $blockmapReparseParent
+        } catch {
+            $blockmapReparseRejected = $_.Exception.Message -match 'reparse point'
+        }
+        if (-not $blockmapReparseRejected -or
+            -not (Test-Path -LiteralPath $blockmapReparse -PathType Container) -or
+            -not (Test-Path -LiteralPath $blockmapReparseTargetProof -PathType Leaf)) {
+            throw 'A setup blockmap reparse point was deleted/traversed or did not fail closed.'
+        }
+    } finally {
+        if (Test-Path -LiteralPath $blockmapReparse) {
+            [IO.Directory]::Delete($blockmapReparse)
+        }
+    }
+
+    $blockmapMultipleParent = Join-Path $temporaryParent 'installer-blockmap-multiple-setup'
+    $blockmapMultipleRoot = Join-Path $blockmapMultipleParent (
+        '.phase5-build-' + [guid]::NewGuid().ToString('N')
+    )
+    New-Item -ItemType Directory -Force -Path (Join-Path $blockmapMultipleRoot 'win-unpacked') | Out-Null
+    $blockmapMultipleSetupA = Join-Path $blockmapMultipleRoot 'Desktop-Translate-a-setup.exe'
+    $blockmapMultipleSetupB = Join-Path $blockmapMultipleRoot 'Desktop-Translate-b-setup.exe'
+    [IO.File]::WriteAllBytes($blockmapMultipleSetupA, [byte[]](1))
+    [IO.File]::WriteAllBytes($blockmapMultipleSetupB, [byte[]](2))
+    $blockmapMultipleExact = $blockmapMultipleSetupA + '.blockmap'
+    [IO.File]::WriteAllBytes($blockmapMultipleExact, [byte[]](3))
+    $blockmapMultipleRejected = $false
+    try {
+        $null = Remove-Phase5UnpublishedInstallerBlockmap `
+            -Root $blockmapMultipleRoot `
+            -AllowedParent $blockmapMultipleParent
+    } catch {
+        $blockmapMultipleRejected = $_.Exception.Data['StableErrorCode'] -eq `
+            'PACKAGE_OUTPUT_INSTALLER_SETUP_INVALID'
+    }
+    if (-not $blockmapMultipleRejected -or
+        -not (Test-Path -LiteralPath $blockmapMultipleSetupA -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $blockmapMultipleSetupB -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $blockmapMultipleExact -PathType Leaf)) {
+        throw 'Multiple setup executables did not fail closed before exact blockmap cleanup.'
+    }
+
+    $setupDirectoryParent = Join-Path $temporaryParent 'installer-setup-directory'
+    $setupDirectoryRoot = Join-Path $setupDirectoryParent (
+        '.phase5-build-' + [guid]::NewGuid().ToString('N')
+    )
+    New-Item -ItemType Directory -Force -Path (Join-Path $setupDirectoryRoot 'win-unpacked') | Out-Null
+    $setupDirectory = Join-Path $setupDirectoryRoot 'Desktop-Translate-directory-setup.exe'
+    New-Item -ItemType Directory -Path $setupDirectory | Out-Null
+    $setupDirectoryBlockmap = $setupDirectory + '.blockmap'
+    [IO.File]::WriteAllBytes($setupDirectoryBlockmap, [byte[]](31, 32, 33))
+    $setupDirectoryRejected = $false
+    try {
+        $null = Remove-Phase5UnpublishedInstallerBlockmap `
+            -Root $setupDirectoryRoot `
+            -AllowedParent $setupDirectoryParent
+    } catch {
+        $setupDirectoryRejected = $_.Exception.Data['StableErrorCode'] -eq `
+            'PACKAGE_OUTPUT_INSTALLER_SETUP_INVALID'
+    }
+    if (-not $setupDirectoryRejected -or
+        -not (Test-Path -LiteralPath $setupDirectory -PathType Container) -or
+        -not (Test-Path -LiteralPath $setupDirectoryBlockmap -PathType Leaf)) {
+        throw 'A setup executable directory was deleted or did not fail closed before blockmap cleanup.'
+    }
+
+    $setupReparseParent = Join-Path $temporaryParent 'installer-setup-reparse'
+    $setupReparseRoot = Join-Path $setupReparseParent (
+        '.phase5-build-' + [guid]::NewGuid().ToString('N')
+    )
+    $setupReparseTarget = Join-Path $setupReparseParent 'outside-target'
+    New-Item -ItemType Directory -Force -Path `
+        (Join-Path $setupReparseRoot 'win-unpacked'), $setupReparseTarget | Out-Null
+    $setupReparseTargetProof = Join-Path $setupReparseTarget 'must-survive.txt'
+    Set-Content -LiteralPath $setupReparseTargetProof -Value 'setup reparse target survives' -Encoding UTF8
+    $setupReparse = Join-Path $setupReparseRoot 'Desktop-Translate-reparse-setup.exe'
+    New-Item -ItemType Junction -Path $setupReparse -Target $setupReparseTarget | Out-Null
+    $setupReparseBlockmap = $setupReparse + '.blockmap'
+    [IO.File]::WriteAllBytes($setupReparseBlockmap, [byte[]](34, 35, 36))
+    try {
+        $setupReparseRejected = $false
+        try {
+            $null = Remove-Phase5UnpublishedInstallerBlockmap `
+                -Root $setupReparseRoot `
+                -AllowedParent $setupReparseParent
+        } catch {
+            $setupReparseRejected = $_.Exception.Message -match 'reparse point'
+        }
+        if (-not $setupReparseRejected -or
+            -not (Test-Path -LiteralPath $setupReparse -PathType Container) -or
+            -not (Test-Path -LiteralPath $setupReparseBlockmap -PathType Leaf) -or
+            -not (Test-Path -LiteralPath $setupReparseTargetProof -PathType Leaf)) {
+            throw 'A setup executable reparse point was deleted/traversed or did not fail closed.'
+        }
+    } finally {
+        if (Test-Path -LiteralPath $setupReparse) {
+            [IO.Directory]::Delete($setupReparse)
+        }
+    }
+
     $postPublishFailureParent = Join-Path $temporaryParent 'post-publish-validation-failure'
     $postPublishFailureStaging = Join-Path $postPublishFailureParent (
         '.phase5-build-' + [guid]::NewGuid().ToString('N')
@@ -304,6 +522,8 @@ try {
     $publishBoundaryIndex = $packageScriptText.IndexOf('Invoke-Phase5PackageCandidateGatesAndPublish')
     $publishedReverifyIndex = $packageScriptText.IndexOf('Re-verify atomically published live manifest and hashes')
     $publishedValidationBoundaryIndex = $packageScriptText.IndexOf('Invoke-Phase5PublishedPackageLiveValidation')
+    $installerBlockmapCleanupIndex = $packageScriptText.IndexOf('Remove-Phase5UnpublishedInstallerBlockmap')
+    $candidateRootExactSetIndex = $packageScriptText.IndexOf('Assert-Phase5PackageOutputRootExactSet')
     $requiredPrePublishMarkers = @(
         'Assert-Phase5PackageOutputRootExactSet',
         'SignedRelease has no protected GitHub Actions OIDC/attestation context',
@@ -313,7 +533,11 @@ try {
         'phase5-sign-verify.ps1',
         'Verify unpublished candidate evidence manifest traceability'
     )
-    if ($publishBoundaryIndex -lt 0 -or $publishedReverifyIndex -le $publishBoundaryIndex -or
+    if ($publishBoundaryIndex -lt 0 -or
+        $installerBlockmapCleanupIndex -lt 0 -or
+        $candidateRootExactSetIndex -le $installerBlockmapCleanupIndex -or
+        $candidateRootExactSetIndex -ge $publishBoundaryIndex -or
+        $publishedReverifyIndex -le $publishBoundaryIndex -or
         $publishedValidationBoundaryIndex -le $publishedReverifyIndex -or
         @($requiredPrePublishMarkers | Where-Object {
             $markerIndex = $packageScriptText.IndexOf($_)

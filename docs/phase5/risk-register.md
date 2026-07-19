@@ -78,6 +78,9 @@
   canonical `dist` 会同父原子移入失败保留目录。release-hardening 负测覆盖并发、新读/写/删/执行、parent
   rename、注入、exact-set/SHA 变化、失败保留及 retention 双错误；最终新提交 package rerun 前 P5-R-020
   不关闭为正式证据。
+- auto-update 当前禁用；electron-builder 的唯一 `setup.exe.blockmap` 只能在 unpublished `.phase5-build-*`
+  staging 中按 setup 精确名称删除。canonical `dist`、lookalike、目录/reparse、多个 setup 与额外顶层文件均
+  fail closed，避免为兼容 builder 输出而放宽发布根白名单。
 - Windows packaged UI 开发快检观察到 Ball、Settings、Native service 与 `0.5.0-phase5` 版本面可用，正常 UI
   退出后 exact package process 为 0；设置页残留的 Phase 4 副标题已修正。该会话观察不替代 signed RC、
   clean VM 或正式兼容矩阵。
