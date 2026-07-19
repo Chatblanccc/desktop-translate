@@ -160,9 +160,26 @@ namespace Phase5 {
             return information;
         }
 
+        private static string ToExtendedLengthPath(string path) {
+            if (String.IsNullOrWhiteSpace(path)) {
+                throw new ArgumentException("Native path must not be empty.", "path");
+            }
+            var normalized = path.Replace('/', '\\');
+            if (normalized.StartsWith(@"\\?\", StringComparison.Ordinal)) {
+                return normalized;
+            }
+            if (normalized.StartsWith(@"\\", StringComparison.Ordinal)) {
+                return @"\\?\UNC\" + normalized.Substring(2);
+            }
+            if (normalized.Length < 3 || normalized[1] != ':' || normalized[2] != '\\') {
+                throw new ArgumentException("Native path must be an absolute DOS or UNC path.", "path");
+            }
+            return @"\\?\" + normalized;
+        }
+
         private static SafeFileHandle OpenDirectoryHandle(string path) {
             return CreateFileW(
-                path,
+                ToExtendedLengthPath(path),
                 FILE_READ_ATTRIBUTES,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
                 IntPtr.Zero,
@@ -174,7 +191,7 @@ namespace Phase5 {
 
         public static FileStream OpenFileQuarantineLease(string path) {
             var handle = CreateFileW(
-                path,
+                ToExtendedLengthPath(path),
                 GENERIC_READ,
                 0,
                 IntPtr.Zero,
@@ -234,7 +251,7 @@ namespace Phase5 {
         ) {
             var desiredAccess = GENERIC_READ | (requestDeleteAccess ? DELETE : 0);
             var handle = CreateFileW(
-                path,
+                ToExtendedLengthPath(path),
                 desiredAccess,
                 0,
                 IntPtr.Zero,
@@ -1412,12 +1429,18 @@ function Enter-Phase5PackageOutputQuarantineLease {
         Assert-Phase5PackageQuarantineParentIdentity `
             -DirectoryLease $quarantineParentDirectoryLease `
             -Path $quarantineParentFull
+
         try {
             $quarantineDirectoryLease = `
                 [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($quarantinePath)
         } catch {
-            throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
-                -Message 'the atomically quarantined package directory could not be pinned to a stable identity; the complete quarantine tree was retained.')
+            $nativeErrorCode = Get-Phase5PackageOutputNativeErrorCode -Exception $_.Exception
+            $message = 'the atomically quarantined package directory could not be pinned to a stable identity; the complete quarantine tree was retained.'
+            if ($null -ne $nativeErrorCode) { $message += " nativeErrorCode=$nativeErrorCode." }
+            $exception = New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+                -Message $message
+            if ($null -ne $nativeErrorCode) { $exception.Data['NativeErrorCode'] = $nativeErrorCode }
+            throw $exception
         }
         Assert-Phase5PackageQuarantineDirectoryIdentity `
             -DirectoryLease $quarantineDirectoryLease `
@@ -1466,8 +1489,13 @@ function Enter-Phase5PackageOutputQuarantineLease {
                 $childDirectoryLease = `
                     [Phase5.PackageOutputQuarantineNative]::OpenDirectoryIdentityLease($directoryPath)
             } catch {
-                throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
-                    -Message 'a quarantined child directory could not be pinned to its exact identity; the complete quarantine tree was retained.')
+                $nativeErrorCode = Get-Phase5PackageOutputNativeErrorCode -Exception $_.Exception
+                $message = 'a quarantined child directory could not be pinned to its exact identity; the complete quarantine tree was retained.'
+                if ($null -ne $nativeErrorCode) { $message += " nativeErrorCode=$nativeErrorCode." }
+                $exception = New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_QUARANTINE_CHANGED' `
+                    -Message $message
+                if ($null -ne $nativeErrorCode) { $exception.Data['NativeErrorCode'] = $nativeErrorCode }
+                throw $exception
             }
             $childDirectoryBinding = [pscustomobject][ordered]@{
                 RelativePath = $directoryEntry.RelativePath
@@ -1486,7 +1514,7 @@ function Enter-Phase5PackageOutputQuarantineLease {
 
         # A Windows image scanner can briefly open a newly appeared executable
         # after the atomic move. Retry only sharing/lock violations under one
-        # monotonic whole-tree deadline while both directory identities remain
+        # monotonic whole-tree deadline while every directory identity remains
         # pinned. All other errors and deadline exhaustion still fail closed.
         $contentionStopwatch = [Diagnostics.Stopwatch]::new()
         foreach ($entry in @($initialEntries | Where-Object { -not $_.IsDirectory } | Sort-Object RelativePath)) {

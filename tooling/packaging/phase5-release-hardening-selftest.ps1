@@ -447,6 +447,11 @@ try {
             -QuarantineParent $emptyDirectoryQuarantineParent
         $emptyDirectoryQuarantineRoot = $emptyDirectoryLease.QuarantinePath
         $emptyDirectoryQuarantinedNested = Join-Path $emptyDirectoryQuarantineRoot 'empty-parent\empty-child'
+        $emptyDirectoryExtendedPath = Join-Path $emptyDirectoryQuarantinedNested 'grandchild'
+        if ($emptyDirectoryExtendedPath.Length -le 260 -or
+            -not (Test-Path -LiteralPath $emptyDirectoryExtendedPath -PathType Container)) {
+            throw 'Directory-only quarantine did not exercise a native path beyond legacy MAX_PATH.'
+        }
         $emptyDirectoryRenamedRoot = $emptyDirectoryQuarantineRoot + '-replacement-attempt'
         $emptyDirectoryRenamedNested = Join-Path $emptyDirectoryQuarantineRoot 'empty-parent\empty-child-replacement-attempt'
 
