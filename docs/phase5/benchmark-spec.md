@@ -38,6 +38,13 @@ registry，最新 PERF-09 证据明确记录 `deviceRegistrationId=unregistered-
 
 ### 2.1 当前开发观察值（非正式验收）
 
+- [PERF-03 packaged 1×1](../../artifacts/phase5/local/perf03-host-ready-lease-dev-20260719T060500404Z/summary.json)
+  为 `DEVELOPMENT_SELFTEST_PASS_NOT_ACCEPTANCE`：Main 启动真实 Host 到 authenticated Pipe ready 的
+  p50/p95/max 均为 `118.648ms`，failure=0、forced termination=0，postflight/privacy PASS。计时完成后的
+  cleanup 精确绑定同 PID 唯一 Ball 与同 PID 菜单，并以 UIA Invoke 调用唯一启用的 Exit 项；该运行只有
+  1 轮 1 样本、使用 unsigned package 和未登记设备，不能代替 formal signed fixed-lab 3×100。formal entry
+  在 protected-run receipt、认证指标通道、预先冻结 publisher policy 与完整 namespace trust controller
+  实现前固定返回 `FORMAL_PERF03_TRUST_CONTROLLER_NOT_IMPLEMENTED`。
 - [PERF-09 final combined 2×5](../../artifacts/phase5/local/perf09-final-combined-2x5-20260719-0302/summary.json)
   为 `DEVELOPMENT_SELFTEST_PASS_NOT_ACCEPTANCE`：Round 1 p50 `281.413ms`、p95/max `368.937ms`；
   Round 2 p50 `339.670ms`、p95/max `393.163ms`；10/10 成功、failure=0、forced cleanup=0，privacy PASS。
@@ -45,11 +52,13 @@ registry，最新 PERF-09 证据明确记录 `deviceRegistrationId=unregistered-
   记录 15 samples / 90 role rows；UI command issued、root exit `0`、forced=false，residual、WER、evidence
   privacy、final binary privacy 与 isolated cleanup 全 PASS。它不是正式 900 秒/5 秒采样证据。
 - no-`SkipBuild` unsigned package 开发测量为：Dir installed `322.146 MiB`；Installer installed
-  `322.249 MiB`、installer `87.741 MiB`；Host+non-Electron resources `0.74 MiB`。对应 manifest 均为
-  dirty `HEAD+WORKTREE`、`acceptanceEligible=false`、`NotSigned`。
+  `322.249 MiB`、installer `87.741 MiB`；Host+non-Electron resources `0.74 MiB`。早期两份 manifest 为
+  dirty `HEAD+WORKTREE`；[`3443d875…` clean verify](../../artifacts/phase5/3443d87598d15b697468b0b66755c7e808b76607/clean-verify-local-20260719-rerun1/package/release/evidence-manifest.json)
+  已重建 clean unsigned Dir package，但仍为 `acceptanceEligible=false`、`NotSigned`。
 
-以上数据只证明当前 harness 与 development artifact 的可运行性；正式结论仍要求 clean/signed/attested
-artifact、登记设备、完整 run metadata、独占交互会话及冻结样本数。
+以上数据只证明当前 harness 与 development artifact 的可运行性；正式结论仍要求最终候选 clean/signed/attested
+artifact、登记设备、完整 run metadata、独占交互会话及冻结样本数。当前机器只有 Profile B 的单物理屏
+150% DPI，不覆盖 A 类低配、C 类双屏或 Win10 矩阵。
 
 ## 3. 时钟与事件契约
 

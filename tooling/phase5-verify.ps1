@@ -13,6 +13,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'packaging\phase5-package-output-preflight.ps1')
 
 function Invoke-CheckedExternal {
     param(
@@ -43,6 +44,12 @@ function Invoke-PowerShellHook {
 
 Push-Location $root
 try {
+    if (-not $SkipPackaging) {
+        $null = Assert-Phase5PackageOutputNotInUse `
+            -PackageOutput (Join-Path $root 'artifacts\phase5\package\dist')
+        $null = Assert-Phase5PackageOutputLeaseAvailable `
+            -PackageOutput (Join-Path $root 'artifacts\phase5\package\dist')
+    }
     $gitSha = (& git rev-parse HEAD).Trim().ToLowerInvariant()
     if ($LASTEXITCODE -ne 0 -or $gitSha -notmatch '^[a-f0-9]{40}$') {
         throw 'Unable to bind Phase 5 evidence to the current 40-character git SHA.'
@@ -67,6 +74,10 @@ try {
         metricsInterface = 'PENDING'
         processPrivacyHardening = 'PENDING'
         laneIdentityHardening = 'PENDING'
+        acceptanceDecisionHardening = 'PENDING'
+        environmentPreflightHardening = 'PENDING'
+        formalPerf03Hardening = 'PENDING'
+        providerSmokeHardening = 'PENDING'
         releaseEvidenceHardening = 'PENDING'
         dependencyAudit = 'PENDING'
         unsignedPackaging = 'PENDING'
@@ -110,6 +121,22 @@ try {
     Invoke-PowerShellHook -Label 'Lane A/B artifact identity and acceptance-boundary selftests' `
         -Path (Join-Path $PSScriptRoot 'phase5-lane-identity-selftest.ps1')
     $gate.laneIdentityHardening = 'PASS'
+
+    Invoke-CheckedExternal -Label 'Formal acceptance decision exact-set and merged-role fail-closed selftests' `
+        -FilePath 'node' -ArgumentList @('--test', 'tooling/phase5-acceptance-decision.test.mjs')
+    $gate.acceptanceDecisionHardening = 'PASS'
+
+    Invoke-PowerShellHook -Label 'Environment capability preflight privacy and fail-closed selftests' `
+        -Path (Join-Path $PSScriptRoot 'phase5-environment-preflight.test.ps1')
+    $gate.environmentPreflightHardening = 'PASS'
+
+    Invoke-PowerShellHook -Label 'Formal PERF-03 fixed-count, trust-chain and privacy selftests' `
+        -Path (Join-Path $PSScriptRoot 'phase5-perf03-host-ready-selftest.ps1')
+    $gate.formalPerf03Hardening = 'PASS'
+
+    Invoke-CheckedExternal -Label 'Real Provider formal identity, fault-evidence and privacy selftests' `
+        -FilePath 'pnpm' -ArgumentList @('exec', 'tsx', '--test', 'tooling/phase5-provider-smoke.test.mjs')
+    $gate.providerSmokeHardening = 'PASS'
 
     Invoke-PowerShellHook -Label 'Release evidence, safe deletion and signed-release negative selftests' `
         -Path (Join-Path $root 'tooling\packaging\phase5-release-hardening-selftest.ps1')
@@ -202,6 +229,10 @@ try {
         $gate.metricsInterface -ne 'NOT_IMPLEMENTED' -and
         $gate.processPrivacyHardening -eq 'PASS' -and
         $gate.laneIdentityHardening -eq 'PASS' -and
+        $gate.acceptanceDecisionHardening -eq 'PASS' -and
+        $gate.environmentPreflightHardening -eq 'PASS' -and
+        $gate.formalPerf03Hardening -eq 'PASS' -and
+        $gate.providerSmokeHardening -eq 'PASS' -and
         $gate.releaseEvidenceHardening -eq 'PASS' -and
         $gate.dependencyAudit -eq 'PASS' -and
         $gate.unsignedPackaging -eq 'PASS'
@@ -259,13 +290,27 @@ try {
     $summaryPath = Join-Path $resolvedEvidenceRoot 'verify-summary.json'
     $summaryJson = ($summary | ConvertTo-Json -Depth 8) + "`n"
     $bytes = (New-Object Text.UTF8Encoding($false)).GetBytes($summaryJson)
-    $stream = [IO.File]::Open($summaryPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    # Scan the exact final summary bytes inside the evidence root before an
+    # atomic same-volume rename exposes them as the canonical summary. A
+    # failed scan therefore cannot leave a PASS-looking verify-summary.
+    $finalSummaryCandidateRoot = Join-Path $securityRoot 'pending-final-summary'
+    [IO.Directory]::CreateDirectory($finalSummaryCandidateRoot) | Out-Null
+    $finalSummaryCandidatePath = Join-Path $finalSummaryCandidateRoot 'verify-summary.json'
+    $stream = [IO.File]::Open($finalSummaryCandidatePath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
     try {
         $stream.Write($bytes, 0, $bytes.Length)
         $stream.Flush($true)
     } finally {
         $stream.Dispose()
     }
+    Invoke-CheckedExternal -Label 'Exact final summary binary privacy scan' -FilePath 'node' -ArgumentList @(
+        'tooling/phase5-evidence-privacy-scan.mjs',
+        '--root', $resolvedEvidenceRoot,
+        '--output', (Join-Path $privacyRoot 'final-summary-binary-scan.json'),
+        '--mode', 'binary'
+    )
+    [IO.File]::Move($finalSummaryCandidatePath, $summaryPath)
+    [IO.Directory]::Delete($finalSummaryCandidateRoot)
 
     Write-Host "[phase5] $summaryStatus"
 } finally {

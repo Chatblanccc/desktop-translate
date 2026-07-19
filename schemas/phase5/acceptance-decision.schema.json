@@ -1,0 +1,311 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase5/acceptance-decision.schema.json",
+  "title": "Phase 5 formal acceptance decision",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "phase",
+    "candidate",
+    "gates",
+    "payload",
+    "approvals",
+    "repositoryState",
+    "evaluatedAt",
+    "status",
+    "acceptance",
+    "pending",
+    "blockers",
+    "acceptanceRule"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "phase": { "const": 5 },
+    "candidate": {
+      "type": "object",
+      "required": [
+        "gitSha",
+        "productVersion",
+        "finalReleaseManifest",
+        "cleanDownloadVerification",
+        "artifactSetDigest"
+      ],
+      "properties": {
+        "gitSha": { "$ref": "#/$defs/gitSha" },
+        "productVersion": { "const": "0.5.0-phase5" },
+        "finalReleaseManifest": { "$ref": "#/$defs/fileBinding" },
+        "cleanDownloadVerification": { "$ref": "#/$defs/fileBinding" },
+        "artifactSetDigest": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "gates": {
+      "type": "array",
+      "minItems": 43,
+      "maxItems": 43,
+      "prefixItems": [
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "G0-SCOPE-FREEZE" }, "evidenceClass": { "const": "REPOSITORY" }, "externalEvidence": { "const": false } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "G1-PHASE4-BASELINE" }, "evidenceClass": { "const": "REPOSITORY" }, "externalEvidence": { "const": false } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "G2-CLEAN-SOURCE" }, "evidenceClass": { "const": "REPOSITORY" }, "externalEvidence": { "const": false } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "G2-VERSION-TOOLCHAIN" }, "evidenceClass": { "const": "REPOSITORY" }, "externalEvidence": { "const": false } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP1-METRICS-PRIVACY" }, "evidenceClass": { "const": "REPOSITORY" }, "externalEvidence": { "const": false } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP2-BASELINE-REGRESSION" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP3-PERF-01" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP3-PERF-02" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP3-PERF-03" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP3-PERF-04" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP3-PERF-05" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP3-PERF-06" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP3-PERF-07" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP3-PERF-08" }, "evidenceClass": { "const": "PROVIDER" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP3-PERF-09" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP4-RES-01" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP4-RES-02" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP4-RES-03" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP4-RES-04" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP4-RES-05" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP4-RES-06" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP4-LANE-A-8H" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP4-LANE-B-8H" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP4-FAULT-RECOVERY" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP4-PRIVACY-CANARY" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP5-PACKAGE-CONTENTS" }, "evidenceClass": { "const": "RELEASE" }, "externalEvidence": { "const": false } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP5-PACKAGE-SIZE" }, "evidenceClass": { "const": "RELEASE" }, "externalEvidence": { "const": false } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP5-SUPPLY-CHAIN" }, "evidenceClass": { "const": "RELEASE" }, "externalEvidence": { "const": false } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP5-FINAL-RELEASE-MANIFEST" }, "evidenceClass": { "const": "CRYPTOGRAPHIC" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP5-AUTHENTICODE" }, "evidenceClass": { "const": "CRYPTOGRAPHIC" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP5-ARTIFACT-ATTESTATION" }, "evidenceClass": { "const": "CRYPTOGRAPHIC" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP5-FINAL-MANIFEST-ATTESTATION" }, "evidenceClass": { "const": "CRYPTOGRAPHIC" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP5-CLEAN-DOWNLOAD" }, "evidenceClass": { "const": "CRYPTOGRAPHIC" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP6-DETERMINISTIC-VERIFY" }, "evidenceClass": { "const": "REPOSITORY" }, "externalEvidence": { "const": false } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP6-FRESH-RUNNER-CI" }, "evidenceClass": { "const": "RELEASE" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP6-RELEASE-GOVERNANCE" }, "evidenceClass": { "const": "RELEASE" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP7-CLEAN-VM" }, "evidenceClass": { "const": "CLEAN_VM" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP7-INSTALL-UPGRADE-UNINSTALL" }, "evidenceClass": { "const": "CLEAN_VM" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP7-DISPLAY-HARDWARE" }, "evidenceClass": { "const": "HARDWARE" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP7-APPLICATION-COMPATIBILITY" }, "evidenceClass": { "const": "HARDWARE" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP7-PERMISSION-BOUNDARIES" }, "evidenceClass": { "const": "HARDWARE" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP7-DATA-LIFECYCLE" }, "evidenceClass": { "const": "CLEAN_VM" }, "externalEvidence": { "const": true } } },
+        { "type": "object", "$ref": "#/$defs/gate", "properties": { "id": { "const": "WP7-RESIDUAL-WER-ZERO" }, "evidenceClass": { "const": "FIXED_LAB" }, "externalEvidence": { "const": true } } }
+      ],
+      "items": false
+    },
+    "payload": {
+      "type": "object",
+      "required": ["algorithm", "canonicalization", "sha256"],
+      "properties": {
+        "algorithm": { "const": "sha256" },
+        "canonicalization": { "const": "UTF8_RECURSIVE_SORTED_KEYS_V1" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "approvals": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "prefixItems": [
+        { "type": "object", "$ref": "#/$defs/approval", "properties": { "role": { "const": "Product" } } },
+        { "type": "object", "$ref": "#/$defs/approval", "properties": { "role": { "const": "Engineering" } } },
+        { "type": "object", "$ref": "#/$defs/approval", "properties": { "role": { "const": "SecurityPrivacy" } } },
+        { "type": "object", "$ref": "#/$defs/approval", "properties": { "role": { "const": "QualityRelease" } } }
+      ],
+      "items": false
+    },
+    "repositoryState": {
+      "type": "object",
+      "required": ["before", "after"],
+      "properties": {
+        "before": { "$ref": "#/$defs/repositoryCheckpoint" },
+        "after": { "$ref": "#/$defs/repositoryCheckpoint" }
+      },
+      "additionalProperties": false
+    },
+    "evaluatedAt": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["PASS", "PENDING", "BLOCKED"] },
+    "acceptance": { "type": "boolean" },
+    "pending": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^(gate|approval):[A-Za-z0-9-]+$" }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "subject", "detail"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^[A-Z0-9_]+$" },
+          "subject": { "type": "string", "minLength": 1 },
+          "detail": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": false
+      }
+    },
+    "acceptanceRule": {
+      "const": "Phase 5 is PASS only when the exact frozen gate set is PASS and Product, Engineering, SecurityPrivacy, and QualityRelease all APPROVE the same canonical payload digest."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "PASS" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "acceptance": { "type": "boolean", "const": true },
+          "pending": { "type": "array", "maxItems": 0 },
+          "blockers": { "type": "array", "maxItems": 0 },
+          "gates": {
+            "type": "array",
+            "contains": { "type": "object", "properties": { "status": { "const": "PASS" } }, "required": ["status"] },
+            "minContains": 43,
+            "maxContains": 43
+          },
+          "approvals": {
+            "type": "array",
+            "contains": { "type": "object", "properties": { "decision": { "const": "APPROVE" } }, "required": ["decision"] },
+            "minContains": 4,
+            "maxContains": 4
+          },
+          "repositoryState": {
+            "type": "object",
+            "properties": {
+              "before": { "$ref": "#/$defs/verifiedRepositoryCheckpoint" },
+              "after": { "$ref": "#/$defs/verifiedRepositoryCheckpoint" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "PENDING" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "acceptance": { "type": "boolean", "const": false },
+          "pending": { "type": "array", "minItems": 1 },
+          "blockers": { "type": "array", "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "BLOCKED" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "acceptance": { "type": "boolean", "const": false },
+          "blockers": { "type": "array", "minItems": 1 }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "gitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "repositoryCheckpoint": {
+      "type": "object",
+      "required": ["gitSha", "clean", "verified"],
+      "properties": {
+        "gitSha": { "anyOf": [{ "$ref": "#/$defs/gitSha" }, { "type": "null" }] },
+        "clean": { "type": "boolean" },
+        "verified": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "verifiedRepositoryCheckpoint": {
+      "type": "object",
+      "required": ["gitSha", "clean", "verified"],
+      "properties": {
+        "gitSha": { "$ref": "#/$defs/gitSha" },
+        "clean": { "const": true },
+        "verified": { "const": true }
+      },
+      "additionalProperties": false
+    },
+    "logicalPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "pattern": "^[^\\\\\\r\\n]+$"
+    },
+    "fileBinding": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/logicalPath" },
+        "sha256": { "$ref": "#/$defs/sha256" }
+      },
+      "additionalProperties": false
+    },
+    "optionalFileBinding": {
+      "type": "object",
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": { "$ref": "#/$defs/logicalPath" },
+        "sha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] }
+      },
+      "additionalProperties": false
+    },
+    "gate": {
+      "type": "object",
+      "required": ["id", "evidenceClass", "externalEvidence", "status", "evidence", "note"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Z0-9-]+$" },
+        "evidenceClass": { "enum": ["REPOSITORY", "FIXED_LAB", "PROVIDER", "RELEASE", "CRYPTOGRAPHIC", "CLEAN_VM", "HARDWARE"] },
+        "externalEvidence": { "type": "boolean" },
+        "status": { "enum": ["PASS", "PENDING", "BLOCKED"] },
+        "evidence": { "$ref": "#/$defs/optionalFileBinding" },
+        "note": { "anyOf": [{ "type": "string", "minLength": 1 }, { "type": "null" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "status": { "const": "PASS" } }, "required": ["status"] },
+          "then": {
+            "properties": {
+              "evidence": { "$ref": "#/$defs/fileBinding" }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "approval": {
+      "type": "object",
+      "required": ["role", "decision", "signerId", "displayName", "authorityMode", "signedPayloadSha256", "signedAt", "statement"],
+      "properties": {
+        "role": { "enum": ["Product", "Engineering", "SecurityPrivacy", "QualityRelease"] },
+        "decision": { "enum": ["APPROVE", "PENDING", "REJECT"] },
+        "signerId": { "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 200 }, { "type": "null" }] },
+        "displayName": { "anyOf": [{ "type": "string", "minLength": 1, "maxLength": 200 }, { "type": "null" }] },
+        "authorityMode": { "anyOf": [{ "enum": ["ROLE_HOLDER", "MERGED_PROJECT_OWNER"] }, { "type": "null" }] },
+        "signedPayloadSha256": { "anyOf": [{ "$ref": "#/$defs/sha256" }, { "type": "null" }] },
+        "signedAt": { "anyOf": [{ "type": "string", "format": "date-time" }, { "type": "null" }] },
+        "statement": { "anyOf": [{ "const": "This role decision is bound to the exact Phase 5 acceptance payload." }, { "type": "null" }] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "decision": { "const": "PENDING" } }, "required": ["decision"] },
+          "then": {
+            "properties": {
+              "signerId": { "type": "null" },
+              "displayName": { "type": "null" },
+              "authorityMode": { "type": "null" },
+              "signedPayloadSha256": { "type": "null" },
+              "signedAt": { "type": "null" },
+              "statement": { "type": "null" }
+            }
+          },
+          "else": {
+            "properties": {
+              "signerId": { "type": "string", "minLength": 1 },
+              "displayName": { "type": "string", "minLength": 1 },
+              "authorityMode": { "enum": ["ROLE_HOLDER", "MERGED_PROJECT_OWNER"] },
+              "signedPayloadSha256": { "$ref": "#/$defs/sha256" },
+              "signedAt": { "type": "string", "format": "date-time" },
+              "statement": { "const": "This role decision is bound to the exact Phase 5 acceptance payload." }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

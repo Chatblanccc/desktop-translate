@@ -4,7 +4,14 @@ import { readFile, stat, unlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseArguments, readJson, requiredArgument, sha256File } from './phase5-supply-chain-lib.mjs';
+import {
+  buildFileManifest,
+  parseArguments,
+  readJson,
+  renderChecksumManifest,
+  requiredArgument,
+  sha256File
+} from './phase5-supply-chain-lib.mjs';
 import {
   assertExactArtifactSet,
   collectReleaseArtifacts,
@@ -62,6 +69,15 @@ for (const field of ['binaryManifest', 'sizeManifest', 'fileManifest']) {
   assertSafeEvidencePath(value, `package.${field}`);
   await assertRegularFile(join(evidenceDirectory, ...value.split('/')), `evidence ${field}`);
 }
+const packageFileManifestPath = join(evidenceDirectory, ...manifest.package.fileManifest.split('/'));
+const [recordedPackageFileManifest, livePackageFileManifest] = await Promise.all([
+  readFile(packageFileManifestPath, 'utf8'),
+  buildFileManifest(packageDirectory).then((entries) => renderChecksumManifest(entries))
+]);
+assert(
+  recordedPackageFileManifest === livePackageFileManifest,
+  'live package tree does not exactly match package/file-manifest.sha256'
+);
 assertSafeEvidencePath(manifest.package.startupSmoke, 'package.startupSmoke');
 const startupSmokePath = join(evidenceDirectory, ...manifest.package.startupSmoke.split('/'));
 await assertRegularFile(startupSmokePath, 'packaged startup smoke evidence');

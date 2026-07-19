@@ -11,22 +11,31 @@ import {
   PHASE4_AUDIT_FILE_ENV
 } from './translation/phase4-audit-transport.js';
 import { ShellController, type Phase2DebugState } from './ui-shell/shell-controller.js';
-import { createRuntimeMetricsFromEnvironment } from './metrics/runtime-metrics-config.js';
+import {
+  createRuntimeMetricsFromEnvironment,
+  resolvePackagedRuntimeMetricsUserDataDirectory
+} from './metrics/runtime-metrics-config.js';
 import {
   localDataResetMarkerPath,
   scheduleLocalDataResetAfterExit
 } from './local-data-reset.js';
 import { DESKTOP_TRANSLATE_TEST_HOOKS_ENABLED } from './build-flavor.js';
 
+const packagedMetricsUserData = resolvePackagedRuntimeMetricsUserDataDirectory({
+  isPackaged: app.isPackaged,
+  commandLineUserDataDirectory: app.commandLine.getSwitchValue('user-data-dir')
+});
+if (packagedMetricsUserData !== undefined) {
+  app.setPath('userData', packagedMetricsUserData);
+}
 const testUserData = process.env.DESKTOP_TRANSLATE_USER_DATA_DIR;
 if (DESKTOP_TRANSLATE_TEST_HOOKS_ENABLED && !app.isPackaged && testUserData) {
   app.setPath('userData', resolve(testUserData));
 }
 
-routeApplicationStart();
+routeApplicationStart(packagedMetricsUserData ?? app.getPath('userData'));
 
-function routeApplicationStart(): void {
-  const userDataDirectory = app.getPath('userData');
+function routeApplicationStart(userDataDirectory: string): void {
   if (existsSync(localDataResetMarkerPath(userDataDirectory))) {
     // A prior helper encountered a locked file or was interrupted. Do not open
     // the database or any renderer until deletion has been rescheduled.
@@ -52,7 +61,7 @@ function startDesktopApplication(userDataDirectory: string): void {
   let lifecycle!: ShellLifecycle<ShellController>;
   lifecycle = new ShellLifecycle<ShellController>({
     createShell: (requestQuit) => {
-      const metrics = resolveRuntimeMetrics();
+      const metrics = resolveRuntimeMetrics(userDataDirectory);
       return new ShellController({
         requestQuit,
         requestLocalDataReset: async () => {
@@ -113,10 +122,10 @@ function resolveLocalDataResetHelperPath(): string {
   return join(app.getAppPath(), '.vite', 'build', 'local-data-reset-helper.js');
 }
 
-function resolveRuntimeMetrics() {
+function resolveRuntimeMetrics(userDataDirectory: string) {
   return createRuntimeMetricsFromEnvironment({
     isPackaged: app.isPackaged,
-    userDataDirectory: app.getPath('userData'),
+    userDataDirectory,
     ...(app.isPackaged
       ? {
           resourcesDirectory: process.resourcesPath,

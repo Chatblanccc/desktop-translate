@@ -1,0 +1,605 @@
+{
+  "schemaVersion": 1,
+  "phase": 5,
+  "candidate": {
+    "gitSha": "0000000000000000000000000000000000000000",
+    "productVersion": "0.5.0-phase5",
+    "finalReleaseManifest": {
+      "path": "artifacts/phase5/formal/release/final-release-manifest.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "cleanDownloadVerification": {
+      "path": "artifacts/phase5/formal/clean-download/clean-download-verification.json",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "artifactSetDigest": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "gates": [
+    {
+      "id": "G0-SCOPE-FREEZE",
+      "evidenceClass": "REPOSITORY",
+      "externalEvidence": false,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/G0-SCOPE-FREEZE.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "G1-PHASE4-BASELINE",
+      "evidenceClass": "REPOSITORY",
+      "externalEvidence": false,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/G1-PHASE4-BASELINE.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "G2-CLEAN-SOURCE",
+      "evidenceClass": "REPOSITORY",
+      "externalEvidence": false,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/G2-CLEAN-SOURCE.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "G2-VERSION-TOOLCHAIN",
+      "evidenceClass": "REPOSITORY",
+      "externalEvidence": false,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/G2-VERSION-TOOLCHAIN.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP1-METRICS-PRIVACY",
+      "evidenceClass": "REPOSITORY",
+      "externalEvidence": false,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP1-METRICS-PRIVACY.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP2-BASELINE-REGRESSION",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP2-BASELINE-REGRESSION.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP3-PERF-01",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP3-PERF-01.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP3-PERF-02",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP3-PERF-02.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP3-PERF-03",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP3-PERF-03.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP3-PERF-04",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP3-PERF-04.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP3-PERF-05",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP3-PERF-05.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP3-PERF-06",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP3-PERF-06.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP3-PERF-07",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP3-PERF-07.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP3-PERF-08",
+      "evidenceClass": "PROVIDER",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP3-PERF-08.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP3-PERF-09",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP3-PERF-09.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP4-RES-01",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP4-RES-01.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP4-RES-02",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP4-RES-02.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP4-RES-03",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP4-RES-03.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP4-RES-04",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP4-RES-04.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP4-RES-05",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP4-RES-05.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP4-RES-06",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP4-RES-06.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP4-LANE-A-8H",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP4-LANE-A-8H.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP4-LANE-B-8H",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP4-LANE-B-8H.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP4-FAULT-RECOVERY",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP4-FAULT-RECOVERY.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP4-PRIVACY-CANARY",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP4-PRIVACY-CANARY.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP5-PACKAGE-CONTENTS",
+      "evidenceClass": "RELEASE",
+      "externalEvidence": false,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP5-PACKAGE-CONTENTS.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP5-PACKAGE-SIZE",
+      "evidenceClass": "RELEASE",
+      "externalEvidence": false,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP5-PACKAGE-SIZE.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP5-SUPPLY-CHAIN",
+      "evidenceClass": "RELEASE",
+      "externalEvidence": false,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP5-SUPPLY-CHAIN.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP5-FINAL-RELEASE-MANIFEST",
+      "evidenceClass": "CRYPTOGRAPHIC",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP5-FINAL-RELEASE-MANIFEST.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP5-AUTHENTICODE",
+      "evidenceClass": "CRYPTOGRAPHIC",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP5-AUTHENTICODE.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP5-ARTIFACT-ATTESTATION",
+      "evidenceClass": "CRYPTOGRAPHIC",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP5-ARTIFACT-ATTESTATION.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP5-FINAL-MANIFEST-ATTESTATION",
+      "evidenceClass": "CRYPTOGRAPHIC",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP5-FINAL-MANIFEST-ATTESTATION.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP5-CLEAN-DOWNLOAD",
+      "evidenceClass": "CRYPTOGRAPHIC",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP5-CLEAN-DOWNLOAD.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP6-DETERMINISTIC-VERIFY",
+      "evidenceClass": "REPOSITORY",
+      "externalEvidence": false,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP6-DETERMINISTIC-VERIFY.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP6-FRESH-RUNNER-CI",
+      "evidenceClass": "RELEASE",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP6-FRESH-RUNNER-CI.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP6-RELEASE-GOVERNANCE",
+      "evidenceClass": "RELEASE",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP6-RELEASE-GOVERNANCE.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP7-CLEAN-VM",
+      "evidenceClass": "CLEAN_VM",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP7-CLEAN-VM.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP7-INSTALL-UPGRADE-UNINSTALL",
+      "evidenceClass": "CLEAN_VM",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP7-INSTALL-UPGRADE-UNINSTALL.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP7-DISPLAY-HARDWARE",
+      "evidenceClass": "HARDWARE",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP7-DISPLAY-HARDWARE.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP7-APPLICATION-COMPATIBILITY",
+      "evidenceClass": "HARDWARE",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP7-APPLICATION-COMPATIBILITY.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP7-PERMISSION-BOUNDARIES",
+      "evidenceClass": "HARDWARE",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP7-PERMISSION-BOUNDARIES.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP7-DATA-LIFECYCLE",
+      "evidenceClass": "CLEAN_VM",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP7-DATA-LIFECYCLE.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    },
+    {
+      "id": "WP7-RESIDUAL-WER-ZERO",
+      "evidenceClass": "FIXED_LAB",
+      "externalEvidence": true,
+      "status": "PENDING",
+      "evidence": {
+        "path": "artifacts/phase5/formal/gates/WP7-RESIDUAL-WER-ZERO.json",
+        "sha256": null
+      },
+      "note": "Replace with the exact formal evidence path and digest; do not promote development smoke."
+    }
+  ],
+  "payload": {
+    "algorithm": "sha256",
+    "canonicalization": "UTF8_RECURSIVE_SORTED_KEYS_V1",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "approvals": [
+    {
+      "role": "Product",
+      "decision": "PENDING",
+      "signerId": null,
+      "displayName": null,
+      "authorityMode": null,
+      "signedPayloadSha256": null,
+      "signedAt": null,
+      "statement": null
+    },
+    {
+      "role": "Engineering",
+      "decision": "PENDING",
+      "signerId": null,
+      "displayName": null,
+      "authorityMode": null,
+      "signedPayloadSha256": null,
+      "signedAt": null,
+      "statement": null
+    },
+    {
+      "role": "SecurityPrivacy",
+      "decision": "PENDING",
+      "signerId": null,
+      "displayName": null,
+      "authorityMode": null,
+      "signedPayloadSha256": null,
+      "signedAt": null,
+      "statement": null
+    },
+    {
+      "role": "QualityRelease",
+      "decision": "PENDING",
+      "signerId": null,
+      "displayName": null,
+      "authorityMode": null,
+      "signedPayloadSha256": null,
+      "signedAt": null,
+      "statement": null
+    }
+  ],
+  "repositoryState": {
+    "before": {
+      "gitSha": null,
+      "clean": false,
+      "verified": false
+    },
+    "after": {
+      "gitSha": null,
+      "clean": false,
+      "verified": false
+    }
+  },
+  "evaluatedAt": "1970-01-01T00:00:00.000Z",
+  "status": "PENDING",
+  "acceptance": false,
+  "pending": [
+    "gate:G0-SCOPE-FREEZE",
+    "gate:G1-PHASE4-BASELINE",
+    "gate:G2-CLEAN-SOURCE",
+    "gate:G2-VERSION-TOOLCHAIN",
+    "gate:WP1-METRICS-PRIVACY",
+    "gate:WP2-BASELINE-REGRESSION",
+    "gate:WP3-PERF-01",
+    "gate:WP3-PERF-02",
+    "gate:WP3-PERF-03",
+    "gate:WP3-PERF-04",
+    "gate:WP3-PERF-05",
+    "gate:WP3-PERF-06",
+    "gate:WP3-PERF-07",
+    "gate:WP3-PERF-08",
+    "gate:WP3-PERF-09",
+    "gate:WP4-RES-01",
+    "gate:WP4-RES-02",
+    "gate:WP4-RES-03",
+    "gate:WP4-RES-04",
+    "gate:WP4-RES-05",
+    "gate:WP4-RES-06",
+    "gate:WP4-LANE-A-8H",
+    "gate:WP4-LANE-B-8H",
+    "gate:WP4-FAULT-RECOVERY",
+    "gate:WP4-PRIVACY-CANARY",
+    "gate:WP5-PACKAGE-CONTENTS",
+    "gate:WP5-PACKAGE-SIZE",
+    "gate:WP5-SUPPLY-CHAIN",
+    "gate:WP5-FINAL-RELEASE-MANIFEST",
+    "gate:WP5-AUTHENTICODE",
+    "gate:WP5-ARTIFACT-ATTESTATION",
+    "gate:WP5-FINAL-MANIFEST-ATTESTATION",
+    "gate:WP5-CLEAN-DOWNLOAD",
+    "gate:WP6-DETERMINISTIC-VERIFY",
+    "gate:WP6-FRESH-RUNNER-CI",
+    "gate:WP6-RELEASE-GOVERNANCE",
+    "gate:WP7-CLEAN-VM",
+    "gate:WP7-INSTALL-UPGRADE-UNINSTALL",
+    "gate:WP7-DISPLAY-HARDWARE",
+    "gate:WP7-APPLICATION-COMPATIBILITY",
+    "gate:WP7-PERMISSION-BOUNDARIES",
+    "gate:WP7-DATA-LIFECYCLE",
+    "gate:WP7-RESIDUAL-WER-ZERO",
+    "approval:Product",
+    "approval:Engineering",
+    "approval:SecurityPrivacy",
+    "approval:QualityRelease"
+  ],
+  "blockers": [],
+  "acceptanceRule": "Phase 5 is PASS only when the exact frozen gate set is PASS and Product, Engineering, SecurityPrivacy, and QualityRelease all APPROVE the same canonical payload digest."
+}

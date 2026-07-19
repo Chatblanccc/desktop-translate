@@ -50,6 +50,43 @@ on:
         description: Separately downloaded signed RC bundle directory on the dedicated Lane B runner
         required: false
         type: string
+      run_phase5_performance:
+        description: Run the formal PERF-03 3x100 and 900-second product-idle gates on the registered lab runner
+        required: false
+        default: false
+        type: boolean
+      perf_package_directory:
+        description: External package directory from the independently downloaded signed RC bundle
+        required: false
+        type: string
+      perf_package_evidence_manifest:
+        description: External canonical evidence/release/evidence-manifest.json from that same bundle
+        required: false
+        type: string
+      perf_installer_path:
+        description: External signed installer from that same independently downloaded bundle
+        required: false
+        type: string
+      perf_final_release_manifest:
+        description: External canonical evidence/release/final-release-manifest.json from that same bundle
+        required: false
+        type: string
+      perf_clean_download_verification:
+        description: External clean-download verification JSON for the exact signed RC
+        required: false
+        type: string
+      perf_independent_trusted_root:
+        description: External independently acquired GitHub Sigstore trusted-root JSONL
+        required: false
+        type: string
+      perf_device_registry:
+        description: Git-tracked fixed-lab device registry path in the clean tagged source tree
+        required: false
+        type: string
+      perf_run_metadata:
+        description: Exact formal PERF-03 run metadata JSON matching the live registered device
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -170,8 +207,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.run_lane_a_harness
     runs-on: [self-hosted, Windows, X64, phase5-lab]
     timeout-minutes: 540
+    permissions:
+      actions: read
+      contents: read
     env:
       CI: 'true'
+      PHASE5_LAB_RUNNER_ID: ${{ vars.PHASE5_LAB_RUNNER_ID }}
       TEST_ARTIFACT_PATH: ${{ inputs.lane_a_test_artifact_path }}
       RELEASE_ARTIFACT_PATH: ${{ inputs.lane_a_release_artifact_path }}
       TEST_BUILD_MANIFEST_PATH: ${{ inputs.lane_a_test_build_manifest_path }}
@@ -184,6 +225,22 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Require the formal Lane A environment and exact runner identity
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tooling/phase5-environment-preflight.ps1 `
+            -Mode Formal `
+            -HardwareProfile B `
+            -RunnerRole LaneA `
+            -OutputPath "artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/environment/lane-a.json" `
+            -Repository '${{ github.repository }}' `
+            -RunnerLabels @('self-hosted', 'Windows', 'X64', 'phase5-lab') `
+            -ExclusiveInteractiveSession `
+            -ForegroundInputExclusive
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
@@ -287,13 +344,172 @@ jobs:
           retention-days: 30
           path: artifacts/phase5/**
 
+  phase5-performance:
+    name: Phase 5 formal performance matrix
+    if: github.event_name == 'workflow_dispatch' && inputs.run_phase5_performance && startsWith(github.ref, 'refs/tags/phase5-rc-')
+    runs-on: [self-hosted, Windows, X64, phase5-lab]
+    timeout-minutes: 180
+    permissions:
+      actions: read
+      contents: read
+    env:
+      CI: 'true'
+      PHASE5_LAB_RUNNER_ID: ${{ vars.PHASE5_LAB_RUNNER_ID }}
+      PERF_PACKAGE_DIRECTORY: ${{ inputs.perf_package_directory }}
+      PERF_PACKAGE_EVIDENCE_MANIFEST: ${{ inputs.perf_package_evidence_manifest }}
+      PERF_INSTALLER_PATH: ${{ inputs.perf_installer_path }}
+      PERF_FINAL_RELEASE_MANIFEST: ${{ inputs.perf_final_release_manifest }}
+      PERF_CLEAN_DOWNLOAD_VERIFICATION: ${{ inputs.perf_clean_download_verification }}
+      PERF_INDEPENDENT_TRUSTED_ROOT: ${{ inputs.perf_independent_trusted_root }}
+      PERF_DEVICE_REGISTRY: ${{ inputs.perf_device_registry }}
+      PERF_RUN_METADATA: ${{ inputs.perf_run_metadata }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Require the formal performance environment and exact runner identity
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tooling/phase5-environment-preflight.ps1 `
+            -Mode Formal `
+            -HardwareProfile B `
+            -RunnerRole Perf `
+            -OutputPath "artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/environment/performance.json" `
+            -Repository '${{ github.repository }}' `
+            -RunnerLabels @('self-hosted', 'Windows', 'X64', 'phase5-lab') `
+            -ExclusiveInteractiveSession `
+            -ForegroundInputExclusive
+
+      - name: Require one external independently downloaded signed-RC input set
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd('\')
+          $workspacePrefix = $workspace + '\'
+          $package = Get-Item -LiteralPath $env:PERF_PACKAGE_DIRECTORY -Force -ErrorAction Stop
+          if (-not $package.PSIsContainer -or ($package.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw 'PERF BLOCKED: package input must be a regular non-reparse directory.'
+          }
+          $packagePath = $package.FullName.TrimEnd('\')
+          if ($packagePath.Equals($workspace, [StringComparison]::OrdinalIgnoreCase) -or
+              $packagePath.StartsWith($workspacePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'PERF BLOCKED: signed package must be independently downloaded outside the source workspace.'
+          }
+          if (-not [IO.Path]::GetFileName($packagePath).Equals('package', [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'PERF BLOCKED: package directory must retain the canonical release-bundle package name.'
+          }
+          $bundleRoot = [IO.Path]::GetDirectoryName($packagePath).TrimEnd('\')
+          $canonicalInputs = [ordered]@{
+            PERF_PACKAGE_EVIDENCE_MANIFEST = Join-Path $bundleRoot 'evidence\release\evidence-manifest.json'
+            PERF_FINAL_RELEASE_MANIFEST = Join-Path $bundleRoot 'evidence\release\final-release-manifest.json'
+          }
+          foreach ($entry in $canonicalInputs.GetEnumerator()) {
+            $actual = [IO.Path]::GetFullPath([Environment]::GetEnvironmentVariable($entry.Key, 'Process'))
+            if (-not $actual.Equals([IO.Path]::GetFullPath($entry.Value), [StringComparison]::OrdinalIgnoreCase)) {
+              throw "PERF BLOCKED: $($entry.Key) is not canonical within the same downloaded bundle."
+            }
+          }
+          $installer = Get-Item -LiteralPath $env:PERF_INSTALLER_PATH -Force -ErrorAction Stop
+          $canonicalInstallerRoot = [IO.Path]::GetFullPath((Join-Path $bundleRoot 'installer')).TrimEnd('\') + '\'
+          if ($installer.PSIsContainer -or ($installer.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+              -not $installer.FullName.StartsWith($canonicalInstallerRoot, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'PERF BLOCKED: installer is not one regular file in the same canonical downloaded bundle.'
+          }
+          $bundleInstallerFiles = @(Get-ChildItem -LiteralPath (Join-Path $bundleRoot 'installer') -File -Force)
+          if ($bundleInstallerFiles.Count -ne 1 -or
+              -not $bundleInstallerFiles[0].FullName.Equals($installer.FullName, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'PERF BLOCKED: the downloaded bundle must contain exactly the selected installer.'
+          }
+          $externalFiles = @(
+            $env:PERF_PACKAGE_EVIDENCE_MANIFEST,
+            $env:PERF_FINAL_RELEASE_MANIFEST,
+            $env:PERF_CLEAN_DOWNLOAD_VERIFICATION,
+            $env:PERF_INDEPENDENT_TRUSTED_ROOT
+          )
+          foreach ($path in $externalFiles) {
+            $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or
+                $item.FullName.Equals($workspace, [StringComparison]::OrdinalIgnoreCase) -or
+                $item.FullName.StartsWith($workspacePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+              throw 'PERF BLOCKED: release trust inputs must be regular non-reparse files acquired outside the source workspace.'
+            }
+          }
+          foreach ($path in @($env:PERF_DEVICE_REGISTRY, $env:PERF_RUN_METADATA)) {
+            $item = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+            if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+              throw 'PERF BLOCKED: device registry and run metadata must be regular non-reparse files.'
+            }
+          }
+          $packageEntries = @(Get-ChildItem -LiteralPath $packagePath -Recurse -Force)
+          if (@($packageEntries | Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 }).Count -ne 0) {
+            throw 'PERF BLOCKED: the downloaded package tree contains a reparse point.'
+          }
+          $expectedPackageFiles = @(
+            (Join-Path $packagePath 'desktop-translate.exe'),
+            (Join-Path $packagePath 'resources\app.asar'),
+            (Join-Path $packagePath 'resources\selection-host\selection-host.exe')
+          )
+          if (@($expectedPackageFiles | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }).Count -ne 0) {
+            throw 'PERF BLOCKED: the canonical downloaded package is missing an application, ASAR, or Native Host.'
+          }
+
+      - name: Run formal PERF-03 frozen 3x100 on the exact signed RC
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tooling/phase5-perf03-host-ready.ps1 `
+            -PackageDirectory $env:PERF_PACKAGE_DIRECTORY `
+            -PackageEvidenceManifest $env:PERF_PACKAGE_EVIDENCE_MANIFEST `
+            -InstallerPath $env:PERF_INSTALLER_PATH `
+            -FinalReleaseManifest $env:PERF_FINAL_RELEASE_MANIFEST `
+            -CleanDownloadVerification $env:PERF_CLEAN_DOWNLOAD_VERIFICATION `
+            -IndependentTrustedRoot $env:PERF_INDEPENDENT_TRUSTED_ROOT `
+            -DeviceRegistry $env:PERF_DEVICE_REGISTRY `
+            -RunMetadata $env:PERF_RUN_METADATA `
+            -OutputRoot "artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/performance/perf03" `
+            -RoundCount 3 `
+            -SamplesPerRound 100
+
+      - name: Run the frozen 900-second signed-product idle resource gate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tooling/phase5-product-resource-acceptance.ps1 `
+            -PackageDirectory $env:PERF_PACKAGE_DIRECTORY `
+            -PackageEvidenceManifest $env:PERF_PACKAGE_EVIDENCE_MANIFEST `
+            -OutputRoot "artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/performance/product-idle-900s" `
+            -DurationSeconds 900 `
+            -SampleIntervalSeconds 5
+
+      - name: Upload formal performance evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: phase5-formal-performance-${{ github.sha }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+          retention-days: 90
+          path: |
+            artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/environment/performance.json
+            artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/performance/**
+
   lane-b-preflight:
     name: Lane B signed-RC interactive preflight only
     if: github.event_name == 'workflow_dispatch' && inputs.run_lane_b_preflight && startsWith(github.ref, 'refs/tags/phase5-rc-')
     runs-on: [self-hosted, Windows, X64, phase5-lane-b]
     timeout-minutes: 15
     environment: phase5-lane-b
+    permissions:
+      actions: read
+      contents: read
     env:
+      CI: 'true'
+      PHASE5_GITHUB_ENVIRONMENT: phase5-lane-b
+      PHASE5_LANE_B_RUNNER_ID: ${{ secrets.PHASE5_LANE_B_RUNNER_ID }}
       DOWNLOAD_DIRECTORY: ${{ inputs.lane_b_download_directory }}
       PHASE5_EXPECTED_SIGNING_SUBJECT: ${{ secrets.PHASE5_WINDOWS_SIGNING_SUBJECT }}
     steps:
@@ -301,6 +517,24 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Require the formal Lane B environment and exact runner identity
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tooling/phase5-environment-preflight.ps1 `
+            -Mode Formal `
+            -HardwareProfile C `
+            -RunnerRole LaneB `
+            -OutputPath "artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/environment/lane-b.json" `
+            -ExpectedPublisherSubject $env:PHASE5_EXPECTED_SIGNING_SUBJECT `
+            -Repository '${{ github.repository }}' `
+            -RunnerLabels @('self-hosted', 'Windows', 'X64', 'phase5-lane-b') `
+            -CurrentGitHubEnvironment phase5-lane-b `
+            -ExclusiveInteractiveSession `
+            -ForegroundInputExclusive
 
       - name: Check the real-machine Lane B entry conditions
         shell: pwsh
@@ -341,12 +575,15 @@ jobs:
     timeout-minutes: 180
     environment: phase5-release
     permissions:
+      actions: read
       contents: read
       id-token: write
       attestations: write
       artifact-metadata: write
     env:
       CI: 'true'
+      PHASE5_GITHUB_ENVIRONMENT: phase5-release
+      PHASE5_RELEASE_RUNNER_ID: ${{ secrets.PHASE5_RELEASE_RUNNER_ID }}
       PHASE5_RELEASE_EVIDENCE: artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/release
       PHASE5_RELEASE_AUDIT: ${{ runner.temp }}/phase5-dependency-audit-${{ github.run_id }}-${{ github.run_attempt }}.json
     steps:
@@ -354,6 +591,27 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Require the formal protected-release environment and exact runner identity
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CSC_LINK: ${{ secrets.PHASE5_WINDOWS_CERTIFICATE_BASE64 }}
+          CSC_KEY_PASSWORD: ${{ secrets.PHASE5_WINDOWS_CERTIFICATE_PASSWORD }}
+          PHASE5_EXPECTED_SIGNING_SUBJECT: ${{ secrets.PHASE5_WINDOWS_SIGNING_SUBJECT }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tooling/phase5-environment-preflight.ps1 `
+            -Mode Formal `
+            -HardwareProfile B `
+            -RunnerRole Release `
+            -OutputPath "artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/environment/release.json" `
+            -ExpectedPublisherSubject $env:PHASE5_EXPECTED_SIGNING_SUBJECT `
+            -Repository '${{ github.repository }}' `
+            -RunnerLabels @('self-hosted', 'Windows', 'X64', 'phase5-release') `
+            -CurrentGitHubEnvironment phase5-release `
+            -ExclusiveInteractiveSession `
+            -ForegroundInputExclusive
 
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
@@ -515,6 +773,7 @@ jobs:
           path: |
             ${{ env.PHASE5_RELEASE_EVIDENCE }}/**
             ${{ env.PHASE5_RELEASE_AUDIT }}
+            artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/environment/release.json
 
   protected-release-clean-download:
     name: Independent clean-download release verification
@@ -524,12 +783,33 @@ jobs:
     timeout-minutes: 30
     environment: phase5-release
     permissions:
+      actions: read
       contents: read
+    env:
+      CI: 'true'
+      PHASE5_GITHUB_ENVIRONMENT: phase5-release
+      PHASE5_EXPECTED_SIGNING_SUBJECT: ${{ secrets.PHASE5_WINDOWS_SIGNING_SUBJECT }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Require the formal GitHub-hosted clean-download verifier context
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & ./tooling/phase5-environment-preflight.ps1 `
+            -Mode Formal `
+            -HardwareProfile B `
+            -RunnerRole CleanDownload `
+            -OutputPath "artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/environment/clean-download.json" `
+            -ExpectedPublisherSubject $env:PHASE5_EXPECTED_SIGNING_SUBJECT `
+            -Repository '${{ github.repository }}' `
+            -RunnerLabels @('windows-2022') `
+            -CurrentGitHubEnvironment phase5-release
 
       - name: Download the protected candidate into a fresh directory
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -564,4 +844,6 @@ jobs:
           name: phase5-clean-download-verification-${{ github.sha }}-${{ github.run_attempt }}
           if-no-files-found: warn
           retention-days: 90
-          path: artifacts/phase5/clean-download-verification/**
+          path: |
+            artifacts/phase5/clean-download-verification/**
+            artifacts/phase5/${{ github.sha }}/${{ github.run_id }}-${{ github.run_attempt }}/environment/clean-download.json

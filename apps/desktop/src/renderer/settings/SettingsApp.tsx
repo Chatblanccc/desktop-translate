@@ -187,7 +187,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
         </span>
         <span>
           <span className="app-name">桌面翻译</span>
-          <span className="app-stage">Phase 4 · 内部开发预览</span>
+          <span className="app-stage">Phase 5 · 发布候选验证</span>
         </span>
       </header>
 

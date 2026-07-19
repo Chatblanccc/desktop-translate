@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   createRuntimeMetricsFromEnvironment,
-  PHASE5_RUNTIME_METRICS_ENV
+  PHASE5_RUNTIME_METRICS_ENV,
+  readRawAppBundleBytes,
+  resolvePackagedRuntimeMetricsUserDataDirectory
 } from './runtime-metrics-config.js';
 
 const temporaryDirectories: string[] = [];
@@ -18,6 +20,137 @@ afterEach(async () => {
 });
 
 describe('Phase 5 runtime metrics configuration', () => {
+  it('reads raw ASAR bytes with virtualization disabled and restores the prior state', () => {
+    const previousNoAsar = process.noAsar;
+    process.noAsar = false;
+    try {
+      const bytes = readRawAppBundleBytes('C:\\package\\resources\\app.asar', (path) => {
+        expect(path).toBe('C:\\package\\resources\\app.asar');
+        expect(process.noAsar).toBe(true);
+        return Buffer.from('raw-asar-bytes');
+      });
+      expect(bytes.toString('utf8')).toBe('raw-asar-bytes');
+      expect(process.noAsar).toBe(false);
+    } finally {
+      process.noAsar = previousNoAsar;
+    }
+  });
+
+  it('restores ASAR virtualization after a raw archive read failure', () => {
+    const previousNoAsar = process.noAsar;
+    process.noAsar = false;
+    try {
+      expect(() => readRawAppBundleBytes('C:\\package\\resources\\app.asar', () => {
+        expect(process.noAsar).toBe(true);
+        throw new Error('simulated archive read failure');
+      })).toThrow('simulated archive read failure');
+      expect(process.noAsar).toBe(false);
+    } finally {
+      process.noAsar = previousNoAsar;
+    }
+  });
+
+  it('binds packaged metrics to the exact runner-owned temporary userData directory', async () => {
+    const directory = await temporaryDirectory();
+    const runRoot = join(
+      directory,
+      'desktop-translate-phase5-perf03-0123456789abcdef0123456789abcdef'
+    );
+    const userData = join(runRoot, 'User Data 阶段五-启动');
+    await mkdir(userData, { recursive: true });
+
+    expect(resolvePackagedRuntimeMetricsUserDataDirectory({
+      isPackaged: true,
+      commandLineUserDataDirectory: userData,
+      temporaryDirectory: directory,
+      environment: environment({
+        [PHASE5_RUNTIME_METRICS_ENV.userDataDirectory]: userData,
+        [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'packaged-unsigned',
+        [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'real-acquisition',
+        [PHASE5_RUNTIME_METRICS_ENV.runId]: RUN_ID
+      })
+    })).toBe(userData);
+  });
+
+  it('keeps ordinary packaged launches default-off and rejects arbitrary profile paths', async () => {
+    const directory = await temporaryDirectory();
+    const arbitrary = join(directory, 'ordinary-profile');
+    await mkdir(arbitrary);
+
+    expect(resolvePackagedRuntimeMetricsUserDataDirectory({
+      isPackaged: true,
+      commandLineUserDataDirectory: arbitrary,
+      temporaryDirectory: directory,
+      environment: {}
+    })).toBeUndefined();
+    expect(resolvePackagedRuntimeMetricsUserDataDirectory({
+      isPackaged: true,
+      commandLineUserDataDirectory: arbitrary,
+      temporaryDirectory: directory,
+      environment: environment({
+        [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'packaged-unsigned',
+        [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'real-acquisition',
+        [PHASE5_RUNTIME_METRICS_ENV.runId]: RUN_ID
+      })
+    })).toBeUndefined();
+  });
+
+  it('rejects a runner-owned environment profile that differs from the command line profile', async () => {
+    const directory = await temporaryDirectory();
+    const runRoot = join(
+      directory,
+      'desktop-translate-phase5-perf03-fedcba9876543210fedcba9876543210'
+    );
+    const userData = join(runRoot, 'User Data 阶段五-启动');
+    const differentUserData = join(runRoot, 'User Data 阶段五-不同');
+    await mkdir(userData, { recursive: true });
+    await mkdir(differentUserData, { recursive: true });
+
+    expect(resolvePackagedRuntimeMetricsUserDataDirectory({
+      isPackaged: true,
+      commandLineUserDataDirectory: differentUserData,
+      temporaryDirectory: directory,
+      environment: environment({
+        [PHASE5_RUNTIME_METRICS_ENV.userDataDirectory]: userData,
+        [PHASE5_RUNTIME_METRICS_ENV.buildMode]: 'packaged-unsigned',
+        [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: 'real-acquisition',
+        [PHASE5_RUNTIME_METRICS_ENV.runId]: RUN_ID
+      })
+    })).toBeUndefined();
+  });
+
+  it.each([
+    ['non-packaged runtime', false, 'packaged-unsigned', 'real-acquisition', RUN_ID],
+    ['development build mode', true, 'development', 'real-acquisition', RUN_ID],
+    ['fixture measurement mode', true, 'packaged-unsigned', 'deterministic-fixture', RUN_ID],
+    ['missing run id', true, 'packaged-unsigned', 'real-acquisition', undefined]
+  ])('refuses benchmark userData binding for %s', async (
+    _label,
+    isPackaged,
+    buildMode,
+    measurementMode,
+    runId
+  ) => {
+    const directory = await temporaryDirectory();
+    const runRoot = join(
+      directory,
+      'desktop-translate-phase5-perf03-abcdef0123456789abcdef0123456789'
+    );
+    const userData = join(runRoot, 'User Data 阶段五-启动');
+    await mkdir(userData, { recursive: true });
+    expect(resolvePackagedRuntimeMetricsUserDataDirectory({
+      isPackaged,
+      commandLineUserDataDirectory: userData,
+      temporaryDirectory: directory,
+      environment: environment({
+        [PHASE5_RUNTIME_METRICS_ENV.userDataDirectory]: userData,
+        [PHASE5_RUNTIME_METRICS_ENV.buildMode]: buildMode,
+        [PHASE5_RUNTIME_METRICS_ENV.measurementMode]: measurementMode,
+        [PHASE5_RUNTIME_METRICS_ENV.runId]: runId
+      })
+    })).toBeUndefined();
+  });
+
   it('is completely default-off and creates no evidence directory', async () => {
     const userData = await temporaryDirectory();
     const evidenceDirectory = join(userData, 'phase5-evidence');

@@ -3,14 +3,20 @@
 Windows 桌面划词助手。Phase 4 在线文本翻译闭环已于 2026-07-18 在合并提交
 `4ea65dcd5c5ef7c56127fe419127d48e0573a65d` 上以 `PASS WITH ACCEPTED RISKS` 验收；
 当前正在按已冻结计划执行 Phase 5 的测量、长稳、打包与发布门禁开发。仓库版本已切换为
-**`0.5.0-phase5` 开发候选**。当前 deterministic/严格超集、unsigned package、PERF-09 2×5 与短时
-产品 idle 开发证据已通过，但全部属于 dirty/unsigned/non-acceptance；Phase 5 总状态仍为
-`NOT YET ACCEPTED / RELEASE BLOCKED`，在签名 RC、正式性能/长稳、clean VM、实机矩阵与发布签字完成前
-仍不是公开版本。
+**`0.5.0-phase5` 开发候选**。提交 `3443d87598d15b697468b0b66755c7e808b76607` 已完成一次 clean-HEAD
+本地 deterministic 严格超集验证，结果为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`；同次 clean unsigned
+Dir package 的构建、启动、供应链和隐私门禁通过，但应用与 Native Host 均为 `NotSigned`，不具备发布资格。
+该提交之后新增的 PERF-03、Provider、环境预检、验收决议和 UI 修订仍需在新提交上重新执行 clean 本地门禁与
+远程 CI。Phase 5 总状态仍为 `NOT YET ACCEPTED / RELEASE BLOCKED`，在签名 RC、正式性能/长稳、clean VM、
+实机矩阵与发布签字完成前仍不是公开版本。
 
-最新开发证据为 `perf09-final-combined-2x5-20260719-0302` 与
-`product-idle-final-hardened-dev-20260719-0326`。产品退出由 Ball UI 命令进入 Electron quit lifecycle；
-失败后的 exact-identity harness cleanup 只用于测试隔离，不代表产品正常退出。
+当前开发观察还包括 PERF-09 2×5、15 秒产品 idle，以及 PERF-03 packaged 1×1：最新 PERF-03 样本为
+`118.648ms`、failure/forced termination 均为 `0`，但这些缩减运行均为 unsigned/non-acceptance；formal
+PERF-03 在 protected-run receipt、认证指标通道、publisher policy 与完整 namespace trust controller
+实现前固定阻断。
+Windows 实机 UI 快检确认 Ball、Settings、Native service 与 `0.5.0-phase5` 版本面可用，并修正了设置页残留的
+Phase 4 副标题；该会话观察不替代签名 RC、clean VM 或完整兼容矩阵。产品退出由 Ball UI 命令进入 Electron
+quit lifecycle；失败后的 exact-identity harness cleanup 只用于测试隔离，不代表产品正常退出。
 
 ## 当前能力边界
 
@@ -72,16 +78,22 @@ pnpm test:e2e
 pnpm privacy:scan
 ```
 
-Phase 5 的确定性开发门禁、供应链审计和无签名包可分别运行：
+Phase 5 的确定性开发门禁、环境预检、专项 runner 自测、供应链审计和无签名包可分别运行：
 
 ```powershell
 pnpm phase5:verify
+pnpm phase5:environment:selftest
+pnpm phase5:environment:preflight
+pnpm phase5:perf03:selftest
+pnpm phase5:perf03:dev
+pnpm phase5:provider-smoke:selftest
+pnpm phase5:acceptance-decision:selftest
 pnpm phase5:audit
 pnpm phase5:package
 pnpm phase5:package:installer
 ```
 
-这些命令退出 `0` 只表示相应开发/无签名门禁通过，不等于 Phase 5 正式验收。正式发布仍要求
+这些命令退出 `0` 只表示相应开发、自测或无签名门禁通过，不等于 Phase 5 正式验收。正式发布仍要求
 受保护环境中的 Authenticode 签名与时间戳、GitHub artifact attestation、独立下载复核、
 固定实验室性能/资源测试、完整 Lane A/Lane B、clean VM/兼容性矩阵和角色签字。
 

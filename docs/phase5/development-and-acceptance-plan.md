@@ -12,12 +12,20 @@
 不是新增产品功能的阶段；它把已经验收的本地取词与在线翻译闭环提升为可测量、可长时间运行、可打包、
 可审计和可签字发布的候选版本。
 
-截至 2026-07-19，Phase 4 已在 GitHub 合并 SHA `4ea65dc` 上完成历史验收；当前 dirty Phase 5 工作区的
-`pnpm phase4:verify` 已退出 `0`（Electron E2E 6/6、Phase 2 3/3），归档的 deterministic `phase5:verify`
-也为 `DEVELOPMENT_GATE_PASS_NOT_ACCEPTANCE`。no-`SkipBuild` Dir/Installer、[PERF-09 final combined 2×5](../../artifacts/phase5/local/perf09-final-combined-2x5-20260719-0302/summary.json)
-与 [15 秒产品 idle final hardened](../../artifacts/phase5/local/product-idle-final-hardened-dev-20260719-0326/summary.json)
-开发证据已经通过，但全部为 dirty/unsigned/non-acceptance。正式签名、attestation/clean-download、fixed-lab
-PERF-01–09/3×50、900 秒 idle、Lane A/B 8 小时、clean VM、兼容矩阵、真实 Provider 与签字仍未完成。
+截至 2026-07-19，Phase 4 已在 GitHub 合并 SHA `4ea65dc` 上完成历史验收。Phase 5 提交
+`3443d87598d15b697468b0b66755c7e808b76607` 的 clean-HEAD `phase5:verify` 已完整退出 `0`，状态为
+`DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`、`strictPhase4Superset=true`、`worktreeDirty=false`、
+`acceptance=false`；同次 clean unsigned Dir package 的 build/package/startup/supply-chain 门禁通过，但应用与
+Host 均为 `NotSigned`，release 仍为 `RELEASE BLOCKED`。该提交之后新增的 PERF-03、Provider、环境预检、
+验收决议和 UI 修订仍需在新提交上重新执行 clean 本地门禁与远程 CI。
+
+[PERF-09 final combined 2×5](../../artifacts/phase5/local/perf09-final-combined-2x5-20260719-0302/summary.json)、
+[15 秒产品 idle final hardened](../../artifacts/phase5/local/product-idle-final-hardened-dev-20260719-0326/summary.json)
+与 [PERF-03 packaged 1×1](../../artifacts/phase5/local/perf03-host-ready-lease-dev-20260719T060500404Z/summary.json)
+开发运行均通过；PERF-03 单样本为 `118.648ms`、failure/forced termination 为 `0`。这些缩减运行仍为
+unsigned/non-acceptance，formal PERF-03 trust controller 与 approval receipt verifier 当前均 fail closed。
+正式签名、attestation/clean-download、fixed-lab PERF-01–09、PERF-03 3×100、
+PERF-09 3×50、900 秒 idle、Lane A/B 8 小时、clean VM、兼容矩阵、真实 Provider 与签字仍未完成。
 
 ## 1. 阶段目标与范围
 
@@ -139,15 +147,16 @@ G1 同时修订全局架构与隐私基线：Windows OCR 是当前真实 runtime
 5. 绝对性能门禁只在固定实验室或自托管 Windows runner 执行；共享 GitHub runner 只验证 harness、统计器和
    明显回归，不对硬件相关 p95 作发布结论。
 6. 真实 Provider 的公网耗时与本地编排开销分开。真实网络 p50/p95只报告，不作为 deterministic PR gate，
-   也不混入 `phase5:perf:smoke` 或 PERF-09；真实 Provider runner 尚未暴露为 package script，完成实现后必须
-   由显式人工/受控命令生成独立证据。8 秒总截止、source-only 首显和 UI 可用性仍是硬门禁。
+   也不混入 `phase5:perf:smoke` 或 PERF-09。`phase5:provider-smoke` formal runner 已暴露，并将真实百度
+   health、timeout、network、malformed-response、recovery 与 aggregate 拆成 append-never 证据；当前只有
+   runner/selftest 通过，没有受控账号的正式证据。8 秒总截止、source-only 首显和 UI 可用性仍是硬门禁。
 7. 指标 artifact 只允许 git/binary hash、角色、场景、来源、稳定错误码、字符数桶、耗时与资源数值；禁止
    原文、译文、截图、窗口标题、精确坐标、PID/HWND、完整路径、Pipe、nonce、凭据、签名或 body。
 8. WP1 从 `4ea65dc` 建立仅含 default-off instrumentation 的基线提交，必须先跑完整 Phase 4 门禁并证明
    默认路径行为等价。开发态与 packaged 态分别建立基线；`10%` 相对回归只在相同构建模式、相同 harness
    schema/version 和相同设备间比较，不能拿未打包的 Phase 4 与 ASAR/installer Phase 5 直接相减。
 
-当前 dirty Phase 5 严格超集回归通过不填补第 8 条：独立 `4ea65dc` instrumentation-only 三轮 baseline
+当前 clean-HEAD Phase 5 严格超集回归通过不填补第 8 条：独立 `4ea65dc` instrumentation-only 三轮 baseline
 仍是明确 gap，因此当前开发数据不得用于 Phase 4→5 的正式 `≤10%` 相对回归结论。
 
 Native IPC v1 拒绝未知字段。不得为了方便给 `selection/result` 偷加 timing 字段；优先使用受控 benchmark
@@ -222,8 +231,10 @@ PERF-08 的 `N=10` 时 nearest-rank p95 等于最大值，报告必须注明这�
 能作为独立、限权 CI artifact 保存。
 
 当前 no-`SkipBuild` unsigned development package 已满足候选绝对体积：Dir installed `322.146 MiB`；Installer
-installed `322.249 MiB`、installer `87.741 MiB`；Host+non-Electron resources `0.74 MiB`。这些 manifest
-均为 dirty `HEAD+WORKTREE`、`acceptanceEligible=false`、`NotSigned`，只证明开发包预算与链路，不是最终 RC。
+installed `322.249 MiB`、installer `87.741 MiB`；Host+non-Electron resources `0.74 MiB`。早期 Installer/Dir
+测量来自 dirty `HEAD+WORKTREE`；`3443d875…` 的 clean verify 已重新生成 clean unsigned Dir package，
+`developmentDirty=false`，但仍为 `acceptanceEligible=false`、`NotSigned`。这些结果只证明开发包预算与链路，
+不是最终 RC；clean signed Installer、attestation、clean-download 与 clean VM 仍未取得。
 
 资源采样器以启动根进程和 Windows Job/process ancestry 跟踪完整进程树，不能靠进程名猜测或漏掉 Electron
 GPU、utility、crashpad 子进程。PID 只用于本次采样关联，写入 artifact 前删除或替换为稳定角色标识。
@@ -386,12 +397,12 @@ checksum 验证。若选择“公开 V1 + 自动更新”，则增加以下硬�
 
 ### 10.1 当前已暴露的 package scripts
 
-本轮只使用以下 evidence roots 执行；运行后的结论以实际生成 manifest/summary 字段为准，不预写 PASS 或
-永久 PENDING：
+每次执行必须使用新的 append-never evidence root；以下命令中的路径仅为示例，运行后的结论以实际生成的
+manifest/summary 字段为准，不预写 PASS：
 
 ```powershell
-pnpm phase5:package:installer -- -EvidenceRoot ./artifacts/phase5/local/final-current-installer-20260719-0350
-pnpm phase5:verify -- -EvidenceRoot ./artifacts/phase5/local/final-current-verify-20260719-0350
+pnpm phase5:package:installer -- -EvidenceRoot ./artifacts/phase5/local/<new-installer-run>
+pnpm phase5:verify -- -EvidenceRoot ./artifacts/phase5/<git-sha>/<new-verify-run>
 ```
 
 | 命令 | 当前职责与证据边界 |
@@ -401,6 +412,11 @@ pnpm phase5:verify -- -EvidenceRoot ./artifacts/phase5/local/final-current-verif
 | `pnpm phase5:package` | no-`SkipBuild` unsigned Dir build/package/supply-chain gate |
 | `pnpm phase5:package:installer` | no-`SkipBuild` unsigned Installer build/package/supply-chain gate |
 | `pnpm phase5:perf:smoke` | metrics instrumentation smoke，不提供 fixed-lab PERF-01–07 结论 |
+| `pnpm phase5:environment:selftest` | 环境预检 schema、隐私与 fail-closed 负向自测，不证明 formal 环境就绪 |
+| `pnpm phase5:environment:preflight` | 采集 Windows/硬件/交互会话、`gh` 能力、签名身份、runner 与 protected environment readiness；输出 `PASS` 也只表示环境就绪 |
+| `pnpm phase5:perf03:selftest` | PERF-03 3×100、nearest-rank、身份、签名/attestation 与隐私 contract 静态自测 |
+| `pnpm phase5:perf03:dev` | 最多 2×5 的真实 packaged Host-ready 开发运行；永远为 non-acceptance |
+| `pnpm phase5:perf03` | formal PERF-03 3×100 entry；当前在可信 protected-run receipt、认证指标通道、publisher policy 与完整 namespace trust controller 实现前固定阻断，不生成 formal PASS |
 | `pnpm phase5:perf09:selftest` | PERF-09 frozen counts/statistics/privacy/fail-closed 静态自测，不启动产品 |
 | `pnpm phase5:perf09:dev` | 最多 2×5 的 packaged development 产品退出自测，永远为 non-acceptance |
 | `pnpm phase5:perf09` | formal 3×50 entry；要求 clean/signed/attested package、独立 trusted root/clean-download、登记设备和完整 metadata |
@@ -408,23 +424,30 @@ pnpm phase5:verify -- -EvidenceRoot ./artifacts/phase5/local/final-current-verif
 | `pnpm phase5:lane-identity:selftest` | Lane A/B artifact identity 与 policy 自测 |
 | `pnpm phase5:lane-a:product:selftest` | 证明 Lane A product policy fail closed |
 | `pnpm phase5:lane-a:product` | formal Lane A entry；当前因 runtime-control contract、packaged endpoint 与 action driver 未实现而返回 `NOT_IMPLEMENTED_BLOCKER` |
+| `pnpm phase5:provider-smoke:selftest` | real/fake 边界、脱敏与开发 fault/recovery 负向自测；不调用真实 Provider，固定 `NOT ACCEPTANCE` |
+| `pnpm phase5:provider-smoke` | PERF-08 CLI；formal health 只允许真实百度 product provider，formal fault/aggregate 在可信故障控制器实现前固定 fail closed |
+| `pnpm phase5:acceptance-decision:selftest` | 冻结 43-gate exact set、候选绑定、canonical digest、角色权限、source validator 与 approval receipt fail-closed 自测；当前可信生产 validator 为 0/43 |
+| `pnpm phase5:acceptance-decision -- --input <draft.json> --output <new-decision.json>` | append-never 正式决议入口；43 个 gate 均无可信 source validator，且非 PENDING 签字没有可信 receipt verifier，会稳定阻断批准 |
 | `pnpm phase5:process-privacy:selftest` | 进程身份、残留与证据隐私负向自测 |
 | `pnpm phase5:release:selftest` | release evidence/identity fail-closed 自测，不签名或发布 artifact |
 
 ### 10.2 尚未暴露为 package script 的正式工作
 
-仓库当前没有 `phase5:perf`、`phase5:soak`、`phase5:package:verify`、`phase5:sbom:verify`、
-`phase5:sign:verify`、`phase5:installer-upgrade:verify`、`phase5:auto-update:verify`、
-`phase5:provider-smoke` 或 `phase5:release:verify` package script。相关底层脚本或 workflow 片段存在时也不得把
-计划名称写成可运行命令。正式 PERF-01–08、两条 8 小时 lane、签名、安装升级、真实 Provider 与 release
-收口必须先形成受评审的可执行入口及 fail-closed evidence contract，再在清单中勾选。
+仓库当前仍没有统一的 `phase5:perf`、`phase5:soak`、`phase5:package:verify`、`phase5:sbom:verify`、
+`phase5:sign:verify`、`phase5:installer-upgrade:verify`、`phase5:auto-update:verify` 或
+`phase5:release:verify` package script。PERF-03 与 PERF-08 已有独立 formal entry，但没有正式运行证据；
+PERF-01/02/04–07、两条 8 小时 lane、签名、安装升级和 release 收口仍须形成受评审的可执行入口及
+fail-closed evidence contract，再在清单中勾选。
 
-`.github/workflows/phase5-windows.yml` 分三类执行：
+`.github/workflows/phase5-windows.yml` 暴露四组 fail-closed entry：
 
 1. **PR deterministic gate**：frozen install、lint/typecheck/test/coverage、Phase 4 回归、Native Release、
    unsigned package、packaged E2E、解包扫描、SBOM、短稳、tracked mutation 和残留进程；
-2. **性能/长稳 gate**：固定自托管 Windows 会话或登记实验室设备，执行完整性能矩阵与 8 小时 soak；
-3. **protected release gate**：仅受保护 tag，执行签名、安装/升级/回滚、签名验证、上传 immutable release
+2. **Lane A harness gate**：固定自托管 Windows 会话执行开发期调度；当前 product runtime-control contract
+   未实现，不能冒充 8 小时产品 soak；
+3. **tag-only performance gate**：登记实验室 runner 上接收外部签名 bundle，预检后执行 formal PERF-03 3×100
+   与 900 秒资源 entry；当前 PERF-03 trust controller 会在采样前明确阻断；
+4. **protected Lane B/release gate**：仅受保护 tag，执行独立下载预检、签名、安装/升级/回滚、签名验证、上传 immutable release
    bundle、SBOM、notices、checksums 和 provenance。
 
 真实百度 secret 与签名 secret 不进入普通 PR。真实外部 fork PR 必须取得一次运行证据，证明 workflow 不读取
@@ -450,11 +473,24 @@ security/signature-report.json
 supply-chain/sbom.cdx.json
 supply-chain/third-party-notices.txt
 release/evidence-manifest.json
+release/acceptance-decision.json
 ```
 
 `release/evidence-manifest.json` 记录版本、git SHA、workflow/run、installer/ASAR/Host/SBOM/checksum hash、
 各门禁结果与签字状态。报告引用相对 evidence path，不把真实凭据、正文、用户绝对路径或原始 TLS body/pcap
 放入仓库和 CI artifact。
+
+最终 `release/acceptance-decision.json` 由
+[`phase5-acceptance-decision.mjs`](../../tooling/phase5-acceptance-decision.mjs) 从模板生成。其 canonical payload
+仅包含 schema/phase、候选 Git SHA + `0.5.0-phase5`、final release manifest hash、clean-download hash、exact
+artifact-set digest 与固定顺序的 43 项 gate 路径/hash/status；签字不进入 payload 本体，而必须逐条引用该 payload
+SHA-256。相同自然人可以合并签四个角色，但必须对重复 signer 使用 `MERGED_PROJECT_OWNER`。该权限声明不替代
+Authenticode、attestation、fixed-lab、Provider、clean VM 或硬件证据。当前 registry 覆盖全部 43 个 gate，
+但当前 43 个生产 source validator 全部明确返回 `GATE_SOURCE_VALIDATOR_NOT_IMPLEMENTED`；非 PENDING 角色记录也会
+返回 `APPROVAL_RECEIPT_VERIFIER_NOT_IMPLEMENTED`。已有结构解析、阈值重算
+和哈希绑定代码不能授予生产信任；必须再接入受保护运行证明、系统 Authenticode 验签、离线 DSSE/Sigstore 验证、
+独立下载与真实故障控制证明。因此 selftest 通过只证明决议工具 fail closed，不能形成
+Phase 5 `APPROVE`。
 
 ## 12. 主要风险与立即停止条件
 
@@ -528,7 +564,7 @@ Security/Privacy 与 Quality/Release 复核。
 10. Windows 11、DPI、多屏/旋转和代表性应用核心矩阵通过；Windows 10 与系统边界按实际证据表述；
 11. 真实百度成功与故障/恢复 smoke 完成，fake/真实证据严格分层；
 12. 无未处置 P0/P1；所有 P2/未执行项都有剩余分、owner、缓解、复审日和用户影响；
-13. Product、Engineering、Security/Privacy、Quality/Release 对同一 evidence manifest 完成签字。
+13. Product、Engineering、Security/Privacy、Quality/Release 对同一 canonical acceptance payload digest 完成签字。
 
 以下风险不可通过普通 `ACCEPTED RISK` 豁免：敏感数据泄露、未同意联网、签名/更新完整性失败、任意代码
 执行、数据库不可恢复损坏、stale result 安全边界失效、可复现 crash/hang 或无限重启。出现这些问题时

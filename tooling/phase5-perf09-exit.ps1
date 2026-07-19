@@ -3756,15 +3756,30 @@ $summary.acceptance = $false
 $summary.completedAt = $null
 Write-AtomicJson -Path $summaryPath -Value $summary
 
+$finalSummaryCandidateRoot = $null
 try {
-    Invoke-EvidencePrivacyScan
+    # Build the exact final bytes under the evidence root, scan those bytes,
+    # then atomically replace the still-FINALIZING canonical summary. No PASS
+    # field is changed after the successful scan.
     $summary.gates.evidencePrivacy = 'PASS'
-    Write-AtomicJson -Path $summaryPath -Value $summary
-    Invoke-EvidencePrivacyScan
     $summary.status = $candidateStatus
     $summary.acceptance = $candidateAcceptance
     $summary.completedAt = [DateTimeOffset]::UtcNow.ToString('o')
+    $finalSummaryCandidateRoot = Join-Path $OutputRoot 'pending-final-summary'
+    [IO.Directory]::CreateDirectory($finalSummaryCandidateRoot) | Out-Null
+    $finalSummaryCandidatePath = Join-Path $finalSummaryCandidateRoot 'summary.json'
+    Write-AtomicJson -Path $finalSummaryCandidatePath -Value $summary
+    Invoke-EvidencePrivacyScan
+    $flags = [Phase5Perf09Native]::MOVEFILE_REPLACE_EXISTING -bor [Phase5Perf09Native]::MOVEFILE_WRITE_THROUGH
+    if (-not [Phase5Perf09Native]::MoveFileEx($finalSummaryCandidatePath, $summaryPath, $flags)) {
+        throw (New-Object ComponentModel.Win32Exception([Runtime.InteropServices.Marshal]::GetLastWin32Error()))
+    }
+    [IO.Directory]::Delete($finalSummaryCandidateRoot)
+    $finalSummaryCandidateRoot = $null
 } catch {
+    if ($null -ne $finalSummaryCandidateRoot -and (Test-Path -LiteralPath $finalSummaryCandidateRoot -PathType Container)) {
+        try { [IO.Directory]::Delete($finalSummaryCandidateRoot, $true) } catch {}
+    }
     $summary.gates.evidencePrivacy = 'FAIL'
     $summary.status = 'FAIL'
     $summary.acceptance = $false
@@ -3773,8 +3788,9 @@ try {
         $summary.stableFailureCodes + @('EVIDENCE_PRIVACY_FAILED') |
             Sort-Object -Unique
     )
+    Write-AtomicJson -Path $summaryPath -Value $summary
+    try { Invoke-EvidencePrivacyScan } catch {}
 }
-Write-AtomicJson -Path $summaryPath -Value $summary
 
 if ($summary.status -eq 'FAIL') {
     throw 'PERF-09 failed; inspect the stable, redacted evidence codes.'

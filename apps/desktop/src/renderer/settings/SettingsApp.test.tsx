@@ -87,6 +87,14 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
 }
 
 describe('SettingsApp', () => {
+  it('labels the release-hardening surface as a Phase 5 candidate', async () => {
+    const { api } = createSettingsApi();
+    render(<SettingsApp api={api} />);
+
+    expect(await screen.findByText('Phase 5 · 发布候选验证')).toBeTruthy();
+    expect(screen.queryByText('Phase 4 · 内部开发预览')).toBeNull();
+  });
+
   it('requires a two-step exact confirmation before clearing all local data', async () => {
     const { api, clearAllLocalData } = createSettingsApi();
     render(<SettingsApp api={api} />);
