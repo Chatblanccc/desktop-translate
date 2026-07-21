@@ -157,6 +157,97 @@ describe('native host client protocol checks', () => {
     await expect(hostError).resolves.toMatchObject([expect.objectContaining({ method: 'host/error' })]);
   });
 
+  it('emits validated pointer-down activity from the Native Host', async () => {
+    const pipeName = await listen((socket, request) => {
+      socket.write(encodeFrame({
+        v: 1,
+        kind: 'response',
+        id: request.id,
+        method: 'ready',
+        timestamp: new Date().toISOString(),
+        payload: {
+          selectedVersion: 1,
+          hostVersion: 'test-host',
+          hostPid: '4242',
+          sessionNonce: '0123456789abcdef0123456789abcdef',
+          capabilities: ['pointer-down-events']
+        }
+      }));
+      socket.write(encodeFrame({
+        v: 1,
+        kind: 'event',
+        seq: 1,
+        method: 'input/pointer-down',
+        timestamp: new Date().toISOString(),
+        payload: {
+          point: { x: -120, y: 480 },
+          coordinateSpace: 'physical-px'
+        }
+      }));
+    });
+    const client = new NativeHostClient({ pipeName });
+    openClients.push(client);
+    const pointerDown = once(client, 'input/pointer-down');
+    await client.connect();
+    await expect(client.request('hello', {
+      desktopVersion: '0.5.0-phase5',
+      supportedVersions: [1],
+      sessionNonce: '0123456789abcdef0123456789abcdef',
+      requestedCapabilities: ['pointer-down-events']
+    })).resolves.toMatchObject({ method: 'ready' });
+    await expect(pointerDown).resolves.toMatchObject([
+      expect.objectContaining({
+        method: 'input/pointer-down',
+        payload: { point: { x: -120, y: 480 }, coordinateSpace: 'physical-px' }
+      })
+    ]);
+  });
+
+  it('fails closed when a Host sends pointer activity without negotiating the capability', async () => {
+    const sessionNonce = '0123456789abcdef0123456789abcdef';
+    const pipeName = await listen((socket, request) => {
+      socket.write(encodeFrame({
+        v: 1,
+        kind: 'response',
+        id: request.id,
+        method: 'ready',
+        timestamp: new Date().toISOString(),
+        payload: {
+          selectedVersion: 1,
+          hostVersion: 'legacy-test-host',
+          hostPid: '4242',
+          sessionNonce,
+          capabilities: []
+        }
+      }));
+      setImmediate(() => socket.write(encodeFrame({
+        v: 1,
+        kind: 'event',
+        seq: 1,
+        method: 'input/pointer-down',
+        timestamp: new Date().toISOString(),
+        payload: {
+          point: { x: 120, y: 480 },
+          coordinateSpace: 'physical-px'
+        }
+      })));
+    });
+    const client = new NativeHostClient({ pipeName });
+    openClients.push(client);
+    client.on('disconnect', () => undefined);
+    const protocolError = once(client, 'protocolError');
+    await client.connect();
+    await expect(client.request('hello', {
+      desktopVersion: '0.5.0-phase5',
+      supportedVersions: [1],
+      sessionNonce,
+      requestedCapabilities: []
+    })).resolves.toMatchObject({ method: 'ready' });
+    await expect(protocolError).resolves.toMatchObject([
+      expect.objectContaining({ message: expect.stringMatching(/not negotiated/u) })
+    ]);
+  });
+
   it('rejects pending work when explicitly closed', async () => {
     const pipeName = await listen(() => undefined);
     const client = new NativeHostClient({ pipeName, requestTimeoutMs: 5_000 });

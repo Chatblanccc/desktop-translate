@@ -19,18 +19,18 @@ describe('selection card positioning', () => {
     expect(resolveSelectionCardBounds(
       { x: 700, y: 300, width: 200, height: 30 },
       workArea
-    )).toEqual({ x: 610, y: 340, width: 380, height: 320 });
+    )).toEqual({ x: 650, y: 340, width: 300, height: 160 });
     expect(resolveSelectionCardBounds(
       { x: 700, y: 990, width: 200, height: 30 },
       workArea
-    )).toEqual({ x: 610, y: 660, width: 380, height: 320 });
+    )).toEqual({ x: 650, y: 820, width: 300, height: 160 });
   });
 
   it('clamps inside negative-coordinate and narrow work areas', () => {
     expect(resolveSelectionCardBounds(
       { x: -1275, y: 20, width: 20, height: 20 },
       { x: -1280, y: 0, width: 1280, height: 984 }
-    )).toEqual({ x: -1272, y: 50, width: 380, height: 320 });
+    )).toEqual({ x: -1272, y: 50, width: 300, height: 160 });
     expect(resolveSelectionCardBounds(
       { x: 10, y: 10, width: 10, height: 10 },
       { x: 0, y: 0, width: 300, height: 180 },

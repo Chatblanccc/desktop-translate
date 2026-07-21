@@ -42,6 +42,7 @@ describe('role-isolated preload entrypoints', () => {
     expect(Object.keys(api as object).sort()).toEqual([
       'clearAllLocalData',
       'deleteBaiduCredentials',
+      'getBaiduCredentialSummary',
       'getSnapshot',
       'onSnapshotChanged',
       'openProviderPrivacyPolicy',

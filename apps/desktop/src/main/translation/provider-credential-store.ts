@@ -1,4 +1,5 @@
 import type { SecretsRepository } from '@desktop-translate/storage';
+import type { BaiduCredentialSummary } from '@desktop-translate/contracts/ui-shell';
 
 export type ProviderCredentialStatus = 'missing' | 'configured' | 'unavailable';
 
@@ -181,6 +182,17 @@ export class ProviderCredentialStore {
       this.requireReadableGeneration(generation);
       throw error;
     }
+  }
+
+  /**
+   * Returns the only credential projection permitted to cross into the settings
+   * renderer. The decrypted secret is consumed inside Main and never copied to
+   * the returned object.
+   */
+  public async getSummary(): Promise<BaiduCredentialSummary> {
+    const credentials = await this.load();
+    if (credentials === undefined) return { appId: '', secretConfigured: false };
+    return { appId: credentials.appId, secretConfigured: true };
   }
 
   public async delete(): Promise<boolean> {

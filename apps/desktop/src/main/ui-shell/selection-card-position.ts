@@ -1,7 +1,7 @@
 import type { Rectangle } from 'electron';
 
-export const CARD_WIDTH_DIP = 380;
-export const CARD_HEIGHT_DIP = 320;
+export const CARD_WIDTH_DIP = 300;
+export const CARD_HEIGHT_DIP = 160;
 export const CARD_GAP_DIP = 10;
 export const CARD_WORK_AREA_MARGIN_DIP = 8;
 

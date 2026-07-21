@@ -26,6 +26,10 @@ function setup(role: 'ball' | 'settings' = 'settings') {
     setTranslationEnabled: vi.fn().mockResolvedValue(undefined),
     setTranslationSourceLanguage: vi.fn().mockResolvedValue(undefined),
     setTranslationTargetLanguage: vi.fn().mockResolvedValue(undefined),
+    getBaiduCredentialSummary: vi.fn().mockResolvedValue({
+      appId: 'safe-app-id',
+      secretConfigured: true
+    }),
     saveBaiduCredentials: vi.fn().mockResolvedValue(undefined),
     deleteBaiduCredentials: vi.fn().mockResolvedValue(undefined),
     testTranslationProvider: vi.fn().mockResolvedValue({ ok: true }),
@@ -107,6 +111,28 @@ describe('UI shell IPC', () => {
     requireHandler(handlers, UI_SHELL_CHANNELS.openContextMenu)(event);
     expect(actions.openSettings).toHaveBeenCalledOnce();
     expect(actions.openContextMenu).toHaveBeenCalledOnce();
+  });
+
+  it('returns the renderer-safe credential summary only to the settings main frame', async () => {
+    const settings = setup('settings');
+    await expect(requireHandler(
+      settings.handlers,
+      UI_SHELL_CHANNELS.getBaiduCredentialSummary
+    )(settings.event)).resolves.toEqual({
+      appId: 'safe-app-id',
+      secretConfigured: true
+    });
+    expect(settings.actions.getBaiduCredentialSummary).toHaveBeenCalledOnce();
+
+    const ball = setup('ball');
+    await expect(requireHandler(
+      ball.handlers,
+      UI_SHELL_CHANNELS.getBaiduCredentialSummary
+    )(ball.event)).rejects.toThrow(/rejected/u);
+    await expect(requireHandler(
+      settings.handlers,
+      UI_SHELL_CHANNELS.getBaiduCredentialSummary
+    )(settings.event, {})).rejects.toThrow(/does not accept/u);
   });
 
   it('rejects a ball attempting to write settings', async () => {

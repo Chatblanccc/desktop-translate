@@ -72,15 +72,22 @@ export function createBallWindowOptions(preload: string, bounds: Rectangle): Bro
 }
 
 export function createSettingsWindowOptions(preload: string): BrowserWindowConstructorOptions {
+  const dark = nativeTheme.shouldUseDarkColors;
   return {
-    width: 720,
-    height: 640,
-    minWidth: 640,
-    minHeight: 560,
+    width: 1000,
+    height: 720,
+    minWidth: 760,
+    minHeight: 600,
     show: false,
     frame: true,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: {
+      color: dark ? '#202020' : '#f7f7f7',
+      symbolColor: dark ? '#ffffff' : '#202020',
+      height: 50
+    },
     transparent: false,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#202020' : '#f3f3f3',
+    backgroundColor: dark ? '#202020' : '#f7f7f7',
     autoHideMenuBar: true,
     title: '桌面翻译设置',
     webPreferences: createSecureWebPreferences(preload)
@@ -129,9 +136,8 @@ export function createSystemAccentCss(accentColor: string, accentTextColor: stri
   return `
 @media (forced-colors: none) {
   :root {
-    --color-accent: ${accent} !important;
-    --color-accent-hover: color-mix(in srgb, ${accent} 84%, #000 16%) !important;
-    --color-accent-text: ${accentText} !important;
+    --color-system-accent: ${accent} !important;
+    --color-system-accent-text: ${accentText} !important;
     --focus-ring: ${accent} !important;
   }
 }`;
@@ -262,6 +268,7 @@ export class WindowManager {
   }
 
   public broadcast(snapshot: UiShellSnapshot): void {
+    this.syncSettingsWindowChrome();
     for (const window of [this.ballWindow, this.settingsWindow]) {
       if (window !== undefined && !window.isDestroyed()) {
         window.webContents.send(UI_SHELL_CHANNELS.snapshotChanged, snapshot);
@@ -385,6 +392,18 @@ export class WindowManager {
       role,
       expectedUrl: pathToFileURL(html).href
     });
+  }
+
+  private syncSettingsWindowChrome(): void {
+    const window = this.settingsWindow;
+    if (window === undefined || window.isDestroyed()) return;
+    const dark = nativeTheme.shouldUseDarkColors;
+    window.setTitleBarOverlay({
+      color: dark ? '#202020' : '#f7f7f7',
+      symbolColor: dark ? '#ffffff' : '#202020',
+      height: 50
+    });
+    window.setBackgroundColor(dark ? '#202020' : '#f7f7f7');
   }
 
   private secure(window: BrowserWindow): void {

@@ -33,7 +33,9 @@ describe('CardApp', () => {
     const view = render(<CardApp api={api} />);
     await screen.findByRole('heading', { name: '识别结果' });
     expect(screen.getByText(card.sourceText)).toBeTruthy();
-    expect(screen.getByText(/本地 OCR · 75%/u)).toBeTruthy();
+    expect(screen.queryByText(/本地 OCR/u)).toBeNull();
+    expect(view.container.querySelector('.card-origin-section')).toBeNull();
+    expect(screen.getByText('在线翻译：未启用 · 仅显示原文')).toBeTruthy();
     expect(screen.queryByText(/译文/u)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: '关闭识别结果' }));
     expect(dismiss).toHaveBeenCalledOnce();
@@ -141,9 +143,9 @@ describe('CardApp', () => {
     };
 
     const view = render(<CardApp api={api} />);
-    const region = await screen.findByRole('region', { name: '翻译内容' });
+    const region = await screen.findByRole('region', { name: '识别内容' });
     expect(view.container.querySelector('.card-text')?.textContent).toBe(sourceText);
-    expect(view.container.querySelector('img, script, svg, a')).toBeNull();
+    expect(view.container.querySelector('.card-text img, .card-text script, .card-text svg, .card-text a')).toBeNull();
     expect(region.getAttribute('tabindex')).toBe('0');
     region.focus();
     expect(document.activeElement).toBe(region);
@@ -171,6 +173,9 @@ describe('CardApp', () => {
     };
     const view = render(<CardApp api={api} />);
     expect(await screen.findByText(translated.translatedText)).toBeTruthy();
+    expect(screen.queryByText(translated.sourceText)).toBeNull();
+    expect(view.container.querySelector('.card-origin-section')).toBeNull();
+    expect(view.container.querySelector('.translated-section')).toBeTruthy();
     view.unmount();
 
     const failed = {
@@ -181,8 +186,61 @@ describe('CardApp', () => {
       retryable: true
     };
     vi.mocked(api.getCurrent).mockResolvedValue(failed);
-    render(<CardApp api={api} />);
+    const failedView = render(<CardApp api={api} />);
+    expect(await screen.findByText(failed.sourceText)).toBeTruthy();
+    expect(failedView.container.querySelector('.card-origin-section')).toBeNull();
+    expect(
+      failedView.container.querySelector('.card-content')?.firstElementChild?.classList.contains('translation-error')
+    ).toBe(true);
+    expect(screen.getByText('翻译失败 · 已保留原文')).toBeTruthy();
     fireEvent.click(await screen.findByRole('button', { name: '重试翻译' }));
     expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it('resets scroll position and announces a completed translation', async () => {
+    let listener: ((value: typeof translated | typeof translating | undefined) => void) | undefined;
+    const requestId = '223e4567-e89b-42d3-a456-426614174000';
+    const translating = {
+      ...card,
+      kind: 'translating' as const,
+      requestId
+    };
+    const translated = {
+      ...card,
+      kind: 'translated' as const,
+      requestId,
+      translatedText: '翻译已完成',
+      targetLanguage: 'zh-CN',
+      attribution: { providerId: 'baidu', providerDisplayName: '百度翻译' },
+      fromCache: false
+    };
+    const api: SelectionCardRendererBridge = {
+      getCurrent: vi.fn().mockResolvedValue(translating),
+      dismiss: vi.fn().mockResolvedValue(undefined),
+      retry: vi.fn().mockResolvedValue(undefined),
+      onChanged: vi.fn((next) => {
+        listener = next as typeof listener;
+        return vi.fn();
+      })
+    };
+
+    const view = render(<CardApp api={api} />);
+    await waitFor(() => expect(listener).toBeTypeOf('function'));
+    await waitFor(() => expect(view.container.querySelector('.card-shell')?.getAttribute('data-kind')).toBe('translating'));
+    expect(view.container.querySelector('.card-origin-section')).toBeNull();
+    expect(
+      view.container.querySelector('.card-content')?.firstElementChild?.classList.contains('translation-state')
+    ).toBe(true);
+    const content = view.container.querySelector<HTMLElement>('.card-content');
+    expect(content).toBeTruthy();
+    content!.scrollTop = 96;
+
+    act(() => { listener?.(translated); });
+
+    const status = await screen.findByRole('status');
+    expect(status.textContent).toBe('翻译完成');
+    expect(status.getAttribute('aria-live')).toBe('polite');
+    expect(status.getAttribute('aria-atomic')).toBe('true');
+    expect(content!.scrollTop).toBe(0);
   });
 });

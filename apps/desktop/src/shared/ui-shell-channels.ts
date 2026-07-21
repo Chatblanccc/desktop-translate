@@ -11,6 +11,7 @@ export const UI_SHELL_CHANNELS = Object.freeze({
   setTranslationEnabled: 'ui-shell:set-translation-enabled',
   setTranslationSourceLanguage: 'ui-shell:set-translation-source-language',
   setTranslationTargetLanguage: 'ui-shell:set-translation-target-language',
+  getBaiduCredentialSummary: 'ui-shell:get-baidu-credential-summary',
   saveBaiduCredentials: 'ui-shell:save-baidu-credentials',
   deleteBaiduCredentials: 'ui-shell:delete-baidu-credentials',
   testTranslationProvider: 'ui-shell:test-translation-provider',

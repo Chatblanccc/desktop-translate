@@ -305,7 +305,8 @@ bool ValidateRequestedCapabilities(std::string_view payload) {
   const auto capabilities = FindJsonStringArrayField(payload, "requestedCapabilities");
   if (!capabilities) return false;
   static constexpr std::string_view kAllowed[] = {
-      "mouse-hook", "uia-selection", "uia-point-approximation", "desktop-capture", "ocr"};
+      "mouse-hook", "pointer-down-events", "uia-selection", "uia-point-approximation",
+      "desktop-capture", "ocr"};
   std::unordered_set<std::string> unique;
   return std::all_of(capabilities->begin(), capabilities->end(), [&](const std::string& item) {
     return std::find(std::begin(kAllowed), std::end(kAllowed), item) != std::end(kAllowed) &&
@@ -313,15 +314,24 @@ bool ValidateRequestedCapabilities(std::string_view payload) {
   });
 }
 
+bool RequestedCapability(std::string_view payload, std::string_view capability) {
+  const auto capabilities = FindJsonStringArrayField(payload, "requestedCapabilities");
+  return capabilities &&
+         std::find(capabilities->begin(), capabilities->end(), capability) !=
+             capabilities->end();
+}
+
 }  // namespace
 
 SelectionHostApp::SelectionHostApp(SelectionHostOptions options)
     : options_(std::move(options)),
       pipe_server_(options_.pipe_name, options_.parent_pid),
+      event_writer_([this](const Envelope& event) { return pipe_server_.Send(event); }),
       ocr_engine_(CreateWindowsOcrAdapter()) {
   pipeline_ = std::make_unique<SelectionPipeline>(
       mouse_hook_, uia_worker_, capture_, *ocr_engine_,
-      [this](SelectionPipelineResult result) { HandlePipelineResult(std::move(result)); });
+      [this](SelectionPipelineResult result) { HandlePipelineResult(std::move(result)); },
+      [this](PhysicalPoint point) { HandlePointerDown(point); });
 }
 
 SelectionHostApp::~SelectionHostApp() {
@@ -395,6 +405,9 @@ bool SelectionHostApp::HandleRequest(const Envelope& envelope) {
                 "supportedVersions must contain protocol v1", envelope.id);
       return false;
     }
+    pointer_down_events_enabled_.store(
+        RequestedCapability(envelope.payload_json, "pointer-down-events"),
+        std::memory_order_release);
     handshake_complete_.store(true, std::memory_order_release);
     const auto payload = "{\"selectedVersion\":1,\"hostVersion\":" +
                          JsonString(kHostVersion) + ",\"hostPid\":" +
@@ -428,7 +441,7 @@ bool SelectionHostApp::HandleRequest(const Envelope& envelope) {
                          ",\"listening\":" + BoolJson(listening) +
                          ",\"uptimeMs\":" + std::to_string(uptime) +
                          ",\"lastEventSeq\":" +
-                         std::to_string(last_event_sequence_.load(std::memory_order_acquire)) +
+                         std::to_string(event_writer_.last_sequence()) +
                          ",\"degradedCapabilities\":" + DegradedCapabilitiesJson() + "}";
     return SendResponse(envelope, "health", payload);
   }
@@ -569,22 +582,21 @@ void SelectionHostApp::HandlePipelineResult(SelectionPipelineResult result) noex
                        ",\"coordinateSpace\":\"physical-px\"" +
                        ",\"timestamp\":" + JsonString(timestamp) + "}";
 
-  const auto sequence = next_event_sequence_.fetch_add(1U, std::memory_order_acq_rel);
-  last_event_sequence_.store(sequence, std::memory_order_release);
-  Envelope event;
-  event.kind = MessageKind::kEvent;
-  event.sequence = sequence;
-  event.method = "selection/result";
-  event.timestamp = timestamp;
-  event.payload_json = payload;
-  (void)pipe_server_.Send(event);
+  (void)event_writer_.Send("selection/result", timestamp, payload);
+}
+
+void SelectionHostApp::HandlePointerDown(PhysicalPoint point) noexcept {
+  if (!pointer_down_events_enabled_.load(std::memory_order_acquire)) return;
+  const auto timestamp = UtcTimestamp();
+  auto payload = "{\"point\":{\"x\":" + std::to_string(point.x) +
+                 ",\"y\":" + std::to_string(point.y) +
+                 "},\"coordinateSpace\":\"physical-px\"}";
+  (void)event_writer_.Send("input/pointer-down", timestamp, std::move(payload));
 }
 
 void SelectionHostApp::SendError(ErrorCode error, std::string scope, std::string message,
                                  std::optional<std::string> related_request_id,
                                  std::optional<std::string> selection_id) noexcept {
-  const auto sequence = next_event_sequence_.fetch_add(1U, std::memory_order_acq_rel);
-  last_event_sequence_.store(sequence, std::memory_order_release);
   const std::string_view raw_message =
       message.empty() ? ToString(error) : std::string_view(message);
   const auto bounded_message = TruncateUtf8ToUtf16Units(raw_message, 1024U);
@@ -599,17 +611,14 @@ void SelectionHostApp::SendError(ErrorCode error, std::string scope, std::string
   if (selection_id) payload += ",\"selectionId\":" + JsonString(*selection_id);
   payload.push_back('}');
 
-  Envelope event;
-  event.kind = MessageKind::kEvent;
-  event.sequence = sequence;
-  event.method = "host/error";
-  event.timestamp = UtcTimestamp();
-  event.payload_json = std::move(payload);
-  (void)pipe_server_.Send(event);
+  (void)event_writer_.Send("host/error", UtcTimestamp(), std::move(payload));
 }
 
 std::string SelectionHostApp::CapabilitiesJson() const {
   std::vector<std::string> capabilities{"mouse-hook", "desktop-capture"};
+  if (pointer_down_events_enabled_.load(std::memory_order_acquire)) {
+    capabilities.emplace_back("pointer-down-events");
+  }
   if (uia_worker_.available()) capabilities.emplace_back("uia-selection");
   if (ocr_engine_->available()) capabilities.emplace_back("ocr");
   return StringArrayJson(capabilities);

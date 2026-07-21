@@ -42,6 +42,14 @@ export type BallEdge = (typeof BALL_EDGES)[number];
 export const CREDENTIAL_STATUSES = ["missing", "configured", "unavailable"] as const;
 export type CredentialStatus = (typeof CREDENTIAL_STATUSES)[number];
 
+/**
+ * Renderer-safe projection of the stored Baidu credentials. The secret value is
+ * deliberately absent; `secretConfigured` only controls the fixed UI mask.
+ */
+export type BaiduCredentialSummary =
+  | { readonly appId: ""; readonly secretConfigured: false }
+  | { readonly appId: string; readonly secretConfigured: true };
+
 export interface TranslationUiState {
   readonly enabled: boolean;
   readonly providerId: string;
@@ -162,6 +170,34 @@ export function isOcrActivation(value: unknown): value is OcrActivation {
 
 export function isCredentialStatus(value: unknown): value is CredentialStatus {
   return typeof value === "string" && CREDENTIAL_STATUSES.includes(value as CredentialStatus);
+}
+
+export function isBaiduCredentialSummary(value: unknown): value is BaiduCredentialSummary {
+  if (!isRecord(value) || Object.keys(value).length !== 2) return false;
+  if (!hasOnlyKeys(value, ["appId", "secretConfigured"])) return false;
+  if (value.secretConfigured === false) return value.appId === "";
+  return value.secretConfigured === true && isRendererSafeBaiduAppId(value.appId);
+}
+
+function isRendererSafeBaiduAppId(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    value.length > 128 ||
+    value.trim() !== value
+  ) return false;
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit === 0) return false;
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      return false;
+    }
+  }
+  return true;
 }
 
 export function isBallAnchor(value: unknown): value is BallAnchor {

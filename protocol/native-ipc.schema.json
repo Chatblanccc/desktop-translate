@@ -14,6 +14,7 @@
     { "$ref": "#/$defs/stopResponse" },
     { "$ref": "#/$defs/shutdownRequest" },
     { "$ref": "#/$defs/shutdownResponse" },
+    { "$ref": "#/$defs/pointerDownEvent" },
     { "$ref": "#/$defs/selectionResultEvent" },
     { "$ref": "#/$defs/hostErrorEvent" }
   ],
@@ -77,7 +78,7 @@
     },
     "capability": {
       "type": "string",
-      "enum": ["mouse-hook", "uia-selection", "uia-point-approximation", "desktop-capture", "ocr"]
+      "enum": ["mouse-hook", "pointer-down-events", "uia-selection", "uia-point-approximation", "desktop-capture", "ocr"]
     },
     "helloRequest": {
       "allOf": [
@@ -327,6 +328,27 @@
         "y": { "type": "number" }
       },
       "additionalProperties": false
+    },
+    "pointerDown": {
+      "type": "object",
+      "required": ["point", "coordinateSpace"],
+      "properties": {
+        "point": { "$ref": "#/$defs/point" },
+        "coordinateSpace": { "const": "physical-px" }
+      },
+      "additionalProperties": false
+    },
+    "pointerDownEvent": {
+      "allOf": [
+        { "$ref": "#/$defs/eventEnvelope" },
+        {
+          "type": "object",
+          "properties": {
+            "method": { "const": "input/pointer-down" },
+            "payload": { "$ref": "#/$defs/pointerDown" }
+          }
+        }
+      ]
     },
     "rect": {
       "type": "object",

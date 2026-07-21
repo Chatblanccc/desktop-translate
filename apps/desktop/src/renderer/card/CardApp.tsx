@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
+import { ArrowClockwiseRegular, DismissRegular } from '@fluentui/react-icons';
 import type { SelectionCardViewModel } from '@desktop-translate/contracts/selection-card';
 import type { SelectionCardRendererBridge } from '../../preload/card-bridge.js';
 
@@ -21,6 +22,7 @@ const FAILURE_LABELS: Readonly<Record<string, string>> = {
 
 export function CardApp({ api }: CardAppProps): JSX.Element {
   const [card, setCard] = useState<SelectionCardViewModel | undefined>();
+  const contentRef = useRef<HTMLElement>(null);
   const renderRevision = useRef(0);
   const committedRevision = useRef(0);
   const pendingPaintProbes = useRef<Array<{ readonly token: number; readonly revision: number }>>([]);
@@ -81,6 +83,10 @@ export function CardApp({ api }: CardAppProps): JSX.Element {
     for (const { token } of ready) schedulePaintAcknowledgement(token);
   }, [card, schedulePaintAcknowledgement]);
 
+  useLayoutEffect(() => {
+    if (contentRef.current !== null) contentRef.current.scrollTop = 0;
+  }, [card?.selectionId, card?.kind]);
+
   useEffect(() => () => {
     for (const frame of animationFrames.current) cancelAnimationFrame(frame);
     animationFrames.current.clear();
@@ -88,35 +94,25 @@ export function CardApp({ api }: CardAppProps): JSX.Element {
   }, []);
 
   if (card === undefined) return <main className="card-shell" aria-hidden="true" />;
-  const sourceLabel = card.source === 'ocr' ? '本地 OCR' : '应用文字';
   const isTranslationCard = card.kind !== 'source-only';
+  const showSourceText = card.kind !== 'translated';
+  const resultTitle = isTranslationCard ? '翻译结果' : '识别结果';
 
   return (
-    <main className="card-shell" aria-labelledby="card-title">
+    <main className="card-shell" data-kind={card.kind} aria-labelledby="card-title">
       <header className="card-header">
-        <span>
-          <h1 id="card-title">{isTranslationCard ? '翻译结果' : '识别结果'}</h1>
-          <span className="card-source">
-            {sourceLabel}
-            {card.source === 'ocr' ? ` · ${Math.round(card.confidence * 100)}%` : ''}
-          </span>
-        </span>
+        <h1 id="card-title">{resultTitle}</h1>
         <button
           className="card-close"
           type="button"
-          aria-label="关闭识别结果"
+          aria-label={`关闭${resultTitle}`}
           onClick={() => { void api.dismiss(); }}
         >
-          ×
+          <DismissRegular aria-hidden="true" />
         </button>
       </header>
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- Keyboard users must be able to scroll long card content. */}
-      <section className="card-content" aria-label="翻译内容" tabIndex={0}>
-        <section className="card-text-section" aria-labelledby="source-text-label">
-          <h2 id="source-text-label">原文</h2>
-          <p className="card-text">{card.sourceText}</p>
-        </section>
-
+      <section ref={contentRef} className="card-content" aria-label={isTranslationCard ? '翻译内容' : '识别内容'} tabIndex={0}>
         {card.kind === 'translating' && (
           <section className="translation-state" aria-live="polite" aria-busy="true">
             <span className="translation-spinner" aria-hidden="true" />
@@ -126,6 +122,7 @@ export function CardApp({ api }: CardAppProps): JSX.Element {
 
         {card.kind === 'translated' && (
           <section className="card-text-section translated-section" aria-labelledby="translated-text-label">
+            <output className="sr-only" aria-live="polite" aria-atomic="true">翻译完成</output>
             <h2 id="translated-text-label">译文 · {card.targetLanguage}</h2>
             <p className="card-text translated-text">{card.translatedText}</p>
           </section>
@@ -140,16 +137,29 @@ export function CardApp({ api }: CardAppProps): JSX.Element {
                 type="button"
                 onClick={() => { void api.retry(); }}
               >
+                <ArrowClockwiseRegular aria-hidden="true" />
                 重试翻译
               </button>
             )}
           </section>
         )}
+
+        {showSourceText && (
+          <section className="card-text-section source-text-section" aria-labelledby="source-text-label">
+            <h2 id="source-text-label">原文</h2>
+            <p className="card-text">{card.sourceText}</p>
+          </section>
+        )}
       </section>
       <footer>
-        {card.kind === 'translated'
+        <span className="card-footer-status" aria-hidden="true" />
+        <span>{card.kind === 'translated'
           ? `${card.attribution.providerDisplayName}${card.fromCache ? ' · 内存缓存' : ''}`
-          : card.kind === 'source-only' ? '在线翻译未启用 · 原文预览' : 'Phase 4 · 在线翻译'}
+          : card.kind === 'source-only'
+            ? '在线翻译：未启用 · 仅显示原文'
+            : card.kind === 'failed'
+              ? '翻译失败 · 已保留原文'
+              : '正在连接在线翻译'}</span>
       </footer>
     </main>
   );

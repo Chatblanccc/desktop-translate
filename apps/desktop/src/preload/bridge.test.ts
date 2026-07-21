@@ -87,6 +87,39 @@ describe('renderer bridges', () => {
     );
   });
 
+  it('accepts only renderer-safe provider credential summaries', async () => {
+    const { port, invoke } = createIpc();
+    const api = createSettingsRendererBridge(port);
+
+    invoke.mockResolvedValueOnce({ appId: '', secretConfigured: false });
+    await expect(api.getBaiduCredentialSummary()).resolves.toEqual({
+      appId: '',
+      secretConfigured: false
+    });
+
+    invoke.mockResolvedValueOnce({ appId: 'visible-app-id', secretConfigured: true });
+    await expect(api.getBaiduCredentialSummary()).resolves.toEqual({
+      appId: 'visible-app-id',
+      secretConfigured: true
+    });
+
+    for (const invalid of [
+      null,
+      [],
+      { appId: '', secretConfigured: true },
+      { appId: 'visible-app-id', secretConfigured: false },
+      { appId: ' visible-app-id ', secretConfigured: true },
+      { appId: 'visible-app-id', secretConfigured: true, secretKey: 'must-not-cross-ipc' }
+    ]) {
+      invoke.mockResolvedValueOnce(invalid);
+      await expect(api.getBaiduCredentialSummary()).rejects.toThrow(
+        /invalid provider credential summary/u
+      );
+    }
+
+    expect(invoke).toHaveBeenCalledWith(UI_SHELL_CHANNELS.getBaiduCredentialSummary);
+  });
+
   it('accepts only sanitized provider test results', async () => {
     const { port, invoke } = createIpc();
     const api = createSettingsRendererBridge(port);

@@ -15,10 +15,12 @@ import {
 import type {
   HealthResponse,
   HostError,
+  PointerDownPayload,
   SelectionResult,
   StartConfig
 } from '@desktop-translate/contracts/native-ipc';
 import type {
+  BaiduCredentialSummary,
   OcrActivation,
   ThemeMode,
   UiShellSnapshot
@@ -66,6 +68,19 @@ import { DESKTOP_TRANSLATE_TEST_HOOKS_ENABLED } from '../build-flavor.js';
 const PROVIDER_PRIVACY_URL = 'https://fanyi-app.baidu.com/static/agreement/privacy.html';
 const PROVIDER_SERVICE_TERMS_URL = 'https://fanyi-api.baidu.com/doc/6';
 const TRANSLATION_CONSENT_VERSION = 1;
+const DEVELOPMENT_NATIVE_HOST_PATHS = [
+  ['native', 'out', 'build', 'windows-x64-llvm-mingw', 'selection-host', 'selection-host.exe'],
+  ['native', 'out', 'build', 'windows-x64-msvc', 'selection-host', 'Release', 'selection-host.exe'],
+  ['native', 'out', 'build', 'llvm-mingw-release', 'selection-host', 'selection-host.exe'],
+  [
+    'native',
+    'out',
+    'build',
+    'phase5-windows-x64-msvc-nmake-release',
+    'selection-host',
+    'selection-host.exe'
+  ]
+] as const;
 
 export interface ShellControllerOptions {
   readonly requestQuit: () => void;
@@ -161,6 +176,15 @@ export class ShellController {
     this.credentials = credentials;
     const credentialStatus = await credentials.getStatus();
     this.state.initialize(await settings.load(), credentialStatus);
+    if (this.state.getSnapshot().ball.anchor === undefined) {
+      const anchor = createDefaultBallAnchor(getDisplayAtCursor());
+      this.state.setBallAnchor(anchor);
+      try {
+        await settings.setBallAnchor(anchor);
+      } catch {
+        console.warn('[phase2:display] Failed to persist the default ball position.');
+      }
+    }
     const translationProvider = new BaiduTranslationProvider({
       credentials: async () => {
         try {
@@ -241,6 +265,7 @@ export class ShellController {
         setTranslationEnabled: (value) => this.setTranslationEnabled(value),
         setTranslationSourceLanguage: (value) => this.setTranslationSourceLanguage(value),
         setTranslationTargetLanguage: (value) => this.setTranslationTargetLanguage(value),
+        getBaiduCredentialSummary: () => this.getBaiduCredentialSummary(),
         saveBaiduCredentials: (value, consentVersion) =>
           this.saveBaiduCredentials(value, consentVersion),
         deleteBaiduCredentials: () => this.deleteBaiduCredentials(),
@@ -349,8 +374,7 @@ export class ShellController {
 
   public async resetBallPosition(): Promise<void> {
     const settings = this.requireSettings();
-    const primary = toDisplayLike(screen.getPrimaryDisplay());
-    const anchor = createDefaultBallAnchor(primary);
+    const anchor = createDefaultBallAnchor(getDisplayAtCursor());
     await settings.setBallAnchor(anchor);
     this.state.setBallAnchor(anchor);
     this.windows?.setBallBounds(resolveBallBounds(anchor, getDisplays()));
@@ -418,6 +442,22 @@ export class ShellController {
     const settings = this.requireSettings();
     await settings.setTranslationSourceLanguage(value);
     this.state.setTranslationSourceLanguage(value);
+  }
+
+  public async getBaiduCredentialSummary(): Promise<BaiduCredentialSummary> {
+    try {
+      const summary = await this.requireCredentials().getSummary();
+      if (!summary.secretConfigured) await this.failClosedRuntimeCredentials('missing');
+      return summary;
+    } catch (error) {
+      if (
+        !(error instanceof ProviderCredentialStoreError
+          && error.code === 'operation-superseded')
+      ) {
+        await this.failClosedRuntimeCredentials('unavailable');
+      }
+      throw new Error('Provider credential summary is unavailable');
+    }
   }
 
   public async saveBaiduCredentials(
@@ -751,6 +791,7 @@ export class ShellController {
         });
     });
     supervisor.on('selection', (selection: SelectionResult) => this.handleSelection(selection));
+    supervisor.on('pointerDown', (event: PointerDownPayload) => this.handlePointerDown(event));
     supervisor.on('hostError', (error: HostError) => this.handleHostError(error));
     supervisor.on('health', (health: HealthResponse) => this.applyHealth(health));
     supervisor.on('unhealthy', () => {
@@ -909,6 +950,29 @@ export class ShellController {
       resolveSelectionCardBounds(anchor, display.workArea)
     );
   }
+
+  private handlePointerDown(event: PointerDownPayload): void {
+    if (this.disposed || this.localDataResetting) return;
+    const cardWindow = this.windows?.getCardWindow();
+    if (
+      cardWindow === undefined
+      || cardWindow.isDestroyed()
+      || !cardWindow.isVisible()
+    ) return;
+
+    const point = screen.screenToDipRect(null, {
+      x: event.point.x,
+      y: event.point.y,
+      width: 1,
+      height: 1
+    });
+    const bounds = cardWindow.getBounds();
+    const insideCard = point.x >= bounds.x
+      && point.x < bounds.x + bounds.width
+      && point.y >= bounds.y
+      && point.y < bounds.y + bounds.height;
+    if (!insideCard) this.dismissTranslationCard();
+  }
 }
 
 function toDisplayLike(display: Electron.Display): DisplayLike {
@@ -920,6 +984,10 @@ function getDisplays(): readonly DisplayLike[] {
   return [primary, ...screen.getAllDisplays().filter((display) => display.id !== primary.id)].map(
     toDisplayLike
   );
+}
+
+function getDisplayAtCursor(): DisplayLike {
+  return toDisplayLike(screen.getDisplayNearestPoint(screen.getCursorScreenPoint()));
 }
 
 function resolveMigrationsDirectory(): string {
@@ -945,6 +1013,16 @@ function resolveNativeLaunchOptions(): NativeLaunchOptions | undefined {
       };
     }
   }
-  const executablePath = process.env.SELECTION_HOST_PATH?.trim();
-  return executablePath ? { executablePath } : undefined;
+  const configuredPath = process.env.SELECTION_HOST_PATH;
+  if (configuredPath !== undefined) {
+    const executablePath = configuredPath.trim();
+    return executablePath ? { executablePath } : undefined;
+  }
+
+  const workspaceRoot = resolve(app.getAppPath(), '..', '..');
+  for (const relativePath of DEVELOPMENT_NATIVE_HOST_PATHS) {
+    const candidate = join(workspaceRoot, ...relativePath);
+    if (existsSync(candidate)) return { executablePath: candidate };
+  }
+  return undefined;
 }

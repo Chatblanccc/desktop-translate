@@ -47,6 +47,8 @@ export class NativeHostClient extends EventEmitter {
   private readonly pending = new Map<string, PendingRequest>();
   private readonly requestTimeoutMs: number;
   private lastEventSeq = -1;
+  private pointerDownEventsRequested = false;
+  private pointerDownEventsNegotiated = false;
 
   public constructor(private readonly options: NativeHostClientOptions) {
     super();
@@ -55,6 +57,10 @@ export class NativeHostClient extends EventEmitter {
 
   public async connect(timeoutMs = 5_000): Promise<void> {
     if (this.socket) throw new Error('Native host client is already connected');
+
+    this.lastEventSeq = -1;
+    this.pointerDownEventsRequested = false;
+    this.pointerDownEventsNegotiated = false;
 
     const socket = net.createConnection(this.options.pipeName);
     this.socket = socket;
@@ -105,6 +111,10 @@ export class NativeHostClient extends EventEmitter {
     if (!isNativeMessage(message)) {
       throw new TypeError(`Outgoing Native IPC request violates v1 contract: ${method}`);
     }
+    if (message.method === 'hello') {
+      this.pointerDownEventsRequested =
+        message.payload.requestedCapabilities?.includes('pointer-down-events') ?? false;
+    }
 
     const response = new Promise<NativeResponse>((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -154,11 +164,20 @@ export class NativeHostClient extends EventEmitter {
       }
       clearTimeout(pending.timeout);
       this.pending.delete(value.id);
+      if (value.method === 'ready') {
+        this.pointerDownEventsNegotiated =
+          this.pointerDownEventsRequested &&
+          value.payload.capabilities.includes('pointer-down-events');
+      }
       pending.resolve(value);
       return;
     }
 
     if (value.kind === 'event') {
+      if (value.method === 'input/pointer-down' && !this.pointerDownEventsNegotiated) {
+        this.failProtocol('Native IPC pointer-down event was not negotiated');
+        return;
+      }
       if (value.seq <= this.lastEventSeq) {
         this.failProtocol('Native IPC event sequence did not increase');
         return;

@@ -1,6 +1,17 @@
-import { useEffect, useId, useState, type JSX } from 'react';
+import {
+  ArrowResetRegular,
+  CircleFilled,
+  GlobeRegular,
+  ScanTextRegular,
+  SettingsRegular,
+  ShieldAddFilled,
+  ShieldRegular,
+  type FluentIcon
+} from '@fluentui/react-icons';
+import { useEffect, useId, useRef, useState, type JSX } from 'react';
 import {
   CLEAR_LOCAL_DATA_CONFIRMATION,
+  type BaiduCredentialSummary,
   type NativeUiStatus,
   type OcrActivation,
   type SettingsRendererApi,
@@ -9,7 +20,20 @@ import {
   useUiShellSnapshot
 } from '../shared/shell-api.js';
 
-const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.4.0-phase4';
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.5.0';
+
+type SettingsView = 'general' | 'selection' | 'translation' | 'privacy';
+
+const SETTINGS_NAVIGATION: ReadonlyArray<{
+  readonly id: SettingsView;
+  readonly label: string;
+  readonly icon: FluentIcon;
+}> = [
+  { id: 'general', label: '常规与外观', icon: SettingsRegular },
+  { id: 'selection', label: '划词取词', icon: ScanTextRegular },
+  { id: 'translation', label: '在线翻译', icon: GlobeRegular },
+  { id: 'privacy', label: '隐私与关于', icon: ShieldRegular }
+];
 
 const NATIVE_STATUS: Readonly<
   Record<NativeUiStatus, { readonly title: string; readonly description: string }>
@@ -48,9 +72,13 @@ const THEME_OPTIONS: ReadonlyArray<{ readonly value: ThemeMode; readonly label: 
   { value: 'dark', label: '深色' }
 ];
 
-const OCR_OPTIONS: ReadonlyArray<{ readonly value: OcrActivation; readonly label: string }> = [
-  { value: 'fallback', label: '自动回退' },
-  { value: 'alt-drag', label: '仅 Alt + 拖动' }
+const OCR_OPTIONS: ReadonlyArray<{
+  readonly value: OcrActivation;
+  readonly label: string;
+  readonly description: string;
+}> = [
+  { value: 'fallback', label: '自动识别（默认）', description: '自动判断并使用 OCR 识别' },
+  { value: 'alt-drag', label: '仅 Alt + 拖动', description: '按住 Alt 并拖动画选区域时才识别' }
 ];
 
 const TARGET_LANGUAGE_OPTIONS = [
@@ -66,6 +94,11 @@ const SOURCE_LANGUAGE_OPTIONS = [
 ] as const;
 
 const TRANSLATION_CONSENT_VERSION = 1;
+const STORED_SECRET_MASK = '••••••••••••';
+const EMPTY_CREDENTIAL_SUMMARY: BaiduCredentialSummary = Object.freeze({
+  appId: '',
+  secretConfigured: false
+});
 
 type PendingAction =
   | 'ball-visible'
@@ -112,18 +145,21 @@ function SettingRow({
         <span className="setting-title">{title}</span>
         <span className="setting-description">{description}</span>
       </label>
-      <span className="switch-control">
-        <input
-          id={controlId}
-          className="switch-input"
-          type="checkbox"
-          checked={checked}
-          disabled={disabled}
-          onChange={(event) => onChange(event.currentTarget.checked)}
-        />
-        <span className="switch-track" aria-hidden="true">
-          <span className="switch-thumb" />
+      <span className="switch-cluster">
+        <span className="switch-control">
+          <input
+            id={controlId}
+            className="switch-input"
+            type="checkbox"
+            checked={checked}
+            disabled={disabled}
+            onChange={(event) => onChange(event.currentTarget.checked)}
+          />
+          <span className="switch-track" aria-hidden="true">
+            <span className="switch-thumb" />
+          </span>
         </span>
+        <span className="switch-label" aria-hidden="true">{checked ? '开' : '关'}</span>
       </span>
     </div>
   );
@@ -135,16 +171,25 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
   const [actionError, setActionError] = useState<string | null>(null);
   const [providerAppId, setProviderAppId] = useState('');
   const [providerSecretKey, setProviderSecretKey] = useState('');
+  const [providerSummary, setProviderSummary] = useState<BaiduCredentialSummary | null>(null);
+  const [providerSummaryLoaded, setProviderSummaryLoaded] = useState(false);
   const [providerConsent, setProviderConsent] = useState(false);
   const [providerFeedback, setProviderFeedback] = useState<string | null>(null);
   const [pendingSelectionEnabled, setPendingSelectionEnabled] = useState<boolean | null>(null);
   const [pendingTranslationEnabled, setPendingTranslationEnabled] = useState<boolean | null>(null);
   const [showClearDataConfirmation, setShowClearDataConfirmation] = useState(false);
   const [clearDataConfirmation, setClearDataConfirmation] = useState('');
+  const [activeView, setActiveView] = useState<SettingsView>('selection');
+  const contentRef = useRef<HTMLDivElement>(null);
+  const clearDataInputRef = useRef<HTMLInputElement>(null);
   const nativeStatus = NATIVE_STATUS[snapshot.native.status];
-  const controlsDisabled = loading || pendingAction !== null;
+  const controlsDisabled = loading || snapshotError !== null || pendingAction !== null;
   const credentialUnavailable = snapshot.translation.credentialStatus === 'unavailable';
   const providerConfigured = snapshot.translation.credentialStatus === 'configured';
+  const providerSummaryLoading = providerConfigured && !providerSummaryLoaded;
+  const storedSecretConfigured = providerConfigured
+    && providerSummary?.secretConfigured === true;
+  const credentialControlsDisabled = controlsDisabled || providerSummaryLoading;
 
   useDocumentTheme(snapshot.theme);
 
@@ -159,6 +204,50 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
       setPendingTranslationEnabled(null);
     }
   }, [pendingTranslationEnabled, snapshot.translation.enabled]);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!providerConfigured) {
+      setProviderSummary(EMPTY_CREDENTIAL_SUMMARY);
+      setProviderSummaryLoaded(false);
+      setProviderAppId('');
+      setProviderSecretKey('');
+      return () => {
+        active = false;
+      };
+    }
+
+    setProviderSummary(null);
+    setProviderSummaryLoaded(false);
+    void api.getBaiduCredentialSummary().then((summary) => {
+      if (!active) return;
+      setProviderSummary(summary);
+      setProviderSummaryLoaded(true);
+      setProviderAppId(summary.appId);
+      setProviderSecretKey('');
+    }, () => {
+      if (!active) return;
+      setProviderSummary(EMPTY_CREDENTIAL_SUMMARY);
+      setProviderSummaryLoaded(true);
+      setProviderAppId('');
+      setProviderSecretKey('');
+      setActionError('暂时无法读取已保存的凭据，请重新输入完整凭据。');
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [api, providerConfigured]);
+
+  useEffect(() => {
+    if (showClearDataConfirmation) clearDataInputRef.current?.focus();
+  }, [showClearDataConfirmation]);
+
+  const navigateTo = (view: SettingsView): void => {
+    setActiveView(view);
+    contentRef.current?.scrollTo?.({ top: 0, behavior: 'smooth' });
+  };
 
   const runAction = (
     action: Exclude<PendingAction, null>,
@@ -185,19 +274,54 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
         <span className="app-mark" aria-hidden="true">
           <span className="app-mark-icon" />
         </span>
-        <span>
-          <span className="app-name">桌面翻译</span>
-          <span className="app-stage">Phase 5 · 发布候选验证</span>
+        <span className="app-brand-copy">
+          <span className="app-name">桌面翻译 <span aria-hidden="true">·</span> 设置</span>
         </span>
       </header>
 
-      {(snapshotError !== null || actionError !== null) && (
-        <div className="error-banner" role="alert">
-          {actionError ?? snapshotError}
-        </div>
-      )}
+      <aside className="settings-sidebar" aria-label="设置导航">
 
-      <section className="settings-section" aria-labelledby="general-heading">
+        <nav className="settings-navigation">
+          {SETTINGS_NAVIGATION.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                className="settings-navigation-item"
+                data-active={activeView === item.id}
+                type="button"
+                key={item.id}
+                aria-current={activeView === item.id ? 'page' : undefined}
+                onClick={() => navigateTo(item.id)}
+              >
+                <Icon aria-hidden="true" />
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
+
+        <footer className="sidebar-footer">
+          <div className="sidebar-service-status">
+            <span className="native-status-dot" data-status={snapshot.native.status} aria-hidden="true" />
+            <span className="sidebar-service-copy">
+              <span>服务状态：</span>
+              <strong data-status={snapshot.native.status}>
+                {snapshot.native.status === 'ready' ? '运行中' : nativeStatus.title}
+              </strong>
+            </span>
+          </div>
+          <span className="sidebar-version">版本 {APP_VERSION.replace(/-phase\d+$/i, '')}</span>
+        </footer>
+      </aside>
+
+      <div className="settings-content" ref={contentRef}>
+        {(snapshotError !== null || actionError !== null) && (
+          <div className="error-banner" role="alert">
+            {actionError ?? snapshotError}
+          </div>
+        )}
+
+      <section hidden={activeView !== 'general'} className="settings-section settings-section-general" aria-labelledby="general-heading">
         <h1 id="general-heading">常规</h1>
         <div className="settings-card">
           <SettingRow
@@ -231,14 +355,20 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
                 runAction('reset', () => api.resetBallPosition());
               }}
             >
+              <ArrowResetRegular aria-hidden="true" />
               {pendingAction === 'reset' ? '重置中…' : '重置位置'}
             </button>
           </div>
         </div>
       </section>
 
-      <section className="settings-section" aria-labelledby="selection-heading">
-        <h2 id="selection-heading">划词取词</h2>
+      <section hidden={activeView !== 'selection'} className="settings-section settings-section-featured" aria-labelledby="selection-heading">
+        <div className="section-heading">
+          <div>
+            <h1 id="selection-heading">划词取词</h1>
+            <p>配置在屏幕上划词取词的行为与显示。</p>
+          </div>
+        </div>
         <div className="settings-card">
           <SettingRow
             title="启用划词取词"
@@ -257,11 +387,15 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
           <fieldset className="selection-mode-fieldset">
             <legend className="setting-title">本地 OCR 使用方式</legend>
             <p className="setting-description">
-              自动回退会在应用无法提供文字选区时识别本机屏幕像素；截图不会上传或保存。
+              当应用无法提供真实文本时，使用本地 OCR 识别文字。识别过程完全在本机进行，数据不会上传或保存。
             </p>
-            <div className="theme-options">
+            <div className="ocr-options">
               {OCR_OPTIONS.map((option) => (
-                <label className="theme-option" key={option.value}>
+                <label
+                  className="ocr-option"
+                  key={option.value}
+                  aria-label={`${option.label}：${option.description}`}
+                >
                   <input
                     type="radio"
                     name="ocr-activation"
@@ -272,24 +406,53 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
                       runAction('ocr-activation', () => api.setOcrActivation(option.value));
                     }}
                   />
-                  <span>{option.label}</span>
+                  <span className="ocr-option-copy">
+                    <span className="ocr-option-title">{option.label}</span>
+                    <span className="ocr-option-description">{option.description}</span>
+                  </span>
                 </label>
               ))}
+              <span className="privacy-assurance">
+                <ShieldAddFilled aria-hidden="true" />
+                本地处理，数据不外传
+              </span>
             </div>
           </fieldset>
-          <output className="selection-lifecycle" aria-live="polite">
-            取词状态：{
-              snapshot.selection.lifecycle === 'disabled' ? '已暂停'
-                : snapshot.selection.lifecycle === 'starting' ? '正在启动'
-                  : snapshot.selection.lifecycle === 'listening' ? '监听中'
-                    : snapshot.selection.lifecycle === 'degraded' ? '监听中，部分能力不可用'
-                      : '取词故障'
-            }
-          </output>
+          <div className="selection-status-heading">
+            <span className="setting-title">取词状态</span>
+            <span className="setting-description">显示当前划词取词功能与服务运行状态。</span>
+          </div>
+          <div className="selection-status-panel">
+            <output
+              className="selection-lifecycle"
+              data-status={snapshot.selection.lifecycle}
+              aria-live="polite"
+            >
+              <CircleFilled aria-hidden="true" />
+              <span className="selection-lifecycle-copy">
+                <span className="selection-lifecycle-title">划词取词：{
+                  snapshot.selection.lifecycle === 'disabled' ? '已暂停'
+                    : snapshot.selection.lifecycle === 'starting' ? '正在启动'
+                      : snapshot.selection.lifecycle === 'listening' ? '已启用'
+                        : snapshot.selection.lifecycle === 'degraded' ? '部分可用'
+                          : '发生故障'
+                }</span>
+                <span className="selection-lifecycle-description">
+                  {snapshot.selection.lifecycle === 'listening'
+                    ? '监听服务运行正常，可随时使用。'
+                    : nativeStatus.description}
+                </span>
+              </span>
+            </output>
+            <div className="service-lifecycle" data-status={snapshot.native.status}>
+              <span>服务状态：</span>
+              <strong>{snapshot.native.status === 'ready' ? '运行中' : nativeStatus.title}</strong>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="settings-section" aria-labelledby="appearance-heading">
+      <section hidden={activeView !== 'general'} className="settings-section settings-section-appearance" aria-labelledby="appearance-heading">
         <h2 id="appearance-heading">外观</h2>
         <fieldset className="settings-card theme-fieldset">
           <legend className="setting-title">应用主题</legend>
@@ -314,8 +477,8 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
         </fieldset>
       </section>
 
-      <section className="settings-section" aria-labelledby="translation-heading">
-        <h2 id="translation-heading">在线翻译</h2>
+      <section hidden={activeView !== 'translation'} className="settings-section settings-section-translation" aria-labelledby="translation-heading">
+        <h1 id="translation-heading">在线翻译</h1>
         <div className="settings-card provider-settings-card">
           <SettingRow
             title="启用百度在线翻译"
@@ -382,10 +545,14 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
             </select>
           </div>
 
-          <fieldset className="provider-credentials" disabled={controlsDisabled}>
+          <fieldset
+            className="provider-credentials"
+            disabled={credentialControlsDisabled}
+            aria-busy={providerSummaryLoading}
+          >
             <legend className="setting-title">百度翻译凭据</legend>
             <p className="setting-description">
-              凭据仅由 Electron Main 使用，并通过 Windows 安全存储加密后写入本机数据库；界面不会回显密钥。
+              凭据仅由 Electron Main 使用，并通过 Windows 安全存储加密后写入本机数据库；APP ID 会明文显示，密钥只显示固定掩码。
             </p>
             <label className="provider-input-label" htmlFor="provider-app-id">
               <span>APP ID</span>
@@ -400,14 +567,24 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
             </label>
             <label className="provider-input-label" htmlFor="provider-secret-key">
               <span>密钥</span>
-              <input
-                id="provider-secret-key"
-                type="password"
-                autoComplete="new-password"
-                maxLength={512}
-                value={providerSecretKey}
-                onChange={(event) => setProviderSecretKey(event.currentTarget.value)}
-              />
+              <span className="provider-input-control">
+                <input
+                  id="provider-secret-key"
+                  aria-label="密钥"
+                  type="password"
+                  autoComplete="new-password"
+                  maxLength={512}
+                  value={providerSecretKey}
+                  placeholder={storedSecretConfigured ? STORED_SECRET_MASK : undefined}
+                  aria-describedby={storedSecretConfigured ? 'provider-secret-hint' : undefined}
+                  onChange={(event) => setProviderSecretKey(event.currentTarget.value)}
+                />
+                {storedSecretConfigured && (
+                  <span id="provider-secret-hint" className="provider-secret-hint">
+                    密钥已安全保存；输入新密钥将替换现有密钥。
+                  </span>
+                )}
+              </span>
             </label>
             <label className="provider-consent" htmlFor="provider-consent">
               <input
@@ -423,19 +600,22 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
                 className="primary-button"
                 type="button"
                 disabled={
-                  controlsDisabled
+                  credentialControlsDisabled
                   || providerAppId.trim().length === 0
                   || providerSecretKey.trim().length === 0
                   || !providerConsent
                 }
                 onClick={() => {
                   runAction('save-provider-credentials', async () => {
+                    const trimmedAppId = providerAppId.trim();
                     await api.saveBaiduCredentials(
-                      providerAppId.trim(),
+                      trimmedAppId,
                       providerSecretKey.trim(),
                       TRANSLATION_CONSENT_VERSION
                     );
-                    setProviderAppId('');
+                    setProviderSummary({ appId: trimmedAppId, secretConfigured: true });
+                    setProviderSummaryLoaded(true);
+                    setProviderAppId(trimmedAppId);
                     setProviderSecretKey('');
                     setProviderConsent(false);
                     setProviderFeedback('凭据已安全保存。');
@@ -449,7 +629,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
               <button
                 className="secondary-button"
                 type="button"
-                disabled={controlsDisabled || !providerConfigured}
+                disabled={credentialControlsDisabled || !providerConfigured}
                 onClick={() => {
                   runAction('test-provider', async () => {
                     const result = await api.testTranslationProvider();
@@ -465,11 +645,14 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
                 className="secondary-button danger-button"
                 type="button"
                 disabled={
-                  controlsDisabled || snapshot.translation.credentialStatus === 'missing'
+                  credentialControlsDisabled
+                  || snapshot.translation.credentialStatus === 'missing'
                 }
                 onClick={() => {
                   runAction('delete-provider-credentials', async () => {
                     await api.deleteBaiduCredentials();
+                    setProviderSummary(EMPTY_CREDENTIAL_SUMMARY);
+                    setProviderSummaryLoaded(false);
                     setProviderAppId('');
                     setProviderSecretKey('');
                     setProviderConsent(false);
@@ -482,7 +665,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
               <button
                 className="link-button"
                 type="button"
-                disabled={controlsDisabled}
+                disabled={credentialControlsDisabled}
                 onClick={() => {
                   runAction('open-provider-privacy', () => api.openProviderPrivacyPolicy());
                 }}
@@ -492,7 +675,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
               <button
                 className="link-button"
                 type="button"
-                disabled={controlsDisabled}
+                disabled={credentialControlsDisabled}
                 onClick={() => {
                   runAction('open-provider-service-terms', () => api.openProviderServiceTerms());
                 }}
@@ -515,8 +698,8 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
         </div>
       </section>
 
-      <section className="settings-section" aria-labelledby="data-heading">
-        <h2 id="data-heading">数据与隐私</h2>
+      <section hidden={activeView !== 'privacy'} className="settings-section settings-section-privacy" aria-labelledby="data-heading">
+        <h1 id="data-heading">数据与隐私</h1>
         <div className="settings-card danger-zone">
           <div className="setting-row setting-row-action">
             <span className="setting-copy">
@@ -530,6 +713,8 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
                 className="secondary-button danger-button"
                 type="button"
                 disabled={controlsDisabled}
+                aria-expanded={showClearDataConfirmation}
+                aria-controls="clear-data-confirmation-panel"
                 onClick={() => {
                   setClearDataConfirmation('');
                   setShowClearDataConfirmation(true);
@@ -540,7 +725,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
             )}
           </div>
           {showClearDataConfirmation && (
-            <fieldset className="clear-data-confirmation">
+            <fieldset id="clear-data-confirmation-panel" className="clear-data-confirmation">
               <legend className="sr-only">清除全部本地数据最终确认</legend>
               <p className="clear-data-warning">
                 请先确认没有需要保留的本地数据。请输入“{CLEAR_LOCAL_DATA_CONFIRMATION}”，再点击最终确认。
@@ -549,6 +734,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
                 <span>确认短语</span>
                 <input
                   id="clear-data-confirmation"
+                  ref={clearDataInputRef}
                   type="text"
                   autoComplete="off"
                   value={clearDataConfirmation}
@@ -589,7 +775,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
         </div>
       </section>
 
-      <section className="settings-section" aria-labelledby="status-heading">
+      <section hidden={activeView !== 'privacy'} className="settings-section settings-section-status" aria-labelledby="status-heading">
         <h2 id="status-heading">关于与状态</h2>
         <div className="settings-card">
           <output className="status-row" aria-live="polite" aria-atomic="true">
@@ -608,10 +794,11 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
           </output>
           <div className="version-row">
             <span>应用版本</span>
-            <output>{APP_VERSION}</output>
+            <output>{APP_VERSION.replace(/-phase\d+$/i, '')}</output>
           </div>
         </div>
       </section>
+      </div>
     </main>
   );
 }

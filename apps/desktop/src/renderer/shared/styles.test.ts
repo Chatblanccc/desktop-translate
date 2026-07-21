@@ -7,11 +7,18 @@ const settingsStyles = readFileSync(new URL('../settings/styles.css', import.met
 
 describe('Phase 2 renderer styles', () => {
   it('provides a stable accent fallback and exposes hover and focus states', () => {
-    expect(sharedStyles).toMatch(/--color-accent:\s*#005fb8;/u);
+    expect(sharedStyles).toMatch(/--color-accent:\s*#0f6cbd;/u);
     expect(sharedStyles).toMatch(/--color-accent-text:\s*#ffffff;/u);
     expect(ballStyles).toMatch(/\.ball-button:hover/u);
     expect(ballStyles).toMatch(/\.ball-button:focus-visible/u);
-    expect(settingsStyles).toMatch(/label\.setting-row:hover/u);
+    expect(settingsStyles).toMatch(/\.setting-row:hover/u);
+  });
+
+  it('keeps the floating ball surface flat without an outer shadow halo', () => {
+    expect(ballStyles).toMatch(/\.ball-button\s*\{[^}]*box-shadow:\s*none;/su);
+    expect(ballStyles).not.toMatch(/\.ball-button:hover\s*\{[^}]*box-shadow:/su);
+    expect(ballStyles).not.toMatch(/\.ball-button:active\s*\{[^}]*box-shadow:/su);
+    expect(ballStyles).not.toMatch(/transition:[^;]*box-shadow/u);
   });
 
   it('provides forced-colors and reduced-motion fallbacks', () => {

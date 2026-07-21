@@ -19,13 +19,21 @@ describe('native host supervisor security boundary', () => {
   });
 
   it('accepts only a ready response bound to the launch nonce and child PID', () => {
-    const payload = { selectedVersion: 1, sessionNonce: nonce, hostPid: '9001' };
+    const payload = {
+      selectedVersion: 1,
+      sessionNonce: nonce,
+      hostPid: '9001',
+      capabilities: ['pointer-down-events']
+    };
     expect(() => validateReadyHandshake(payload, nonce, 9001)).not.toThrow();
     expect(() => validateReadyHandshake(payload, `${nonce}00`, 9001)).toThrow();
     expect(() => validateReadyHandshake(payload, nonce, 9002)).toThrow();
     expect(() =>
       validateReadyHandshake({ ...payload, selectedVersion: 2 }, nonce, 9001)
     ).toThrow();
+    expect(() =>
+      validateReadyHandshake({ ...payload, capabilities: [] }, nonce, 9001)
+    ).toThrow(/required pointer-down events/u);
   });
 });
 
@@ -74,6 +82,22 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
     expect(selection).not.toHaveBeenCalled();
   }, 5_000);
 
+  it('forwards pointer activity only from the active ready child', async () => {
+    const supervisor = new NativeHostSupervisor({
+      executablePath: process.execPath,
+      desktopVersion: '0.5.0-phase5',
+      executableArguments: [fakeHost, '--fake-mode', 'pointer-down']
+    });
+    const pointerDown = once(supervisor, 'pointerDown');
+
+    await supervisor.start();
+
+    await expect(pointerDown).resolves.toMatchObject([
+      { point: { x: 120, y: 120 }, coordinateSpace: 'physical-px' }
+    ]);
+    await supervisor.stop();
+  }, 5_000);
+
   it('retains a failed-handshake child until forced termination has completed', async () => {
     const supervisor = new NativeHostSupervisor({
       executablePath: process.execPath,
@@ -91,6 +115,17 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
     await expect(start).rejects.toThrow(/invalid or stale ready handshake/u);
     expect(launchedChild.exitCode !== null || launchedChild.signalCode !== null).toBe(true);
     expect((supervisor as unknown as { readonly child?: unknown }).child).toBeUndefined();
+    await expect(supervisor.stop()).resolves.toBeUndefined();
+  }, 5_000);
+
+  it('rejects a v1 Host that does not negotiate required pointer activity', async () => {
+    const supervisor = new NativeHostSupervisor({
+      executablePath: process.execPath,
+      desktopVersion: '0.5.0-phase5',
+      executableArguments: [fakeHost, '--fake-mode', 'missing-pointer-capability']
+    });
+
+    await expect(supervisor.start()).rejects.toThrow(/required pointer-down events/u);
     await expect(supervisor.stop()).resolves.toBeUndefined();
   }, 5_000);
 

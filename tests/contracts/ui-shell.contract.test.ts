@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   DEFAULT_UI_SHELL_SNAPSHOT,
   isBallAnchor,
+  isBaiduCredentialSummary,
   isCredentialStatus,
   isNativeUiStatus,
   isOcrActivation,
@@ -57,6 +58,24 @@ test("theme and native status guards accept only the locked vocabulary", () => {
   }
   for (const invalid of ["auto", "high-contrast", "", null, 1]) assert.equal(isThemeMode(invalid), false);
   for (const invalid of ["stopping", "offline", "", null, 1]) assert.equal(isNativeUiStatus(invalid), false);
+});
+
+test("Baidu credential summaries expose only App ID and configured state", () => {
+  assert.equal(isBaiduCredentialSummary({ appId: "", secretConfigured: false }), true);
+  assert.equal(isBaiduCredentialSummary({ appId: "baidu-app-id", secretConfigured: true }), true);
+  assert.equal(isBaiduCredentialSummary({ appId: "app😀", secretConfigured: true }), true);
+
+  for (const invalid of [
+    { appId: "", secretConfigured: true },
+    { appId: "baidu-app-id", secretConfigured: false },
+    { appId: " baidu-app-id", secretConfigured: true },
+    { appId: `app${"x".repeat(128)}`, secretConfigured: true },
+    { appId: "app\0", secretConfigured: true },
+    { appId: "app\uD800", secretConfigured: true },
+    { appId: "baidu-app-id", secretConfigured: true, secretKey: "must-not-cross-ipc" },
+    { appId: "baidu-app-id" },
+    null,
+  ]) assert.equal(isBaiduCredentialSummary(invalid), false);
 });
 
 test("ball anchors support edge ratios and reject unsafe or extra fields", () => {

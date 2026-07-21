@@ -42,10 +42,11 @@ struct SelectionPipelineConfig {
 class SelectionPipeline {
  public:
   using ResultSink = std::function<void(SelectionPipelineResult)>;
+  using PointerDownSink = std::function<void(PhysicalPoint)>;
 
   SelectionPipeline(MouseHook& mouse_hook, UiaWorker& uia_worker,
                     IScreenCapture& screen_capture, IOcrEngine& ocr_engine,
-                    ResultSink result_sink);
+                    ResultSink result_sink, PointerDownSink pointer_down_sink);
   ~SelectionPipeline();
 
   [[nodiscard]] bool Start();
@@ -65,6 +66,7 @@ class SelectionPipeline {
   IScreenCapture& screen_capture_;
   IOcrEngine& ocr_engine_;
   ResultSink result_sink_;
+  PointerDownSink pointer_down_sink_;
   std::thread thread_;
   std::atomic<bool> running_{false};
   SelectionPipelineConfig config_;

@@ -1,6 +1,8 @@
 import {
+  isBaiduCredentialSummary,
   isUiShellSnapshot,
   CLEAR_LOCAL_DATA_CONFIRMATION,
+  type BaiduCredentialSummary,
   type OcrActivation,
   type ThemeMode,
   type UiShellSnapshot
@@ -18,6 +20,7 @@ export interface BallRendererBridge {
 
 export interface SettingsRendererBridge {
   getSnapshot(): Promise<UiShellSnapshot>;
+  getBaiduCredentialSummary(): Promise<BaiduCredentialSummary>;
   setBallVisible(visible: boolean): Promise<void>;
   setEdgeSnap(enabled: boolean): Promise<void>;
   setTheme(theme: ThemeMode): Promise<void>;
@@ -50,6 +53,16 @@ export interface IpcRendererBridgePort {
 async function getSnapshot(ipc: IpcRendererBridgePort): Promise<UiShellSnapshot> {
   const value = await ipc.invoke(UI_SHELL_CHANNELS.getSnapshot);
   if (!isUiShellSnapshot(value)) throw new Error('Main returned an invalid UI shell snapshot');
+  return value;
+}
+
+async function getBaiduCredentialSummary(
+  ipc: IpcRendererBridgePort
+): Promise<BaiduCredentialSummary> {
+  const value = await ipc.invoke(UI_SHELL_CHANNELS.getBaiduCredentialSummary);
+  if (!isBaiduCredentialSummary(value)) {
+    throw new Error('Main returned an invalid provider credential summary');
+  }
   return value;
 }
 
@@ -97,6 +110,7 @@ export function createBallRendererBridge(ipc: IpcRendererBridgePort): BallRender
 export function createSettingsRendererBridge(ipc: IpcRendererBridgePort): SettingsRendererBridge {
   return Object.freeze({
     getSnapshot: () => getSnapshot(ipc),
+    getBaiduCredentialSummary: () => getBaiduCredentialSummary(ipc),
     setBallVisible: (value: boolean) =>
       invokeVoid(ipc, UI_SHELL_CHANNELS.setBallVisible, { value }),
     setEdgeSnap: (value: boolean) =>

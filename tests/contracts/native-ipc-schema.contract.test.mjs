@@ -25,6 +25,7 @@ test("Native IPC JSON Schema exposes the complete v1 method set", async () => {
     "stopResponse",
     "shutdownRequest",
     "shutdownResponse",
+    "pointerDownEvent",
     "selectionResultEvent",
     "hostErrorEvent",
   ];
@@ -81,7 +82,7 @@ test("canonical schema compiles and rejects protocol boundary drift", async () =
       desktopVersion: "0.1.0-phase1",
       supportedVersions: [1],
       sessionNonce: "0123456789abcdef0123456789abcdef",
-      requestedCapabilities: ["mouse-hook", "uia-selection"],
+      requestedCapabilities: ["mouse-hook", "pointer-down-events", "uia-selection"],
     },
   };
   assert.equal(validate(hello), true, JSON.stringify(validate.errors));
@@ -99,7 +100,7 @@ test("canonical schema compiles and rejects protocol boundary drift", async () =
         hostVersion: "0.1.0",
         hostPid: "4242",
         sessionNonce: hello.payload.sessionNonce,
-        capabilities: ["mouse-hook", "uia-selection", "desktop-capture"],
+        capabilities: ["mouse-hook", "pointer-down-events", "uia-selection", "desktop-capture"],
       },
     },
     { v: 1, kind: "request", id: "health:1", method: "health", timestamp, payload: {} },
@@ -142,6 +143,17 @@ test("canonical schema compiles and rejects protocol boundary drift", async () =
       v: 1,
       kind: "event",
       seq: 0,
+      method: "input/pointer-down",
+      timestamp,
+      payload: {
+        point: { x: -100, y: 44 },
+        coordinateSpace: "physical-px",
+      },
+    },
+    {
+      v: 1,
+      kind: "event",
+      seq: 1,
       method: "selection/result",
       timestamp,
       payload: {
@@ -169,7 +181,7 @@ test("canonical schema compiles and rejects protocol boundary drift", async () =
     {
       v: 1,
       kind: "event",
-      seq: 1,
+      seq: 2,
       method: "host/error",
       timestamp,
       payload: {
@@ -190,6 +202,9 @@ test("canonical schema compiles and rejects protocol boundary drift", async () =
   );
   assert.equal(validate({ ...hello, timestamp: "2026-07-16T08:00:00" }), false);
   assert.equal(validate({ ...hello, unexpected: true }), false);
+  const pointerDown = messages.find((message) => message.method === "input/pointer-down");
+  assert.equal(validate({ ...pointerDown, payload: { ...pointerDown.payload, coordinateSpace: "dip" } }), false);
+  assert.equal(validate({ ...pointerDown, payload: { ...pointerDown.payload, button: "left" } }), false);
   const start = messages.find((message) => message.method === "start" && message.kind === "request");
   assert.equal(validate({ ...start, payload: { excludedProcessNames: ["C:\\Apps\\chrome.exe"] } }), false);
   assert.equal(validate({ ...start, payload: { excludedProcessNames: ["*.exe"] } }), false);

@@ -22,6 +22,25 @@ describe('ball position', () => {
     );
   });
 
+  it('creates a default anchor for the selected display instead of assuming primary', () => {
+    const cursorDisplay: DisplayLike = {
+      id: 'cursor-display',
+      workArea: { x: 1920, y: -120, width: 1440, height: 900 }
+    };
+
+    expect(createDefaultBallAnchor(cursorDisplay)).toEqual({
+      displayId: 'cursor-display',
+      edge: 'right',
+      verticalRatio: 0.6
+    });
+    expect(resolveBallBounds(createDefaultBallAnchor(cursorDisplay), [PRIMARY, cursorDisplay])).toEqual({
+      x: 1920 + 1440 - BALL_MARGIN_DIP - BALL_SIZE_DIP,
+      y: Math.round(-120 + BALL_MARGIN_DIP + (900 - BALL_SIZE_DIP - BALL_MARGIN_DIP * 2) * 0.6),
+      width: BALL_SIZE_DIP,
+      height: BALL_SIZE_DIP
+    });
+  });
+
   it('snaps to the closest edge and clamps outside coordinates', () => {
     const placement = deriveBallPlacement(
       { x: -500, y: 5_000, width: BALL_SIZE_DIP, height: BALL_SIZE_DIP },

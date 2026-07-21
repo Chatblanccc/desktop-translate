@@ -26,6 +26,7 @@ const encode = (message) => {
 const server = net.createServer((socket) => {
   let buffered = Buffer.alloc(0);
   let listening = false;
+  let pointerDownEventsNegotiated = false;
   let eventSequence = 1;
   let startCount = 0;
   const sendSelection = () => {
@@ -64,6 +65,19 @@ const server = net.createServer((socket) => {
       }
     }));
   };
+  const sendPointerDown = () => {
+    socket.write(encode({
+      v: 1,
+      kind: 'event',
+      seq: eventSequence++,
+      method: 'input/pointer-down',
+      timestamp: new Date().toISOString(),
+      payload: {
+        point: { x: 120, y: 120 },
+        coordinateSpace: 'physical-px'
+      }
+    }));
+  };
   socket.on('data', (chunk) => {
     buffered = Buffer.concat([buffered, chunk]);
     while (buffered.length >= 4) {
@@ -80,6 +94,8 @@ const server = net.createServer((socket) => {
       };
       if (request.method === 'hello') {
         if (mode === 'exit-before-ready') process.exit(24);
+        pointerDownEventsNegotiated =
+          request.payload.requestedCapabilities?.includes('pointer-down-events') ?? false;
         socket.write(
           encode({
             ...base,
@@ -92,11 +108,17 @@ const server = net.createServer((socket) => {
                 mode === 'invalid-handshake'
                   ? `${nonce[0] === '0' ? '1' : '0'}${nonce.slice(1)}`
                   : nonce,
-              capabilities: []
+              capabilities:
+                pointerDownEventsNegotiated && mode !== 'missing-pointer-capability'
+                  ? ['pointer-down-events']
+                  : []
             }
           })
         );
         if (mode === 'crash') setTimeout(() => process.exit(23), 20);
+        if (mode === 'pointer-down' && pointerDownEventsNegotiated) {
+          setTimeout(sendPointerDown, 50);
+        }
       } else if (request.method === 'health') {
         const degraded = mode === 'degraded';
         socket.write(
@@ -121,8 +143,12 @@ const server = net.createServer((socket) => {
         }));
         if (
           mode === 'selection'
+          || mode === 'selection-pointer-dismiss'
           || (mode === 'selection-on-restart' && startCount > 1)
         ) setTimeout(sendSelection, 50);
+        if (mode === 'selection-pointer-dismiss' && pointerDownEventsNegotiated) {
+          setTimeout(sendPointerDown, 1_500);
+        }
       } else if (request.method === 'stop') {
         listening = false;
         socket.write(encode({

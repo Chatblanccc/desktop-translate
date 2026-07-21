@@ -96,6 +96,22 @@ describe('ProviderCredentialStore', () => {
     });
   });
 
+  it('projects only the App ID and configured state for renderer display', async () => {
+    const harness = createHarness();
+    await expect(harness.store.getSummary()).resolves.toEqual({
+      appId: '',
+      secretConfigured: false
+    });
+
+    const secret = 'phase4-summary-secret-sentinel';
+    await harness.store.save({ appId: 'phase4-summary-app', secretKey: secret });
+    const summary = await harness.store.getSummary();
+
+    expect(summary).toEqual({ appId: 'phase4-summary-app', secretConfigured: true });
+    expect(summary).not.toHaveProperty('secretKey');
+    expect(JSON.stringify(summary)).not.toContain(secret);
+  });
+
   it('fails closed instead of exposing old credentials while a replacement is pending', async () => {
     const oldSerialized = JSON.stringify({
       version: 1,

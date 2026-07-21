@@ -34,9 +34,9 @@ function findDisplay(anchor: BallAnchor | undefined, displays: readonly DisplayL
   return displays.find((display) => String(display.id) === anchor?.displayId) ?? displays[0]!;
 }
 
-export function createDefaultBallAnchor(primaryDisplay: DisplayLike): BallAnchor {
+export function createDefaultBallAnchor(display: DisplayLike): BallAnchor {
   return {
-    displayId: String(primaryDisplay.id),
+    displayId: String(display.id),
     edge: 'right',
     verticalRatio: DEFAULT_BALL_VERTICAL_RATIO
   };
