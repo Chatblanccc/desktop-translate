@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import {
   DEFAULT_UI_SHELL_SNAPSHOT,
+  CLEAR_LOCAL_DATA_CONFIRMATION,
   type OcrActivation,
   type ThemeMode,
   type UiShellSnapshot
 } from '@desktop-translate/contracts/ui-shell';
 
 export {
+  CLEAR_LOCAL_DATA_CONFIRMATION,
   DEFAULT_UI_SHELL_SNAPSHOT,
   type BallAnchor,
   type NativeUiStatus,
@@ -43,6 +45,7 @@ export interface SettingsRendererApi extends UiShellReaderApi {
   openProviderPrivacyPolicy(): Promise<void>;
   openProviderServiceTerms(): Promise<void>;
   resetBallPosition(): Promise<void>;
+  clearAllLocalData(confirmation: typeof CLEAR_LOCAL_DATA_CONFIRMATION): Promise<void>;
 }
 
 export interface UiShellSnapshotState {

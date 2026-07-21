@@ -10,8 +10,10 @@ const pipeName = valueAfter('--pipe');
 const nonce = valueAfter('--nonce');
 const mode = valueAfter('--fake-mode') ?? 'stable';
 const methodTracePath = process.env.DESKTOP_TRANSLATE_E2E_NATIVE_TRACE;
+const processTracePath = process.env.DESKTOP_TRANSLATE_E2E_NATIVE_PROCESS_TRACE;
 
 if (!pipeName || !nonce) process.exit(2);
+if (processTracePath) appendFileSync(processTracePath, `${process.pid}\n`, 'utf8');
 
 const encode = (message) => {
   const body = Buffer.from(JSON.stringify(message), 'utf8');

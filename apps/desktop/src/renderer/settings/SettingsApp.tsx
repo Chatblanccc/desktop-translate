@@ -1,5 +1,6 @@
 import { useEffect, useId, useState, type JSX } from 'react';
 import {
+  CLEAR_LOCAL_DATA_CONFIRMATION,
   type NativeUiStatus,
   type OcrActivation,
   type SettingsRendererApi,
@@ -81,6 +82,7 @@ type PendingAction =
   | 'open-provider-privacy'
   | 'open-provider-service-terms'
   | 'reset'
+  | 'clear-local-data'
   | null;
 
 export interface SettingsAppProps {
@@ -137,6 +139,8 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
   const [providerFeedback, setProviderFeedback] = useState<string | null>(null);
   const [pendingSelectionEnabled, setPendingSelectionEnabled] = useState<boolean | null>(null);
   const [pendingTranslationEnabled, setPendingTranslationEnabled] = useState<boolean | null>(null);
+  const [showClearDataConfirmation, setShowClearDataConfirmation] = useState(false);
+  const [clearDataConfirmation, setClearDataConfirmation] = useState('');
   const nativeStatus = NATIVE_STATUS[snapshot.native.status];
   const controlsDisabled = loading || pendingAction !== null;
   const credentialUnavailable = snapshot.translation.credentialStatus === 'unavailable';
@@ -183,7 +187,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
         </span>
         <span>
           <span className="app-name">桌面翻译</span>
-          <span className="app-stage">Phase 4 · 内部开发预览</span>
+          <span className="app-stage">Phase 5 · 发布候选验证</span>
         </span>
       </header>
 
@@ -508,6 +512,80 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
               {providerFeedback === null ? '' : ` · ${providerFeedback}`}
             </output>
           </fieldset>
+        </div>
+      </section>
+
+      <section className="settings-section" aria-labelledby="data-heading">
+        <h2 id="data-heading">数据与隐私</h2>
+        <div className="settings-card danger-zone">
+          <div className="setting-row setting-row-action">
+            <span className="setting-copy">
+              <span className="setting-title">清除全部本地数据</span>
+              <span className="setting-description">
+                删除应用设置、Provider 凭据、本地数据库、性能指标和临时数据，然后退出应用。此操作无法撤销。
+              </span>
+            </span>
+            {!showClearDataConfirmation && (
+              <button
+                className="secondary-button danger-button"
+                type="button"
+                disabled={controlsDisabled}
+                onClick={() => {
+                  setClearDataConfirmation('');
+                  setShowClearDataConfirmation(true);
+                }}
+              >
+                开始清除…
+              </button>
+            )}
+          </div>
+          {showClearDataConfirmation && (
+            <fieldset className="clear-data-confirmation">
+              <legend className="sr-only">清除全部本地数据最终确认</legend>
+              <p className="clear-data-warning">
+                请先确认没有需要保留的本地数据。请输入“{CLEAR_LOCAL_DATA_CONFIRMATION}”，再点击最终确认。
+              </p>
+              <label className="provider-input-label" htmlFor="clear-data-confirmation">
+                <span>确认短语</span>
+                <input
+                  id="clear-data-confirmation"
+                  type="text"
+                  autoComplete="off"
+                  value={clearDataConfirmation}
+                  disabled={controlsDisabled}
+                  onChange={(event) => setClearDataConfirmation(event.currentTarget.value)}
+                />
+              </label>
+              <div className="provider-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={controlsDisabled}
+                  onClick={() => {
+                    setClearDataConfirmation('');
+                    setShowClearDataConfirmation(false);
+                  }}
+                >
+                  取消
+                </button>
+                <button
+                  className="primary-button destructive-button"
+                  type="button"
+                  disabled={
+                    controlsDisabled || clearDataConfirmation !== CLEAR_LOCAL_DATA_CONFIRMATION
+                  }
+                  onClick={() => {
+                    runAction(
+                      'clear-local-data',
+                      () => api.clearAllLocalData(CLEAR_LOCAL_DATA_CONFIRMATION)
+                    );
+                  }}
+                >
+                  {pendingAction === 'clear-local-data' ? '正在清除并退出…' : '确认清除并退出'}
+                </button>
+              </div>
+            </fieldset>
+          )}
         </div>
       </section>
 

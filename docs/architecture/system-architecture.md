@@ -46,8 +46,8 @@ flowchart LR
 | Preload | 逐项暴露经校验的 UI API | 暴露原始 `ipcRenderer`、通用 `send/on` |
 | Electron Main | 窗口/托盘生命周期、Native Host 监督、翻译调度、持久化 | 执行 UIA/OCR、保存截图 |
 | Selection Host | 鼠标手势、UIA、屏幕裁剪、本地 OCR | 翻译联网、数据库写入、产品 UI |
-| Translation Provider | 统一翻译/词典能力和供应商适配 | 访问截图或原生窗口句柄 |
-| Storage | 设置、历史、收藏、缓存、迁移 | 保存截图或明文密钥 |
+| Translation Provider | 统一翻译能力和供应商适配 | 访问截图或原生窗口句柄 |
+| Storage | 设置、排除列表、Provider 密文和 schema 迁移；历史/收藏/缓存仅预留表且 Phase 4/5 零写入 | 保存截图或明文密钥 |
 
 Renderer 使用 `nodeIntegration: false`、`contextIsolation: true`、`sandbox: true`，只加载打包的本地资源并启用严格 CSP。Electron 官方建议隔离 Renderer、启用沙箱并逐项验证 IPC sender：[安全清单](https://www.electronjs.org/docs/latest/tutorial/security)、[Context Isolation](https://www.electronjs.org/docs/latest/tutorial/context-isolation)。
 
@@ -113,13 +113,21 @@ UIA 使用 `GetSelection()`、`GetText()` 和 bounding rectangles。控件是否
 
 OCR 输入来自鼠标拖拽区域与有限边距，按显示器边界裁剪。V1 以 DXGI Desktop Duplication 为主，处理旋转、`DXGI_ERROR_ACCESS_LOST` 和受保护内容；必要时可以有 GDI 兼容回退，但必须遵守同一隐私策略。DXGI 按显示器提供桌面图像：[Desktop Duplication API](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api)。
 
-OCR 通过内部 `OcrEngine` 接口注入，不让状态机依赖具体模型。首选验证 PaddleOCR Windows C++ CPU 部署；模型和运行库必须固定版本、核对许可证并随安装包离线提供：[PaddleOCR Windows C++ 部署](https://www.paddleocr.ai/latest/en/version3.x/inference_deployment/local_inference/cpp/OCR_windows.html)。
+OCR 通过内部 `OcrEngine` 接口注入，不让状态机依赖具体模型。当前 V1 使用系统
+`Windows.Media.Ocr`，离线消费 Windows 已安装的 OCR language pack；应用不携带、下载或更新 OCR
+模型。Paddle adapter 保留为未启用的替换边界；未来若改为第三方 runtime/model，必须新建 ADR、固定
+runtime/model hash、核对许可证、增加模型质量与包体门禁，不能继承当前 Windows OCR 验收结论。
 
 ## 7. 数据与翻译边界
 
-Selection Host 输出进入 Main 后，Main 执行：规范化 → 语言识别 → 缓存查询 → Provider 调用 → 历史写入 → UI 状态发布。Provider 采用统一能力声明：翻译、语言检测、词典、音标、发音、例句；缺失能力必须返回“不可用”，禁止伪造字段。
+Selection Host 输出进入 Main 后，当前 Phase 4/5 主路径执行：规范化 → 显式 opt-in/凭据/语言门禁 →
+Provider 调用或 source-only 降级 → UI 状态发布。当前只支持文本翻译，不实现历史、收藏、持久缓存、词典、
+音标、发音或例句；未来新增能力必须先扩展产品规格和数据生命周期，禁止从预留 Schema 推断功能已存在。
 
-SQLite 只能由 Main 访问。建议逻辑表为 `settings`、`translation_history`、`favorites`、`translation_cache`、`app_exclusions`、`schema_migrations`、`secrets`。`secrets` 仅保存 `safeStorage` 密文；Windows 下 safeStorage 使用 DPAPI，但不能防御同一用户上下文中的恶意进程：[Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)。
+SQLite 只能由 Main 访问。当前 Schema 包含 `settings`、`translation_history`、`favorites`、
+`translation_cache`、`app_exclusions`、`schema_migrations`、`secrets`；其中 history/favorites/cache 是预留表，
+Phase 4/5 保持零写入。`secrets` 仅保存 `safeStorage` 密文；Windows 下 safeStorage 使用 DPAPI，但不能防御
+同一用户上下文中的恶意进程：[Electron safeStorage](https://www.electronjs.org/docs/latest/api/safe-storage)。
 
 ## 8. 可观测性与失效策略
 

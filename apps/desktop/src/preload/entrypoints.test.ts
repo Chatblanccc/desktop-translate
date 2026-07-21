@@ -5,7 +5,8 @@ const electron = vi.hoisted(() => ({
   ipcRenderer: {
     invoke: vi.fn(),
     on: vi.fn(),
-    removeListener: vi.fn()
+    removeListener: vi.fn(),
+    send: vi.fn()
   }
 }));
 
@@ -39,6 +40,7 @@ describe('role-isolated preload entrypoints', () => {
     const [namespace, api] = electron.exposeInMainWorld.mock.calls[0] ?? [];
     expect(namespace).toBe('desktopTranslateSettings');
     expect(Object.keys(api as object).sort()).toEqual([
+      'clearAllLocalData',
       'deleteBaiduCredentials',
       'getSnapshot',
       'onSnapshotChanged',
@@ -64,9 +66,11 @@ describe('role-isolated preload entrypoints', () => {
     const [namespace, api] = electron.exposeInMainWorld.mock.calls[0] ?? [];
     expect(namespace).toBe('desktopTranslateCard');
     expect(Object.keys(api as object).sort()).toEqual([
+      'acknowledgePaint',
       'dismiss',
       'getCurrent',
       'onChanged',
+      'onPaintProbe',
       'retry'
     ]);
   });

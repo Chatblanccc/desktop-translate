@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase5/privacy-scan.schema.json",
+  "title": "Phase 5 fail-closed privacy scan report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "scope",
+    "status",
+    "rootsRequested",
+    "rootsScanned",
+    "filesScanned",
+    "bytesScanned",
+    "localAbsoluteRootsPersisted",
+    "forbiddenKeyPolicyApplied",
+    "scanEncodings",
+    "findingCounts",
+    "failures"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.1.0" },
+    "scope": { "enum": ["phase5-evidence", "binary-value-and-path-scan"] },
+    "status": { "enum": ["PASS", "FAIL"] },
+    "rootsRequested": { "type": "integer", "minimum": 1 },
+    "rootsScanned": { "type": "integer", "minimum": 0 },
+    "filesScanned": { "type": "integer", "minimum": 0 },
+    "bytesScanned": { "type": "integer", "minimum": 0 },
+    "localAbsoluteRootsPersisted": { "type": "boolean" },
+    "forbiddenKeyPolicyApplied": { "type": "boolean" },
+    "scanEncodings": {
+      "type": "array",
+      "const": ["utf8", "utf16le"]
+    },
+    "findingCounts": {
+      "type": "object",
+      "required": ["forbiddenValue", "forbiddenField", "absolutePath", "invalidStructuredEvidence", "io", "total"],
+      "additionalProperties": false,
+      "properties": {
+        "forbiddenValue": { "type": "integer", "minimum": 0 },
+        "forbiddenField": { "type": "integer", "minimum": 0 },
+        "absolutePath": { "type": "integer", "minimum": 0 },
+        "invalidStructuredEvidence": { "type": "integer", "minimum": 0 },
+        "io": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "failures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["root", "file", "code"],
+        "additionalProperties": false,
+        "properties": {
+          "root": { "type": "integer", "minimum": 1 },
+          "file": { "type": "string", "minLength": 1 },
+          "code": { "type": "string", "pattern": "^[A-Z0-9_]+$" }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "PASS" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "localAbsoluteRootsPersisted": { "const": false },
+          "findingCounts": {
+            "type": "object",
+            "properties": {
+              "forbiddenValue": { "const": 0 },
+              "forbiddenField": { "const": 0 },
+              "absolutePath": { "const": 0 },
+              "invalidStructuredEvidence": { "const": 0 },
+              "io": { "const": 0 },
+              "total": { "const": 0 }
+            }
+          },
+          "failures": { "type": "array", "maxItems": 0 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "status": { "const": "FAIL" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "findingCounts": { "type": "object", "properties": { "total": { "type": "integer", "minimum": 1 } } },
+          "failures": { "type": "array", "minItems": 1 }
+        }
+      }
+    }
+  ],
+  "additionalProperties": false
+}

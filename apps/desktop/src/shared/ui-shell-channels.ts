@@ -16,5 +16,6 @@ export const UI_SHELL_CHANNELS = Object.freeze({
   testTranslationProvider: 'ui-shell:test-translation-provider',
   openProviderPrivacyPolicy: 'ui-shell:open-provider-privacy-policy',
   openProviderServiceTerms: 'ui-shell:open-provider-service-terms',
-  resetBallPosition: 'ui-shell:reset-ball-position'
+  resetBallPosition: 'ui-shell:reset-ball-position',
+  clearAllLocalData: 'ui-shell:clear-all-local-data'
 } as const);

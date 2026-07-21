@@ -1,0 +1,86 @@
+appId: com.desktoptranslate.app
+productName: Desktop Translate
+buildVersion: 0.5.0.0
+electronVersion: 43.1.1
+copyright: Copyright (c) Desktop Translate contributors
+
+# Only compiled production entrypoints enter app.asar.  Runtime resources are
+# copied through the explicit extraResources allowlist below.
+asar: true
+compression: maximum
+npmRebuild: false
+nodeGypRebuild: false
+files:
+  - package.json
+  - .vite/build/**/*
+  - .vite/renderer/**/*
+  - "!node_modules/**/*"
+  - "!**/*.map"
+  - "!**/*.md"
+  - "!**/test{,s}/**/*"
+  - "!**/*.test.*"
+  - "!**/*.spec.*"
+  - "!**/coverage/**/*"
+  - "!**/playwright-report/**/*"
+
+extraResources:
+  - from: .vite/phase5-resources/selection-host
+    to: selection-host
+    filter:
+      - selection-host.exe
+  - from: .vite/phase5-resources/migrations
+    to: migrations
+    filter:
+      - "*.sql"
+  - from: .vite/phase5-resources/licenses
+    to: licenses
+    filter:
+      - THIRD_PARTY_NOTICES.txt
+      - ELECTRON_LICENSE.txt
+      - LICENSES.chromium.html
+  - from: .vite/phase5-resources/supply-chain
+    to: supply-chain
+    filter:
+      - sbom.cdx.json
+  - from: .vite/phase5-resources/manifest
+    to: manifest
+    filter:
+      - product-manifest.json
+      - component-manifest.json
+      - file-manifest.sha256
+
+directories:
+  output: ../../artifacts/phase5/package/dist
+
+electronLanguages:
+  - en-US
+  - zh-CN
+
+win:
+  executableName: desktop-translate
+  requestedExecutionLevel: asInvoker
+  # electron-builder signs additional files by suffix through the same
+  # standard identity/timestamp path used for the app and installer.
+  signExts:
+    - selection-host.exe
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: Desktop-Translate-0.5.0-phase5-x64-setup.exe
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: false
+  createStartMenuShortcut: true
+  shortcutName: Desktop Translate
+  uninstallDisplayName: Desktop Translate
+  deleteAppDataOnUninstall: false
+  runAfterFinish: false
+
+# Phase 5 RC uses signed manual distribution.  Auto-update remains disabled
+# until a separately reviewed update trust root and rollback design exist.
+publish: null

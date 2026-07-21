@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
 import type { SelectionCardViewModel } from '@desktop-translate/contracts/selection-card';
 import type { SelectionCardRendererBridge } from '../../preload/card-bridge.js';
 
@@ -21,22 +21,71 @@ const FAILURE_LABELS: Readonly<Record<string, string>> = {
 
 export function CardApp({ api }: CardAppProps): JSX.Element {
   const [card, setCard] = useState<SelectionCardViewModel | undefined>();
+  const renderRevision = useRef(0);
+  const committedRevision = useRef(0);
+  const pendingPaintProbes = useRef<Array<{ readonly token: number; readonly revision: number }>>([]);
+  const animationFrames = useRef(new Set<number>());
+
+  const schedulePaintAcknowledgement = useCallback((token: number): void => {
+    if (api.acknowledgePaint === undefined || document.visibilityState !== 'visible') return;
+    const first = requestAnimationFrame(() => {
+      animationFrames.current.delete(first);
+      if (document.visibilityState !== 'visible') return;
+      const second = requestAnimationFrame(() => {
+        animationFrames.current.delete(second);
+        if (document.visibilityState === 'visible') api.acknowledgePaint?.(token);
+      });
+      animationFrames.current.add(second);
+    });
+    animationFrames.current.add(first);
+  }, [api]);
+
+  const publishCard = useCallback((value: SelectionCardViewModel | undefined): void => {
+    renderRevision.current += 1;
+    setCard(value);
+  }, []);
 
   useEffect(() => {
     let active = true;
     let receivedChange = false;
     const unsubscribe = api.onChanged((value) => {
       receivedChange = true;
-      if (active) setCard(value);
+      if (active) publishCard(value);
     });
     void api.getCurrent().then((value) => {
-      if (active && !receivedChange) setCard(value);
+      if (active && !receivedChange) publishCard(value);
     });
     return () => {
       active = false;
       unsubscribe();
     };
-  }, [api]);
+  }, [api, publishCard]);
+
+  useEffect(() => {
+    if (api.onPaintProbe === undefined || api.acknowledgePaint === undefined) return undefined;
+    return api.onPaintProbe((token) => {
+      const revision = renderRevision.current;
+      if (committedRevision.current >= revision) schedulePaintAcknowledgement(token);
+      else pendingPaintProbes.current.push({ token, revision });
+    });
+  }, [api, schedulePaintAcknowledgement]);
+
+  useLayoutEffect(() => {
+    committedRevision.current = renderRevision.current;
+    const ready = pendingPaintProbes.current.filter(
+      ({ revision }) => revision === committedRevision.current
+    );
+    pendingPaintProbes.current = pendingPaintProbes.current.filter(
+      ({ revision }) => revision > committedRevision.current
+    );
+    for (const { token } of ready) schedulePaintAcknowledgement(token);
+  }, [card, schedulePaintAcknowledgement]);
+
+  useEffect(() => () => {
+    for (const frame of animationFrames.current) cancelAnimationFrame(frame);
+    animationFrames.current.clear();
+    pendingPaintProbes.current = [];
+  }, []);
 
   if (card === undefined) return <main className="card-shell" aria-hidden="true" />;
   const sourceLabel = card.source === 'ocr' ? '本地 OCR' : '应用文字';

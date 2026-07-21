@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [switch]$PrepareOnly,
-    [switch]$ForceNativeBuild
+    [switch]$ForceNativeBuild,
+    [ValidateSet('phase4', 'phase5')][string]$Phase = 'phase4'
 )
 
 Set-StrictMode -Version Latest
@@ -75,8 +76,8 @@ try {
     if ($PrepareOnly) {
         Write-Output $nativeHost
     } else {
-        Invoke-CheckedExternal -Label 'Build and start Electron' -FilePath 'pnpm' `
-            -ArgumentList @('--filter', '@desktop-translate/desktop', 'start:phase4')
+        Invoke-CheckedExternal -Label "Build and start Electron ($Phase)" -FilePath 'pnpm' `
+            -ArgumentList @('--filter', '@desktop-translate/desktop', "start:$Phase")
     }
 } finally {
     Pop-Location

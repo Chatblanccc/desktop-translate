@@ -35,6 +35,7 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
   it('starts, handshakes, checks health, and stops a child process', async () => {
     const supervisor = new NativeHostSupervisor({
       executablePath: process.execPath,
+      desktopVersion: '0.5.0-phase5',
       executableArguments: [fakeHost, '--fake-mode', 'stable'],
       healthCheckIntervalMs: 25,
       stableRunMs: 1_000
@@ -51,6 +52,7 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
   it('uses safe liveness defaults and force-terminates a Host that ignores shutdown', async () => {
     const supervisor = new NativeHostSupervisor({
       executablePath: process.execPath,
+      desktopVersion: '0.5.0-phase5',
       executableArguments: [fakeHost, '--fake-mode', 'ignore-shutdown']
     });
     await supervisor.start();
@@ -60,6 +62,7 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
   it('does not forward a queued selection after shutdown starts', async () => {
     const supervisor = new NativeHostSupervisor({
       executablePath: process.execPath,
+      desktopVersion: '0.5.0-phase5',
       executableArguments: [fakeHost, '--fake-mode', 'selection-during-shutdown']
     });
     const selection = vi.fn();
@@ -74,6 +77,7 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
   it('retains a failed-handshake child until forced termination has completed', async () => {
     const supervisor = new NativeHostSupervisor({
       executablePath: process.execPath,
+      desktopVersion: '0.5.0-phase5',
       executableArguments: [fakeHost, '--fake-mode', 'invalid-handshake']
     });
     const start = supervisor.start();
@@ -93,6 +97,7 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
   it('does not restart or retain a child that exits before completing its handshake', async () => {
     const supervisor = new NativeHostSupervisor({
       executablePath: process.execPath,
+      desktopVersion: '0.5.0-phase5',
       executableArguments: [fakeHost, '--fake-mode', 'exit-before-ready'],
       maxRestarts: 3
     });
@@ -110,6 +115,7 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
   it('opens the restart circuit after repeated early crashes', async () => {
     const supervisor = new NativeHostSupervisor({
       executablePath: process.execPath,
+      desktopVersion: '0.5.0-phase5',
       executableArguments: [fakeHost, '--fake-mode', 'crash'],
       maxRestarts: 1,
       healthCheckIntervalMs: 1_000,
@@ -130,6 +136,7 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
   it('cancels a pending restart when stopped', async () => {
     const supervisor = new NativeHostSupervisor({
       executablePath: process.execPath,
+      desktopVersion: '0.5.0-phase5',
       executableArguments: [fakeHost, '--fake-mode', 'crash'],
       maxRestarts: 5,
       healthCheckIntervalMs: 1_000,
@@ -144,6 +151,7 @@ describe.skipIf(process.platform !== 'win32')('native host supervisor lifecycle'
   it('rejects a missing executable without an unhandled child error', async () => {
     const supervisor = new NativeHostSupervisor({
       executablePath: `Z:\\missing-${Date.now()}\\selection-host.exe`,
+      desktopVersion: '0.5.0-phase5',
       maxRestarts: 0
     });
     supervisor.on('spawnError', () => undefined);

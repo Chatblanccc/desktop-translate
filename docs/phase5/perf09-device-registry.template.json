@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "phase5-perf09-device-registry-v1",
+  "devices": [
+    {
+      "deviceRegistrationId": "replace-device-registration-id",
+      "status": "revoked",
+      "deviceFingerprintSha256": "replace-with-lowercase-sha256"
+    }
+  ]
+}

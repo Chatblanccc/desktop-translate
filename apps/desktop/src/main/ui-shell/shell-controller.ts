@@ -56,6 +56,12 @@ import {
   ProviderCredentialStoreError
 } from '../translation/provider-credential-store.js';
 import { TranslationController } from '../translation/translation-controller.js';
+import {
+  Phase5PaintMetricsController,
+  registerPhase5PaintAckIpc
+} from '../metrics/paint-ack-metrics.js';
+import type { Phase5RuntimeMetricsPort } from '../metrics/runtime-metrics.js';
+import { DESKTOP_TRANSLATE_TEST_HOOKS_ENABLED } from '../build-flavor.js';
 
 const PROVIDER_PRIVACY_URL = 'https://fanyi-app.baidu.com/static/agreement/privacy.html';
 const PROVIDER_SERVICE_TERMS_URL = 'https://fanyi-api.baidu.com/doc/6';
@@ -63,7 +69,10 @@ const TRANSLATION_CONSENT_VERSION = 1;
 
 export interface ShellControllerOptions {
   readonly requestQuit: () => void;
+  /** Schedules deletion of the exact Electron userData directory, then begins shutdown. */
+  readonly requestLocalDataReset?: () => Promise<void>;
   readonly translationTransport?: BaiduTransport;
+  readonly metrics?: Phase5RuntimeMetricsPort;
 }
 
 interface NativeLaunchOptions {
@@ -81,6 +90,7 @@ export interface Phase2DebugState {
   readonly settingsVisible: boolean;
   readonly cardCreated: boolean;
   readonly cardVisible: boolean;
+  readonly shutdownPhase: 'running' | 'starting' | 'waiting-native-and-position' | 'disposing-local-resources' | 'complete';
 }
 
 export class ShellController {
@@ -98,9 +108,14 @@ export class ShellController {
   private nativeClient: NativeHostClient | undefined;
   private disposeIpc: (() => void) | undefined;
   private disposeCardIpc: (() => void) | undefined;
+  private paintMetrics: Phase5PaintMetricsController | undefined;
+  private disposePaintMetricsIpc: (() => void) | undefined;
   private started = false;
   private disposed = false;
   private disposePromise: Promise<void> | undefined;
+  private shutdownPhase: Phase2DebugState['shutdownPhase'] = 'running';
+  private localDataResetPromise: Promise<void> | undefined;
+  private localDataResetting = false;
   private positionWrite = Promise.resolve();
   private selectionCommand = Promise.resolve();
   private readonly displayChanged = (): void => {
@@ -173,6 +188,7 @@ export class ShellController {
     const displays = getDisplays();
     const initialBounds = resolveBallBounds(this.state.getSnapshot().ball.anchor, displays);
     const buildDirectory = join(app.getAppPath(), '.vite', 'build');
+    const metricsEnabled = this.options.metrics?.enabled === true;
     const windows = new WindowManager({
       appPath: app.getAppPath(),
       buildDirectory,
@@ -183,9 +199,27 @@ export class ShellController {
           console.warn('[phase2:display] Failed to persist the moved ball position.');
         });
       },
-      onCardDismissed: () => this.translation?.dismiss()
+      onCardDismissed: () => this.translation?.dismiss(),
+      ...(metricsEnabled
+        ? {
+            enablePaintMetrics: true,
+            beginCardPaintProbe: (
+              target: Electron.WebContents,
+              characterCountBucket: Parameters<Phase5PaintMetricsController['begin']>[1]
+            ) => this.paintMetrics?.begin(target, characterCountBucket)
+          }
+        : {})
     });
     this.windows = windows;
+    if (metricsEnabled && this.options.metrics !== undefined) {
+      const paintMetrics = new Phase5PaintMetricsController({ metrics: this.options.metrics });
+      this.paintMetrics = paintMetrics;
+      this.disposePaintMetricsIpc = registerPhase5PaintAckIpc({
+        ipcMain,
+        resolveRole: (event) => windows.resolveRole(event),
+        acknowledge: (senderId, payload) => paintMetrics.acknowledge(senderId, payload)
+      });
+    }
     this.translation = new TranslationController({
       provider: translationProvider,
       getSettings: () => this.state.getSnapshot().translation,
@@ -213,7 +247,8 @@ export class ShellController {
         testTranslationProvider: () => this.testTranslationProvider(),
         openProviderPrivacyPolicy: () => this.openProviderPrivacyPolicy(),
         openProviderServiceTerms: () => this.openProviderServiceTerms(),
-        resetBallPosition: () => this.resetBallPosition()
+        resetBallPosition: () => this.resetBallPosition(),
+        clearAllLocalData: () => this.clearAllLocalData()
       }
     });
     this.disposeCardIpc = registerSelectionCardIpc({
@@ -233,13 +268,11 @@ export class ShellController {
     });
     this.tray = tray;
     this.state.on('changed', this.onStateChanged);
-    await tray.start(this.state.getSnapshot());
-    if (this.disposed) {
-      tray.dispose();
-      windows.dispose();
-      return;
-    }
-    await windows.start();
+    const startupSnapshot = this.state.getSnapshot();
+    await Promise.all([
+      tray.start(startupSnapshot),
+      windows.start()
+    ]);
     if (this.disposed) {
       tray.dispose();
       windows.dispose();
@@ -257,12 +290,18 @@ export class ShellController {
   }
 
   public closeSettingsForTest(): void {
-    if (process.env.DESKTOP_TRANSLATE_E2E !== '1') throw new Error('Test API is disabled');
+    if (
+      !DESKTOP_TRANSLATE_TEST_HOOKS_ENABLED
+      || process.env.DESKTOP_TRANSLATE_E2E !== '1'
+    ) throw new Error('Test API is disabled');
     this.windows?.getSettingsWindow()?.close();
   }
 
   public async moveBallForTest(x: number, y: number): Promise<void> {
-    if (process.env.DESKTOP_TRANSLATE_E2E !== '1') throw new Error('Test API is disabled');
+    if (
+      !DESKTOP_TRANSLATE_TEST_HOOKS_ENABLED
+      || process.env.DESKTOP_TRANSLATE_E2E !== '1'
+    ) throw new Error('Test API is disabled');
     if (!Number.isFinite(x) || !Number.isFinite(y)) throw new TypeError('Invalid test bounds');
     const current = this.windows?.getBallBounds();
     if (current === undefined) throw new Error('Ball window is unavailable');
@@ -282,7 +321,8 @@ export class ShellController {
       settingsCreated: settings !== undefined && !settings.isDestroyed(),
       settingsVisible: settings !== undefined && !settings.isDestroyed() && settings.isVisible(),
       cardCreated: card !== undefined && !card.isDestroyed(),
-      cardVisible: card !== undefined && !card.isDestroyed() && card.isVisible()
+      cardVisible: card !== undefined && !card.isDestroyed() && card.isVisible(),
+      shutdownPhase: this.shutdownPhase
     };
     return ballBounds === undefined ? base : { ...base, ballBounds };
   }
@@ -483,12 +523,78 @@ export class ShellController {
     await shell.openExternal(PROVIDER_SERVICE_TERMS_URL);
   }
 
+  /**
+   * Irreversible local-data reset. Renderer confirmation is validated by the
+   * settings-only IPC boundary before this method can run.
+   */
+  public clearAllLocalData(): Promise<void> {
+    this.localDataResetPromise ??= this.performClearAllLocalData().catch((error: unknown) => {
+      // Scheduling failed: keep the application fail-closed, but allow the
+      // settings role to retry the reset without restarting.
+      this.localDataResetPromise = undefined;
+      this.localDataResetting = false;
+      throw error;
+    });
+    return this.localDataResetPromise;
+  }
+
+  private async performClearAllLocalData(): Promise<void> {
+    const requestLocalDataReset = this.options.requestLocalDataReset;
+    if (requestLocalDataReset === undefined) {
+      throw new Error('Local-data reset is unavailable');
+    }
+    if (this.disposed) throw new Error('Desktop shell is already disposed');
+    this.localDataResetting = true;
+
+    // Fail closed in memory before waiting on any I/O. No later selection or
+    // Provider callback can start another translation while reset is pending.
+    this.cancelProviderTest('local-data-reset');
+    this.translation?.cancelAndHide();
+    this.state.setTranslationEnabled(false);
+    this.state.setTranslationConsentVersion(0);
+    this.state.setTranslationCredentialStatus('unavailable');
+    this.state.setSelectionEnabled(false);
+    this.state.setSelectionLifecycle('disabled');
+
+    const client = this.nativeClient;
+    this.selectionCommand = this.selectionCommand
+      .catch(() => undefined)
+      .then(async () => {
+        if (client !== undefined && this.nativeClient === client) {
+          await client.request('stop', { reason: 'local-data-reset' }).catch(() => undefined);
+        }
+      });
+    await this.selectionCommand;
+    this.nativeClient = undefined;
+    const nativeHost = this.nativeHost;
+    this.nativeHost = undefined;
+    await nativeHost?.stop().catch(() => undefined);
+
+    const settings = this.requireSettings();
+    const credentials = this.requireCredentials();
+    const persistence = await Promise.allSettled([
+      settings.setSelectionEnabled(false),
+      settings.setTranslationEnabled(false),
+      settings.resetTranslationConsent(),
+      credentials.delete()
+    ]);
+    const credentialDeleted = persistence[3]?.status === 'fulfilled';
+    this.state.setTranslationCredentialStatus(credentialDeleted ? 'missing' : 'unavailable');
+
+    // This writes a target/PID/nonce-bound marker and successfully spawns the
+    // fixed post-exit helper before shutdown is requested.
+    await requestLocalDataReset();
+    this.disposeIpc?.();
+    this.disposeIpc = undefined;
+  }
+
   public dispose(): Promise<void> {
     this.disposePromise ??= this.performDispose();
     return this.disposePromise;
   }
 
   private async performDispose(): Promise<void> {
+    this.shutdownPhase = 'starting';
     this.disposed = true;
     this.cancelProviderTest('app-disposed');
     this.translation?.cancelAndHide();
@@ -500,22 +606,40 @@ export class ShellController {
     this.disposeIpc = undefined;
     this.disposeCardIpc?.();
     this.disposeCardIpc = undefined;
-    await this.positionWrite.catch(() => undefined);
+    this.disposePaintMetricsIpc?.();
+    this.disposePaintMetricsIpc = undefined;
+    this.paintMetrics?.dispose();
+    this.paintMetrics = undefined;
+
+    const tray = this.tray;
+    this.tray = undefined;
+    const windows = this.windows;
+    this.windows = undefined;
+
     const nativeHost = this.nativeHost;
     this.nativeHost = undefined;
     this.nativeClient = undefined;
-    await nativeHost?.stop().catch(() => undefined);
-    this.tray?.dispose();
-    this.tray = undefined;
-    this.windows?.dispose();
-    this.windows = undefined;
+    this.translation = undefined;
+    this.translationProvider = undefined;
+    this.shutdownPhase = 'waiting-native-and-position';
+    await Promise.allSettled([
+      this.positionWrite,
+      nativeHost?.stop() ?? Promise.resolve()
+    ]);
+    // Preserve the proven Phase 4 shutdown order: renderer windows stay alive
+    // until persistence and Native Host shutdown have both settled. Destroying
+    // them earlier made Electron/CDP shutdown intermittently stall in the
+    // strict regression smoke even though unit-level cleanup completed.
+    this.shutdownPhase = 'disposing-local-resources';
+    tray?.dispose();
+    windows?.dispose();
     this.database?.close();
     this.database = undefined;
     this.settings = undefined;
     this.exclusions = undefined;
     this.credentials = undefined;
-    this.translationProvider = undefined;
-    this.translation = undefined;
+    await this.options.metrics?.close().catch(() => undefined);
+    this.shutdownPhase = 'complete';
   }
 
   private requireSettings(): SqlitePhase4SettingsRepository {
@@ -597,7 +721,7 @@ export class ShellController {
   }
 
   private async startNativeHost(): Promise<void> {
-    if (this.disposed) return;
+    if (this.disposed || this.localDataResetting) return;
     const launch = resolveNativeLaunchOptions();
     if (launch === undefined || !existsSync(launch.executablePath)) {
       this.state.setNativeStatus('unavailable');
@@ -614,7 +738,7 @@ export class ShellController {
     this.nativeHost = supervisor;
     supervisor.on('ready', () => this.state.setNativeStatus('ready'));
     supervisor.on('clientReady', (client: NativeHostClient) => {
-      if (this.disposed || this.nativeHost !== supervisor) return;
+      if (this.disposed || this.localDataResetting || this.nativeHost !== supervisor) return;
       this.nativeClient = client;
       this.selectionCommand = this.selectionCommand
         .catch(() => undefined)
@@ -651,9 +775,34 @@ export class ShellController {
       this.state.setNativeStatus('faulted');
       this.state.setSelectionLifecycle('faulted');
     });
+    const metrics = this.options.metrics;
+    const startedAt = metrics?.enabled === true ? metrics.beginDuration() : undefined;
     try {
       await supervisor.start();
+      if (startedAt !== undefined) {
+        metrics?.recordDuration({
+          metricId: 'PERF-03',
+          role: 'main',
+          scenario: 'host-ready',
+          source: metrics.measurementMode === 'deterministic-fixture' ? 'fake-native' : 'native-host',
+          startedAt,
+          status: 'success',
+          characterCountBucket: 'not-applicable'
+        });
+      }
     } catch {
+      if (startedAt !== undefined) {
+        metrics?.recordDuration({
+          metricId: 'PERF-03',
+          role: 'main',
+          scenario: 'host-ready',
+          source: metrics.measurementMode === 'deterministic-fixture' ? 'fake-native' : 'native-host',
+          startedAt,
+          status: 'failure',
+          errorCode: 'HOST_NOT_READY',
+          characterCountBucket: 'not-applicable'
+        });
+      }
       this.state.setNativeStatus('faulted');
       this.state.setSelectionLifecycle('faulted');
     }
@@ -740,7 +889,11 @@ export class ShellController {
   }
 
   private handleSelection(selection: SelectionResult): void {
-    if (this.disposed || !this.state.getSnapshot().selection.enabled) return;
+    if (
+      this.disposed
+      || this.localDataResetting
+      || !this.state.getSnapshot().selection.enabled
+    ) return;
     const physicalRects = selection.physicalRects.length > 0
       ? selection.physicalRects
       : [{ x: selection.releasePoint.x, y: selection.releasePoint.y, width: 1, height: 1 }];
@@ -779,7 +932,7 @@ function resolveNativeLaunchOptions(): NativeLaunchOptions | undefined {
   if (app.isPackaged) {
     return { executablePath: join(process.resourcesPath, 'selection-host', 'selection-host.exe') };
   }
-  if (process.env.DESKTOP_TRANSLATE_E2E === '1') {
+  if (DESKTOP_TRANSLATE_TEST_HOOKS_ENABLED && process.env.DESKTOP_TRANSLATE_E2E === '1') {
     const nodePath = process.env.DESKTOP_TRANSLATE_E2E_NODE_PATH;
     const fixturePath = process.env.DESKTOP_TRANSLATE_E2E_NATIVE_FIXTURE;
     if (nodePath && fixturePath) {

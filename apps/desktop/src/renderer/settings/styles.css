@@ -240,6 +240,34 @@ label.setting-row:hover {
   color: var(--color-danger);
 }
 
+.danger-zone {
+  border-color: color-mix(in srgb, var(--color-danger) 38%, var(--color-border));
+}
+
+.clear-data-confirmation {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  margin: 0;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  border-top: 1px solid color-mix(in srgb, var(--color-danger) 30%, var(--color-border));
+}
+
+.clear-data-warning {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.destructive-button {
+  color: #fff;
+  background: var(--color-danger);
+  border-color: var(--color-danger);
+}
+
 .provider-settings-card > .setting-row,
 .provider-language-row,
 .provider-credentials {

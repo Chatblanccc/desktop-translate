@@ -1,8 +1,27 @@
 # Desktop Translate
 
-Windows 桌面划词助手。Phase 3 本地取词闭环已经以 `PASS WITH ACCEPTED RISKS` 验收；
-当前开发目标为 **`0.4.0-phase4` 内部开发预览**：在已验收的 source-only 卡片上增加
-默认关闭、用户自带凭据的百度通用文本翻译闭环。
+Windows 桌面划词助手。Phase 4 在线文本翻译闭环已于 2026-07-18 在合并提交
+`4ea65dcd5c5ef7c56127fe419127d48e0573a65d` 上以 `PASS WITH ACCEPTED RISKS` 验收；
+当前正在按已冻结计划执行 Phase 5 的测量、长稳、打包与发布门禁开发。仓库版本已切换为
+**`0.5.0-phase5` 开发候选**。当前代码基线 `6dae872fa7b7fbabe4e74b77b351c3390170d77a` 的 clean-HEAD
+本地 `phase5:verify` 已退出 `0`，结果为 `DETERMINISTIC_GATE_PASS_NOT_ACCEPTANCE`、
+`strictPhase4Superset=true`；workspace 共发现 400 项，399 passed、1 skipped、0 failed，Desktop 34 files
+共发现 311 项，310 passed、1 skipped。同一基线的 clean unsigned Installer 为
+`Desktop-Translate-0.5.0-phase5-x64-setup.exe`，大小 `92004551` bytes，SHA-256
+`7886c7926d640c8e03a60350361a3f74f6dde1cae73f92ccf0a4de6d25a8a550`；应用、Native Host 与 Installer
+均为 `NotSigned`、`acceptanceEligible=false`，不具备发布资格。`6dae872…` 的远程 Phase 1–5 自动门禁已在
+[Actions run 29684078146](https://github.com/Chatblanccc/desktop-translate/actions/runs/29684078146) 全部通过，
+其中 Phase 5 包含 15 分钟 deterministic short soak；这仍不等于正式验收。Phase 5 总状态仍为
+`NOT YET ACCEPTED / RELEASE BLOCKED`，在签名 RC、正式性能/长稳、clean VM、
+实机矩阵与发布签字完成前仍不是公开版本。
+
+当前开发观察还包括 PERF-09 2×5、15 秒产品 idle，以及 PERF-03 packaged 1×1：最新 PERF-03 样本为
+`118.648ms`、failure/forced termination 均为 `0`，但这些缩减运行均为 unsigned/non-acceptance；formal
+PERF-03 在 protected-run receipt、认证指标通道、publisher policy 与完整 namespace trust controller
+实现前固定阻断。
+Windows 实机 UI 快检确认 Ball、Settings、Native service 与 `0.5.0-phase5` 版本面可用，并修正了设置页残留的
+Phase 4 副标题；该会话观察不替代签名 RC、clean VM 或完整兼容矩阵。产品退出由 Ball UI 命令进入 Electron
+quit lifecycle；失败后的 exact-identity harness cleanup 只用于测试隔离，不代表产品正常退出。
 
 ## 当前能力边界
 
@@ -18,8 +37,8 @@ Windows 桌面划词助手。Phase 3 本地取词闭环已经以 `PASS WITH ACCE
 - Phase 4 首发仅接入百度通用文本翻译；源语言默认 `auto`、目标语言默认 `zh-CN`，两者均可在受支持选项内配置。
 - 翻译网络与凭据只存在于 Electron Main；Provider 失败保留原文并降级，不影响 Native 取词。
 
-Phase 4 不包含历史、收藏、持久翻译缓存、词典、音标、发音、例句、第二家 Provider、云 OCR、
-安装器、签名、自动更新或正式发布。完整范围从[文档索引](docs/README.md)开始，协议以
+Phase 5 仍不包含历史、收藏、持久翻译缓存、词典、音标、发音、例句、第二家 Provider、云 OCR 或
+自动更新；installer、签名和供应链门禁正在开发验收。完整范围从[文档索引](docs/README.md)开始，协议以
 [JSON Schema](protocol/native-ipc.schema.json)为单一事实来源。
 
 ## 环境
@@ -38,12 +57,12 @@ Phase 4 不包含历史、收藏、持久翻译缓存、词典、音标、发音
 
 ```powershell
 pnpm install --frozen-lockfile
-pnpm start:phase4
+pnpm start:phase5
 ```
 
-`start:phase4` 会优先使用当前 `SELECTION_HOST_PATH` 或已有 Native Host 产物；首次运行若未找到产物，
+`start:phase5` 会优先使用当前 `SELECTION_HOST_PATH` 或已有 Native Host 产物；首次运行若未找到产物，
 会先执行 Native configure/build，再把解析出的 `selection-host.exe` 仅传给本次 Electron 进程。
-只准备并检查 Native Host、不启动界面时可运行 `pnpm prepare:phase4`。显式配置的
+只准备并检查 Native Host、不启动界面时可运行 `pnpm prepare:phase5`。显式配置的
 `SELECTION_HOST_PATH` 无效时启动会直接失败，不会静默退回到不可用状态。
 
 完整 Phase 4 本地门禁：
@@ -64,6 +83,25 @@ pnpm test:e2e
 pnpm privacy:scan
 ```
 
+Phase 5 的确定性开发门禁、环境预检、专项 runner 自测、供应链审计和无签名包可分别运行：
+
+```powershell
+pnpm phase5:verify
+pnpm phase5:environment:selftest
+pnpm phase5:environment:preflight
+pnpm phase5:perf03:selftest
+pnpm phase5:perf03:dev
+pnpm phase5:provider-smoke:selftest
+pnpm phase5:acceptance-decision:selftest
+pnpm phase5:audit
+pnpm phase5:package
+pnpm phase5:package:installer
+```
+
+这些命令退出 `0` 只表示相应开发、自测或无签名门禁通过，不等于 Phase 5 正式验收。正式发布仍要求
+受保护环境中的 Authenticode 签名与时间戳、GitHub artifact attestation、独立下载复核、
+固定实验室性能/资源测试、完整 Lane A/Lane B、clean VM/兼容性矩阵和角色签字。
+
 真实 Provider 验收可显式设置 `DESKTOP_TRANSLATE_PHASE4_AUDIT_FILE`，启用 Main-only 的脱敏 JSONL
 attestation；默认不构造该 wrapper，也不写文件或日志。记录只包含 endpoint、方法、header/field 名称、
 长度和布尔校验，不包含正文、APP ID、密钥、salt、签名、响应或 body。Windows 连接元数据可用
@@ -80,5 +118,5 @@ packages/translation/Provider 抽象、网络边界与百度适配器
 packages/storage/    SQLite migration 与 repository
 protocol/            Native IPC v1 canonical JSON Schema
 docs/                架构、安全、兼容性、风险、规格与验收文档
-tooling/             Native 工具链准备和 Phase 1/2/3/4 验收脚本
+tooling/             Native 工具链准备和 Phase 1–5 开发/验收脚本
 ```

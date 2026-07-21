@@ -33,6 +33,9 @@ export type SelectionLifecycle = (typeof SELECTION_LIFECYCLES)[number];
 export const OCR_ACTIVATIONS = ["fallback", "alt-drag"] as const;
 export type OcrActivation = (typeof OCR_ACTIVATIONS)[number];
 
+/** Exact phrase required for the irreversible local-data reset command. */
+export const CLEAR_LOCAL_DATA_CONFIRMATION = "清除全部本地数据" as const;
+
 export const BALL_EDGES = ["left", "right"] as const;
 export type BallEdge = (typeof BALL_EDGES)[number];
 
@@ -119,6 +122,10 @@ export interface SetSelectionEnabledPayload {
 
 export interface SetOcrActivationPayload {
   readonly value: OcrActivation;
+}
+
+export interface ClearAllLocalDataPayload {
+  readonly confirmation: typeof CLEAR_LOCAL_DATA_CONFIRMATION;
 }
 
 export type UiShellSettingsWritePayload =
@@ -250,6 +257,14 @@ export function isSetSelectionEnabledPayload(value: unknown): value is SetSelect
 
 export function isSetOcrActivationPayload(value: unknown): value is SetOcrActivationPayload {
   return isRecord(value) && hasOnlyKeys(value, ["value"]) && isOcrActivation(value.value);
+}
+
+export function isClearAllLocalDataPayload(value: unknown): value is ClearAllLocalDataPayload {
+  return (
+    isRecord(value) &&
+    hasOnlyKeys(value, ["confirmation"]) &&
+    value.confirmation === CLEAR_LOCAL_DATA_CONFIRMATION
+  );
 }
 
 export function isUiShellSettingsWritePayload(value: unknown): value is UiShellSettingsWritePayload {

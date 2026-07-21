@@ -1,6 +1,17 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(desktop_translate_selection_host VERSION 0.3.0 LANGUAGES CXX)
+if(POLICY CMP0091)
+  cmake_policy(SET CMP0091 NEW)
+endif()
+
+include(${CMAKE_CURRENT_LIST_DIR}/../product-version.cmake)
+project(desktop_translate_selection_host VERSION ${DT_CMAKE_VERSION} LANGUAGES CXX)
+
+if(MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY
+      "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+      CACHE STRING "Desktop Translate MSVC runtime linkage" FORCE)
+endif()
 
 option(DT_NATIVE_BUILD_TESTS "Build native core tests" ON)
 option(DT_NATIVE_ENABLE_PADDLE_OCR "Enable a linked PaddleOCR runtime adapter" OFF)
@@ -51,6 +62,7 @@ if(WIN32)
     _WIN32_WINNT=0x0A00
     DT_NATIVE_ENABLE_PADDLE_OCR=$<BOOL:${DT_NATIVE_ENABLE_PADDLE_OCR}>
     DT_NATIVE_ENABLE_WINDOWS_OCR=$<BOOL:${DT_NATIVE_ENABLE_WINDOWS_OCR}>
+    DT_PRODUCT_VERSION="${DT_PRODUCT_VERSION}"
   )
   if(DT_NATIVE_ENABLE_WINDOWS_OCR)
     if(NOT EXISTS "${DT_CPPWINRT_INCLUDE_DIR}/winrt/Windows.Media.Ocr.h")
@@ -66,7 +78,20 @@ if(WIN32)
     target_compile_options(dt_selection_host_windows PRIVATE /W4 /permissive- /EHsc /utf-8)
   endif()
 
-  add_executable(selection-host src/app/main.cpp resources/selection-host.rc)
+  set(DT_SELECTION_HOST_MANIFEST
+      "${CMAKE_CURRENT_SOURCE_DIR}/resources/selection-host.manifest")
+  file(TO_CMAKE_PATH "${DT_SELECTION_HOST_MANIFEST}" DT_SELECTION_HOST_MANIFEST)
+  configure_file(
+    resources/selection-host.rc.in
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/selection-host.rc
+    @ONLY
+  )
+
+  add_executable(
+    selection-host
+    src/app/main.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/selection-host.rc
+  )
   target_link_libraries(selection-host PRIVATE dt_selection_host_windows)
   target_include_directories(selection-host PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources)
   target_compile_definitions(selection-host PRIVATE
@@ -82,7 +107,11 @@ if(WIN32)
     target_link_options(selection-host PRIVATE -municode -static)
   endif()
 
-  add_executable(selection-host-probe src/probes/main.cpp resources/selection-host.rc)
+  add_executable(
+    selection-host-probe
+    src/probes/main.cpp
+    ${CMAKE_CURRENT_BINARY_DIR}/generated/selection-host.rc
+  )
   target_link_libraries(selection-host-probe PRIVATE dt_selection_host_windows)
   target_include_directories(selection-host-probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/resources)
   target_compile_definitions(selection-host-probe PRIVATE

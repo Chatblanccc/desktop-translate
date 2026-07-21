@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "officialNugetBaseUrl": "https://api.nuget.org/v3-flatcontainer",
+  "packages": [
+    {
+      "id": "Microsoft.Windows.CppWinRT",
+      "version": "3.0.260520.1",
+      "purl": "pkg:nuget/Microsoft.Windows.CppWinRT@3.0.260520.1",
+      "role": "projection-generator",
+      "packagePath": ".tools/microsoft.windows.cppwinrt.3.0.260520.1.nupkg",
+      "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windows.cppwinrt/3.0.260520.1/microsoft.windows.cppwinrt.3.0.260520.1.nupkg",
+      "sha256": "d22e2e26133d63217ae26e91b1685fb024b03a508a78af645f8347a3126c8435",
+      "license": {
+        "expression": "MIT",
+        "source": "LICENSE",
+        "requiresAcceptance": false
+      },
+      "prepareScript": {
+        "versionVariable": "cppWinRtVersion",
+        "hashVariable": "cppWinRtHash"
+      }
+    },
+    {
+      "id": "Microsoft.Windows.SDK.Contracts",
+      "version": "10.0.26100.8249",
+      "purl": "pkg:nuget/Microsoft.Windows.SDK.Contracts@10.0.26100.8249",
+      "role": "winmd-contracts",
+      "packagePath": ".tools/microsoft.windows.sdk.contracts.10.0.26100.8249.nupkg",
+      "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windows.sdk.contracts/10.0.26100.8249/microsoft.windows.sdk.contracts.10.0.26100.8249.nupkg",
+      "sha256": "0e1c25793ed1265d49ed5846f1f9dd5a5a32fd44d3e9c16e74b7fda018e5fbd8",
+      "license": {
+        "name": "Microsoft Windows SDK License",
+        "url": "https://aka.ms/WinSDKLicenseURL",
+        "source": "Microsoft.Windows.SDK.Contracts.nuspec",
+        "requiresAcceptance": true
+      },
+      "prepareScript": {
+        "versionVariable": "contractsVersion",
+        "hashVariable": "contractsHash"
+      }
+    }
+  ],
+  "generator": {
+    "packageId": "Microsoft.Windows.CppWinRT",
+    "executablePath": ".tools/cppwinrt-3.0.260520.1/bin/cppwinrt.exe",
+    "executableSha256": "29975c1dc717388e8f0588379850a0f14d7964b51e463568ac9a55ae8cf0b59b"
+  },
+  "projection": {
+    "path": ".tools/cppwinrt-generated-10.0.26100.8249",
+    "requiredHeader": "winrt/Windows.Media.Ocr.h",
+    "treeHashAlgorithm": "sha256-tree-v1",
+    "treeHashDefinition": "Depth-first traversal with each directory sorted by name (en locale); for each file hash its POSIX relative UTF-8 path, NUL, file bytes, NUL."
+  }
+}

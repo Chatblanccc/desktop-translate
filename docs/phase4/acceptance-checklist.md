@@ -1,8 +1,9 @@
 # Phase 4 工程与实机验收清单
 
-- 当前状态：`LOCAL AUTOMATION PASS / RELEASE BLOCKED`
+- 当前状态：`PASS WITH ACCEPTED RISKS`（2026-07-18）
 - 目标版本：`0.4.0-phase4`
 - 开发基线：`1fe45d3c5959b1e45170df21e790d61b69f3f38b`
+- 验收代码提交：`4ea65dcd5c5ef7c56127fe419127d48e0573a65d`
 - 详细证据：[Phase 4 验证报告](validation-report.md)
 - 风险跟踪：[Phase 4 风险登记](risk-register.md)
 
@@ -117,7 +118,9 @@
   受控状态竞态修复后的完整运行 `96.9s`、退出码 `0`；加入真实传输 attestation、网络观察工具和
   最终验收文档后的最新完整运行 `185.2s`、退出码 `0`，完整 E2E `6/6` 且结束进程残留扫描通过。
 - [x] 完整门禁结束后的 workspace process residual scan 通过。
-- [ ] `PENDING`：`.github/workflows/phase4-windows.yml` 尚无目标提交上的远程运行链接。
+- [x] 合并提交 `4ea65dc` 的 [Phase 4 Windows run 29634271260](https://github.com/Chatblanccc/desktop-translate/actions/runs/29634271260)
+  通过，并上传 `phase4-verification-29634271260-1` artifact（213,037 bytes，保留至 2026-08-01；
+  服务端 digest `sha256:a70659c854a169c8352f4602c8840bd19fce3b582032ac8b64e7995b58862937`）。
 
 ## I. 真实 Provider 与人工验收
 
@@ -146,10 +149,15 @@
 - [x] 2026-07-18 Phase 3 `0.3.0-phase3`（提交 `1fe45d3c...`）在 `node:sqlite backup()`
   生成的当前数据库一致性副本上成功启动、读取旧设置并显示 source-only 卡；HTTP(S) 请求为 `0`，
   Phase 4 设置键与加密 secret 的 count/hash 前后不变，真实数据库字节哈希也未变化。
-- [ ] `PENDING`：远程 Windows CI、artifact 上传与 fork secret 边界的运行证据。
-- [ ] `PENDING`：人工 DPI/多屏验收记录。
-- [ ] `PENDING`：Windows 10/11、管理员/受保护桌面及代表性真实应用兼容性矩阵。
-- [ ] `PENDING`：风险接受项的 Owner/复审日期与最终处置签字。
-- [ ] `PENDING`：Product、Engineering、Security/Privacy、Quality/Release 四方验收签字。
+- [x] 合并提交的远程 Windows CI 与 artifact 上传已有可复现证据；PR 与 `main` 的 Phase 1–4 workflow 均通过。
+- [ ] `ACCEPTED RISK`：尚无来自真实外部 fork 的 secret 边界运行；现有 workflow 权限为 `contents: read`，
+  不注入真实 Provider secret，Phase 5 发布门禁继续补测。
+- [ ] `ACCEPTED RISK`：人工 DPI/多屏验收记录尚未覆盖完整矩阵。
+- [ ] `ACCEPTED RISK`：Windows 10/11、管理员/受保护桌面及代表性真实应用兼容性矩阵尚未完整执行。
+- [x] 风险接受项已补充 Owner、剩余分、处置与复审日期，并继承到 Phase 5。
+- [x] 项目负责人于 2026-07-18 在本次会话确认 Phase 4 已验收通过。
+- [ ] `ACCEPTED PROCESS RISK`：本阶段没有相互独立的 Product / Engineering / Security-Privacy /
+  Quality-Release 四方签字；Phase 5 签名 RC 必须重新完成角色化发布评审。
 
-当前最终结论保持 `NOT ACCEPTED`，不得因本地自动化为绿色而提前改为 `PASS`。
+最终结论：`PASS WITH ACCEPTED RISKS`。未勾选项不表示已执行；它们已由项目负责人明确接受并进入
+Phase 5 风险与验收矩阵。任何隐私、越权联网、stale result 或数据库不兼容问题仍触发立即回滚。

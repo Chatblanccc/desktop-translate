@@ -1,5 +1,6 @@
 import {
   isUiShellSnapshot,
+  CLEAR_LOCAL_DATA_CONFIRMATION,
   type OcrActivation,
   type ThemeMode,
   type UiShellSnapshot
@@ -31,6 +32,7 @@ export interface SettingsRendererBridge {
   openProviderPrivacyPolicy(): Promise<void>;
   openProviderServiceTerms(): Promise<void>;
   resetBallPosition(): Promise<void>;
+  clearAllLocalData(confirmation: typeof CLEAR_LOCAL_DATA_CONFIRMATION): Promise<void>;
   onSnapshotChanged(listener: SnapshotChangedListener): () => void;
 }
 
@@ -130,6 +132,8 @@ export function createSettingsRendererBridge(ipc: IpcRendererBridgePort): Settin
     openProviderServiceTerms: () =>
       invokeVoid(ipc, UI_SHELL_CHANNELS.openProviderServiceTerms),
     resetBallPosition: () => invokeVoid(ipc, UI_SHELL_CHANNELS.resetBallPosition),
+    clearAllLocalData: (confirmation: typeof CLEAR_LOCAL_DATA_CONFIRMATION) =>
+      invokeVoid(ipc, UI_SHELL_CHANNELS.clearAllLocalData, { confirmation }),
     onSnapshotChanged: (listener: SnapshotChangedListener) => subscribe(ipc, listener)
   });
 }

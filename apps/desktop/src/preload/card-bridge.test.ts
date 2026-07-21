@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SELECTION_CARD_CHANNELS } from '../shared/selection-card-channels.js';
+import { PHASE5_METRICS_CHANNELS } from '../shared/phase5-metrics-channels.js';
 import {
   createSelectionCardRendererBridge
 } from './card-bridge.js';
-import type { IpcRendererBridgePort } from './bridge.js';
 
 const valid = {
   kind: 'source-only' as const,
@@ -17,8 +17,9 @@ function createIpc() {
   const invoke = vi.fn().mockResolvedValue(undefined);
   const on = vi.fn();
   const removeListener = vi.fn();
-  const port: IpcRendererBridgePort = { invoke, on, removeListener };
-  return { port, invoke, on, removeListener };
+  const send = vi.fn();
+  const port = { invoke, on, removeListener, send };
+  return { port, invoke, on, removeListener, send };
 }
 
 describe('selection card preload bridge', () => {
@@ -58,5 +59,27 @@ describe('selection card preload bridge', () => {
     expect(() => createSelectionCardRendererBridge(port).onChanged(
       undefined as unknown as typeof listener
     )).toThrow(/must be a function/u);
+  });
+
+  it('exposes only a strict paint-probe acknowledgement protocol', () => {
+    const { port, on, removeListener, send } = createIpc();
+    const api = createSelectionCardRendererBridge(port);
+    const listener = vi.fn();
+    const unsubscribe = api.onPaintProbe?.(listener);
+    const wrapped = on.mock.calls.find(
+      ([channel]) => channel === PHASE5_METRICS_CHANNELS.cardPaintProbe
+    )?.[1] as (event: unknown, value: unknown) => void;
+
+    wrapped({ privateEvent: true }, { token: 7 });
+    wrapped({}, { token: 8, text: 'private source text' });
+    wrapped({}, { token: 0 });
+    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalledWith(7);
+    api.acknowledgePaint?.(7);
+    expect(send).toHaveBeenCalledWith(PHASE5_METRICS_CHANNELS.cardPaintAck, { token: 7 });
+    expect(() => api.acknowledgePaint?.(0)).toThrow(/invalid paint/iu);
+    unsubscribe?.();
+    expect(removeListener).toHaveBeenCalledWith(PHASE5_METRICS_CHANNELS.cardPaintProbe, wrapped);
+    expect(() => api.onPaintProbe?.(undefined as never)).toThrow(/must be a function/u);
   });
 });

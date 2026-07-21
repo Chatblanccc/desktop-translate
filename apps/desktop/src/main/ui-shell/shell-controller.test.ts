@@ -192,6 +192,7 @@ const mocks = vi.hoisted(() => {
 
   const startupState = {
     windowStart: Promise.resolve(),
+    trayStart: Promise.resolve(),
     recreateWindowAfterStart: false
   };
 
@@ -251,7 +252,9 @@ const mocks = vi.hoisted(() => {
 
   class FakeTrayController {
     public static readonly instances: FakeTrayController[] = [];
-    public readonly start = vi.fn(async (_snapshot: UiShellSnapshot) => undefined);
+    public readonly start = vi.fn(async (_snapshot: UiShellSnapshot) => {
+      await startupState.trayStart;
+    });
     public readonly update = vi.fn();
     public readonly openContextMenu = vi.fn();
     public readonly dispose = vi.fn(() => { this.tray = undefined; });
@@ -266,6 +269,17 @@ const mocks = vi.hoisted(() => {
   const registerUiShellIpc = vi.fn(() => ipcDispose);
   const cardIpcDispose = vi.fn();
   const registerSelectionCardIpc = vi.fn(() => cardIpcDispose);
+  const paintIpcDispose = vi.fn();
+  const registerPhase5PaintAckIpc = vi.fn(() => paintIpcDispose);
+  class FakePhase5PaintMetricsController {
+    public static readonly instances: FakePhase5PaintMetricsController[] = [];
+    public readonly begin = vi.fn();
+    public readonly acknowledge = vi.fn(() => true);
+    public readonly dispose = vi.fn();
+    public constructor(public readonly options: Record<string, unknown>) {
+      FakePhase5PaintMetricsController.instances.push(this);
+    }
+  }
 
   const existsSync = vi.fn(() => false);
   const readyHealth: HealthResponse = {
@@ -364,6 +378,9 @@ const mocks = vi.hoisted(() => {
     registerUiShellIpc,
     cardIpcDispose,
     registerSelectionCardIpc,
+    paintIpcDispose,
+    registerPhase5PaintAckIpc,
+    FakePhase5PaintMetricsController,
     existsSync,
     readyHealth,
     nativeState,
@@ -396,6 +413,10 @@ vi.mock('./tray-controller.js', () => ({ TrayController: mocks.FakeTrayControlle
 vi.mock('./ui-shell-ipc.js', () => ({ registerUiShellIpc: mocks.registerUiShellIpc }));
 vi.mock('./selection-card-ipc.js', () => ({
   registerSelectionCardIpc: mocks.registerSelectionCardIpc
+}));
+vi.mock('../metrics/paint-ack-metrics.js', () => ({
+  Phase5PaintMetricsController: mocks.FakePhase5PaintMetricsController,
+  registerPhase5PaintAckIpc: mocks.registerPhase5PaintAckIpc
 }));
 
 import { ShellController } from './shell-controller.js';
@@ -547,6 +568,7 @@ describe('ShellController', () => {
     mocks.credentialState.encrypted = undefined;
     mocks.settingsState.rejectAnchor = false;
     mocks.startupState.windowStart = Promise.resolve();
+    mocks.startupState.trayStart = Promise.resolve();
     mocks.startupState.recreateWindowAfterStart = false;
     mocks.nativeState.rejectStart = false;
     mocks.nativeState.rejectStop = false;
@@ -589,6 +611,9 @@ describe('ShellController', () => {
     mocks.ipcDispose.mockClear();
     mocks.registerSelectionCardIpc.mockClear();
     mocks.cardIpcDispose.mockClear();
+    mocks.FakePhase5PaintMetricsController.instances.length = 0;
+    mocks.registerPhase5PaintAckIpc.mockClear();
+    mocks.paintIpcDispose.mockClear();
     mocks.nativeTheme.themeSource = 'system';
   });
 
@@ -622,6 +647,66 @@ describe('ShellController', () => {
     }
   );
 
+  it('fails closed, stops Native listening, removes credentials, and schedules full local-data reset', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    const transport = pendingTranslationTransport();
+    const requestLocalDataReset = vi.fn().mockResolvedValue(undefined);
+    const controller = new ShellController({
+      requestQuit: vi.fn(),
+      requestLocalDataReset,
+      translationTransport: transport
+    });
+    await controller.start();
+    await flushAsyncWork();
+    const signal = await beginOnlineTranslation(controller, transport.send);
+    const supervisor = latestSupervisor();
+    const settings = latestSettings();
+
+    await controller.clearAllLocalData();
+
+    expect(signal.aborted).toBe(true);
+    expect(supervisor.request).toHaveBeenCalledWith('stop', { reason: 'local-data-reset' });
+    expect(supervisor.stop).toHaveBeenCalledOnce();
+    expect(settings.setSelectionEnabled).toHaveBeenLastCalledWith(false);
+    expect(settings.setTranslationEnabled).toHaveBeenLastCalledWith(false);
+    expect(settings.resetTranslationConsent).toHaveBeenCalledOnce();
+    expect(latestSecrets().delete).toHaveBeenCalledOnce();
+    expect(controller.getDebugState().snapshot).toMatchObject({
+      selection: { enabled: false, lifecycle: 'disabled' },
+      translation: { enabled: false, credentialStatus: 'missing', consentVersion: 0 }
+    });
+    expect(requestLocalDataReset).toHaveBeenCalledOnce();
+    expect(mocks.ipcDispose).toHaveBeenCalledOnce();
+
+    await controller.dispose();
+    expect(supervisor.stop).toHaveBeenCalledOnce();
+    expect(mocks.FakeDatabaseSync.instances.at(-1)?.close).toHaveBeenCalledOnce();
+  });
+
+  it('keeps capabilities disabled and permits a reset retry when helper scheduling fails', async () => {
+    const requestLocalDataReset = vi.fn()
+      .mockRejectedValueOnce(new Error('helper spawn failed'))
+      .mockResolvedValueOnce(undefined);
+    const controller = new ShellController({
+      requestQuit: vi.fn(),
+      requestLocalDataReset
+    });
+    await controller.start();
+
+    await expect(controller.clearAllLocalData()).rejects.toThrow(/helper spawn failed/u);
+    expect(controller.getDebugState().snapshot).toMatchObject({
+      selection: { enabled: false, lifecycle: 'disabled' },
+      translation: { enabled: false }
+    });
+    expect(mocks.ipcDispose).not.toHaveBeenCalled();
+
+    await expect(controller.clearAllLocalData()).resolves.toBeUndefined();
+    expect(requestLocalDataReset).toHaveBeenCalledTimes(2);
+    expect(mocks.ipcDispose).toHaveBeenCalledOnce();
+    await controller.dispose();
+  });
+
   it('ignores selections emitted while Native Host shutdown is pending', async () => {
     process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
     mocks.existsSync.mockReturnValue(true);
@@ -654,6 +739,8 @@ describe('ShellController', () => {
     const disposal = controller.dispose();
     try {
       await vi.waitFor(() => expect(supervisor.stop).toHaveBeenCalledOnce());
+      expect(latestTray().dispose).not.toHaveBeenCalled();
+      expect(windows.dispose).not.toHaveBeenCalled();
       supervisor.emit('selection', selectionResult());
       await flushAsyncWork();
 
@@ -663,6 +750,8 @@ describe('ShellController', () => {
       releaseStop?.();
       await disposal;
     }
+    expect(latestTray().dispose).toHaveBeenCalledOnce();
+    expect(windows.dispose).toHaveBeenCalledOnce();
   });
 
   it('starts the secure shell once and remains available without a Native Host', async () => {
@@ -702,6 +791,24 @@ describe('ShellController', () => {
     const preventDefault = vi.fn();
     download({ preventDefault });
     expect(preventDefault).toHaveBeenCalledOnce();
+  });
+
+  it('starts Tray and Ball window initialization concurrently', async () => {
+    let releaseTrayStart: (() => void) | undefined;
+    mocks.startupState.trayStart = new Promise<void>((resolve) => {
+      releaseTrayStart = resolve;
+    });
+    const controller = new ShellController({ requestQuit: vi.fn() });
+
+    const starting = controller.start();
+    await vi.waitFor(() => expect(latestTray().start).toHaveBeenCalledOnce());
+
+    expect(latestWindows().start).toHaveBeenCalledOnce();
+    expect(mocks.screen.on).not.toHaveBeenCalled();
+    releaseTrayStart?.();
+    await starting;
+    expect(mocks.screen.on).toHaveBeenCalledTimes(3);
+    await controller.dispose();
   });
 
   it('loads settings and synchronizes mutations across Window and Tray state', async () => {
@@ -1229,14 +1336,64 @@ describe('ShellController', () => {
     expect(supervisor.stop).not.toHaveBeenCalled();
   });
 
+  it('records the real Main Host start-to-ready segment only when metrics are enabled', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    const metrics = {
+      enabled: true,
+      measurementMode: 'deterministic-fixture' as const,
+      beginDuration: vi.fn(() => 100),
+      recordDuration: vi.fn(),
+      close: vi.fn(async () => undefined)
+    };
+    const controller = new ShellController({ requestQuit: vi.fn(), metrics });
+    await controller.start();
+    await flushAsyncWork();
+
+    expect(metrics.beginDuration).toHaveBeenCalledOnce();
+    expect(metrics.recordDuration).toHaveBeenCalledWith({
+      metricId: 'PERF-03',
+      role: 'main',
+      scenario: 'host-ready',
+      source: 'fake-native',
+      startedAt: 100,
+      status: 'success',
+      characterCountBucket: 'not-applicable'
+    });
+    expect(mocks.registerPhase5PaintAckIpc).toHaveBeenCalledOnce();
+    expect(latestWindows().options).toMatchObject({ enablePaintMetrics: true });
+    await controller.dispose();
+    expect(mocks.paintIpcDispose).toHaveBeenCalledOnce();
+    expect(mocks.FakePhase5PaintMetricsController.instances[0]?.dispose).toHaveBeenCalledOnce();
+    expect(metrics.close).toHaveBeenCalledOnce();
+  });
+
   it('faults safely when Native startup fails', async () => {
     process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
     mocks.existsSync.mockReturnValue(true);
     mocks.nativeState.rejectStart = true;
-    const controller = new ShellController({ requestQuit: vi.fn() });
+    const metrics = {
+      enabled: true,
+      measurementMode: 'real-acquisition' as const,
+      beginDuration: vi.fn(() => 200),
+      recordDuration: vi.fn(),
+      close: vi.fn(async () => undefined)
+    };
+    const controller = new ShellController({ requestQuit: vi.fn(), metrics });
     await controller.start();
     await flushAsyncWork();
     expect(controller.getDebugState().snapshot.native.status).toBe('faulted');
+    expect(metrics.recordDuration).toHaveBeenCalledWith({
+      metricId: 'PERF-03',
+      role: 'main',
+      scenario: 'host-ready',
+      source: 'native-host',
+      startedAt: 200,
+      status: 'failure',
+      errorCode: 'HOST_NOT_READY',
+      characterCountBucket: 'not-applicable'
+    });
+    await controller.dispose();
   });
 
   it('accepts listening health as the expected Phase 4 state', async () => {

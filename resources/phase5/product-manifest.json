@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "productName": "Desktop Translate",
+  "canonicalVersion": "0.5.0-phase5",
+  "windowsFileVersion": "0.5.0.0",
+  "architecture": "x64",
+  "installer": {
+    "technology": "NSIS",
+    "scope": "per-user",
+    "requiresElevation": false,
+    "deleteAppDataOnUninstall": false
+  },
+  "nativeRuntime": {
+    "toolchain": "MSVC x64",
+    "runtimeLibrary": "/MT",
+    "ocr": "Windows.Media.Ocr",
+    "packagedModels": false
+  },
+  "updates": {
+    "mode": "signed-manual-RC",
+    "automaticUpdateEnabled": false
+  }
+}
