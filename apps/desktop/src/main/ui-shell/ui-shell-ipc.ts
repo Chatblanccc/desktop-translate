@@ -5,6 +5,7 @@ import {
   isSetSelectionEnabledPayload,
   isSetOcrActivationPayload,
   isClearAllLocalDataPayload,
+  type BaiduCredentialSummary,
   type OcrActivation,
   type ThemeMode,
   type UiShellSnapshot
@@ -46,6 +47,7 @@ export interface UiShellIpcActions {
   setTranslationEnabled(value: boolean): Promise<void>;
   setTranslationSourceLanguage(value: string): Promise<void>;
   setTranslationTargetLanguage(value: string): Promise<void>;
+  getBaiduCredentialSummary(): Promise<BaiduCredentialSummary>;
   saveBaiduCredentials(
     credentials: { readonly appId: string; readonly secretKey: string },
     consentVersion: number
@@ -192,6 +194,11 @@ export function registerUiShellIpc(options: UiShellIpcOptions): () => void {
       throw new TypeError('Invalid translation language request');
     }
     await actions.setTranslationTargetLanguage(args[0].value);
+  });
+  ipcMain.handle(UI_SHELL_CHANNELS.getBaiduCredentialSummary, async (event, ...args) => {
+    assertRole(event, resolveRole, ['settings']);
+    assertNoArguments(args);
+    return await actions.getBaiduCredentialSummary();
   });
   ipcMain.handle(UI_SHELL_CHANNELS.saveBaiduCredentials, async (event, ...args) => {
     assertRole(event, resolveRole, ['settings']);

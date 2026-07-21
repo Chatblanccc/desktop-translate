@@ -7,6 +7,7 @@ export const MAX_SELECTION_RECTS = 256 as const;
 
 export type NativeCapability =
   | "mouse-hook"
+  | "pointer-down-events"
   | "uia-selection"
   | "uia-point-approximation"
   | "desktop-capture"
@@ -46,6 +47,11 @@ export type SelectionSource = "uia" | "uia-point-approx" | "ocr";
 export interface PhysicalPoint {
   readonly x: number;
   readonly y: number;
+}
+
+export interface PointerDownPayload {
+  readonly point: PhysicalPoint;
+  readonly coordinateSpace: "physical-px";
 }
 
 export interface PhysicalRect extends PhysicalPoint {
@@ -164,6 +170,7 @@ export type ShutdownRequest = RequestEnvelope<
   { readonly reason?: string; readonly gracePeriodMs?: number }
 >;
 export type ShutdownResponse = ResponseEnvelope<"shutdown", { readonly ok: true }>;
+export type PointerDownEvent = EventEnvelope<"input/pointer-down", PointerDownPayload>;
 export type SelectionResultEvent = EventEnvelope<"selection/result", SelectionResult>;
 
 export type HostErrorScope = "protocol" | "hook" | "uia" | "capture" | "ocr" | "host";
@@ -180,7 +187,7 @@ export type HostErrorEvent = EventEnvelope<"host/error", HostError>;
 
 export type NativeRequest = HelloRequest | HealthRequest | StartRequest | StopRequest | ShutdownRequest;
 export type NativeResponse = ReadyResponse | HealthResponse | StartResponse | StopResponse | ShutdownResponse;
-export type NativeEvent = SelectionResultEvent | HostErrorEvent;
+export type NativeEvent = PointerDownEvent | SelectionResultEvent | HostErrorEvent;
 export type NativeMessage = NativeRequest | NativeResponse | NativeEvent;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -281,9 +288,14 @@ function isUtf16Boundary(value: string, offset: number): boolean {
 }
 
 function isCapability(value: unknown): value is NativeCapability {
-  return ["mouse-hook", "uia-selection", "uia-point-approximation", "desktop-capture", "ocr"].includes(
-    value as NativeCapability,
-  );
+  return [
+    "mouse-hook",
+    "pointer-down-events",
+    "uia-selection",
+    "uia-point-approximation",
+    "desktop-capture",
+    "ocr",
+  ].includes(value as NativeCapability);
 }
 
 function isStartConfig(value: unknown): value is StartConfig {
@@ -367,6 +379,10 @@ function isBaseEnvelope(value: unknown): value is Record<string, unknown> {
 export function isNativeMessage(value: unknown): value is NativeMessage {
   if (!isBaseEnvelope(value) || !isRecord(value.payload)) return false;
   const payload = value.payload;
+  if (value.kind === "event" && value.method === "input/pointer-down") {
+    return hasOnlyKeys(payload, ["point", "coordinateSpace"]) &&
+      isPhysicalPoint(payload.point) && payload.coordinateSpace === "physical-px";
+  }
   if (value.kind === "event" && value.method === "selection/result") {
     return isSelectionResult(payload) && Date.parse(value.timestamp as string) >= Date.parse(payload.timestamp);
   }

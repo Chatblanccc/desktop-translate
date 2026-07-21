@@ -11,8 +11,17 @@ import {
 
 afterEach(cleanup);
 
+const STORED_SECRET_MASK = '••••••••••••';
+
+type SettingsViewLabel = '常规与外观' | '划词取词' | '在线翻译' | '隐私与关于';
+
+function openSettingsView(label: SettingsViewLabel): void {
+  fireEvent.click(screen.getByRole('button', { name: label }));
+}
+
 function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT): {
   readonly api: SettingsRendererApi;
+  readonly getBaiduCredentialSummary: ReturnType<typeof vi.fn>;
   readonly setBallVisible: ReturnType<typeof vi.fn>;
   readonly setEdgeSnap: ReturnType<typeof vi.fn>;
   readonly setTheme: ReturnType<typeof vi.fn>;
@@ -30,6 +39,11 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
   readonly clearAllLocalData: ReturnType<typeof vi.fn>;
   readonly unsubscribe: ReturnType<typeof vi.fn>;
 } {
+  const getBaiduCredentialSummary = vi.fn().mockResolvedValue(
+    snapshot.translation.credentialStatus === 'configured'
+      ? { appId: 'configured-app-id', secretConfigured: true }
+      : { appId: '', secretConfigured: false }
+  );
   const setBallVisible = vi.fn().mockResolvedValue(undefined);
   const setEdgeSnap = vi.fn().mockResolvedValue(undefined);
   const setTheme = vi.fn().mockResolvedValue(undefined);
@@ -50,6 +64,7 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
   return {
     api: {
       getSnapshot: vi.fn().mockResolvedValue(snapshot),
+      getBaiduCredentialSummary,
       onSnapshotChanged: vi.fn().mockReturnValue(unsubscribe),
       setBallVisible,
       setEdgeSnap,
@@ -67,6 +82,7 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
       resetBallPosition,
       clearAllLocalData
     },
+    getBaiduCredentialSummary,
     setBallVisible,
     setEdgeSnap,
     setTheme,
@@ -87,17 +103,26 @@ function createSettingsApi(snapshot: UiShellSnapshot = DEFAULT_UI_SHELL_SNAPSHOT
 }
 
 describe('SettingsApp', () => {
-  it('labels the release-hardening surface as a Phase 5 candidate', async () => {
+  it('presents the Phase 6 settings navigation without internal phase labels', async () => {
     const { api } = createSettingsApi();
     render(<SettingsApp api={api} />);
 
-    expect(await screen.findByText('Phase 5 · 发布候选验证')).toBeTruthy();
-    expect(screen.queryByText('Phase 4 · 内部开发预览')).toBeNull();
+    expect(await screen.findByRole('navigation')).toBeTruthy();
+    expect(screen.getByRole('button', { name: '划词取词' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('heading', { name: '划词取词' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: '常规' })).toBeNull();
+
+    openSettingsView('常规与外观');
+    expect(screen.getByRole('button', { name: '常规与外观' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('heading', { name: '常规' })).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: '划词取词' })).toBeNull();
+    expect(screen.queryByText(/Phase \d/u)).toBeNull();
   });
 
   it('requires a two-step exact confirmation before clearing all local data', async () => {
     const { api, clearAllLocalData } = createSettingsApi();
     render(<SettingsApp api={api} />);
+    openSettingsView('隐私与关于');
 
     const begin = await screen.findByRole('button', { name: '开始清除…' });
     await waitFor(() => expect((begin as HTMLButtonElement).disabled).toBe(false));
@@ -123,6 +148,7 @@ describe('SettingsApp', () => {
   it('can cancel the destructive confirmation without invoking Main', async () => {
     const { api, clearAllLocalData } = createSettingsApi();
     render(<SettingsApp api={api} />);
+    openSettingsView('隐私与关于');
     const begin = await screen.findByRole('button', { name: '开始清除…' });
     await waitFor(() => expect((begin as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(begin);
@@ -135,6 +161,7 @@ describe('SettingsApp', () => {
   it('exposes the planned shell controls and delegates changes', async () => {
     const { api, setBallVisible, setEdgeSnap, setTheme, resetBallPosition } = createSettingsApi();
     render(<SettingsApp api={api} />);
+    openSettingsView('常规与外观');
 
     const visibleToggle = await screen.findByRole('checkbox', { name: /显示悬浮球/ });
     const snapToggle = screen.getByRole('checkbox', { name: /自动吸附屏幕边缘/ });
@@ -165,7 +192,7 @@ describe('SettingsApp', () => {
     });
   });
 
-  it('renders degraded capabilities and the injected phase version', async () => {
+  it('renders degraded capabilities and the application version', async () => {
     const degradedSnapshot: UiShellSnapshot = {
       ...DEFAULT_UI_SHELL_SNAPSHOT,
       native: {
@@ -175,12 +202,13 @@ describe('SettingsApp', () => {
     };
     const { api } = createSettingsApi(degradedSnapshot);
     render(<SettingsApp api={api} />);
+    openSettingsView('隐私与关于');
 
     await waitFor(() => {
       expect(screen.getByText('原生服务：部分可用')).toBeTruthy();
     });
     expect(screen.getByText('OCR 未配置')).toBeTruthy();
-    expect(screen.getByText(/0\.4\.0-phase4/)).toBeTruthy();
+    expect(screen.getAllByText(/0\.5\.0/).length).toBeGreaterThan(0);
   });
 
   it('persists Phase 3 selection and OCR activation controls', async () => {
@@ -196,9 +224,10 @@ describe('SettingsApp', () => {
     fireEvent.click(selectionToggle);
     await waitFor(() => expect(setSelectionEnabled).toHaveBeenCalledWith(false));
 
-    fireEvent.click(screen.getByRole('radio', { name: '仅 Alt + 拖动' }));
+    fireEvent.click(screen.getByRole('radio', { name: /仅 Alt \+ 拖动/u }));
     await waitFor(() => expect(setOcrActivation).toHaveBeenCalledWith('alt-drag'));
-    expect(screen.getByText(/取词状态：监听中/)).toBeTruthy();
+    expect(screen.getByText(/划词取词：已启用/)).toBeTruthy();
+    expect(screen.getAllByText('服务状态：')).toHaveLength(2);
   });
 
   it('allows selection to be paused while the native host is unavailable', async () => {
@@ -245,6 +274,7 @@ describe('SettingsApp', () => {
     const {
       api,
       saveBaiduCredentials,
+      deleteBaiduCredentials,
       setTranslationEnabled,
       setTranslationSourceLanguage,
       setTranslationTargetLanguage,
@@ -262,6 +292,7 @@ describe('SettingsApp', () => {
       }
     });
     render(<SettingsApp api={api} />);
+    openSettingsView('在线翻译');
     const enabled = await screen.findByRole('checkbox', { name: /启用百度在线翻译/u });
     await waitFor(() => expect((enabled as HTMLInputElement).disabled).toBe(false));
     fireEvent.click(enabled);
@@ -277,15 +308,25 @@ describe('SettingsApp', () => {
     });
     await waitFor(() => expect(setTranslationSourceLanguage).toHaveBeenCalledWith('ja'));
 
-    fireEvent.change(screen.getByLabelText('APP ID'), { target: { value: 'app-id' } });
-    fireEvent.change(screen.getByLabelText('密钥'), { target: { value: 'secret-key' } });
+    const appIdInput = screen.getByLabelText('APP ID') as HTMLInputElement;
+    const secretInput = screen.getByLabelText('密钥') as HTMLInputElement;
+    await waitFor(() => expect(appIdInput.value).toBe('configured-app-id'));
+    expect(secretInput.type).toBe('password');
+    expect(secretInput.value).toBe('');
+    expect(secretInput.placeholder).toBe(STORED_SECRET_MASK);
+    expect(screen.getByText('密钥已安全保存；输入新密钥将替换现有密钥。')).toBeTruthy();
+
+    fireEvent.change(appIdInput, { target: { value: '  app-id  ' } });
+    fireEvent.change(secretInput, { target: { value: 'secret-key' } });
     fireEvent.click(screen.getByRole('checkbox', { name: /我已了解/u }));
     fireEvent.click(screen.getByRole('button', { name: '替换凭据' }));
     await waitFor(() => expect(saveBaiduCredentials).toHaveBeenCalledWith(
       'app-id', 'secret-key', 1
     ));
-    expect((screen.getByLabelText('APP ID') as HTMLInputElement).value).toBe('');
-    expect((screen.getByLabelText('密钥') as HTMLInputElement).value).toBe('');
+    await waitFor(() => expect(appIdInput.value).toBe('app-id'));
+    expect(secretInput.value).toBe('');
+    expect(secretInput.placeholder).toBe(STORED_SECRET_MASK);
+    expect(document.body.textContent).not.toContain('secret-key');
 
     const privacyButton = screen.getByRole('button', { name: '查看百度翻译隐私说明' });
     await waitFor(() => expect((privacyButton as HTMLButtonElement).disabled).toBe(false));
@@ -297,6 +338,72 @@ describe('SettingsApp', () => {
     await waitFor(() => expect((termsButton as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(termsButton);
     await waitFor(() => expect(openProviderServiceTerms).toHaveBeenCalledOnce());
+
+    fireEvent.click(screen.getByRole('button', { name: '删除凭据' }));
+    await waitFor(() => expect(deleteBaiduCredentials).toHaveBeenCalledOnce());
+    await waitFor(() => expect(appIdInput.value).toBe(''));
+    expect(secretInput.value).toBe('');
+    expect(secretInput.placeholder).toBe('');
+    expect(screen.queryByText('密钥已安全保存；输入新密钥将替换现有密钥。')).toBeNull();
+  });
+
+  it('keeps the credential form disabled until the safe summary is loaded', async () => {
+    const { api, getBaiduCredentialSummary } = createSettingsApi({
+      ...DEFAULT_UI_SHELL_SNAPSHOT,
+      translation: {
+        ...DEFAULT_UI_SHELL_SNAPSHOT.translation,
+        credentialStatus: 'configured',
+        consentVersion: 1
+      }
+    });
+    let resolveSummary: ((value: { appId: string; secretConfigured: true }) => void) | undefined;
+    getBaiduCredentialSummary.mockImplementation(() => new Promise((resolve) => {
+      resolveSummary = resolve;
+    }));
+
+    render(<SettingsApp api={api} />);
+    openSettingsView('在线翻译');
+    const appIdInput = await screen.findByLabelText('APP ID') as HTMLInputElement;
+    const secretInput = screen.getByLabelText('密钥') as HTMLInputElement;
+    const credentialFieldset = appIdInput.closest('fieldset') as HTMLFieldSetElement;
+
+    await waitFor(() => expect(credentialFieldset.disabled).toBe(true));
+    expect(secretInput.value).toBe('');
+    expect(secretInput.placeholder).toBe('');
+
+    resolveSummary?.({ appId: 'loaded-app-id', secretConfigured: true });
+    await waitFor(() => {
+      expect(credentialFieldset.disabled).toBe(false);
+      expect(appIdInput.value).toBe('loaded-app-id');
+    });
+    expect(secretInput.value).toBe('');
+    expect(secretInput.placeholder).toBe(STORED_SECRET_MASK);
+  });
+
+  it('fails safely when the configured credential summary cannot be read', async () => {
+    const { api, getBaiduCredentialSummary } = createSettingsApi({
+      ...DEFAULT_UI_SHELL_SNAPSHOT,
+      translation: {
+        ...DEFAULT_UI_SHELL_SNAPSHOT.translation,
+        credentialStatus: 'configured',
+        consentVersion: 1
+      }
+    });
+    getBaiduCredentialSummary.mockRejectedValue(new Error('sensitive storage detail'));
+
+    render(<SettingsApp api={api} />);
+    openSettingsView('在线翻译');
+
+    expect((await screen.findByRole('alert')).textContent).toContain(
+      '暂时无法读取已保存的凭据'
+    );
+    const appIdInput = screen.getByLabelText('APP ID') as HTMLInputElement;
+    const secretInput = screen.getByLabelText('密钥') as HTMLInputElement;
+    expect(appIdInput.value).toBe('');
+    expect(secretInput.value).toBe('');
+    expect(secretInput.placeholder).toBe('');
+    expect(appIdInput.disabled).toBe(false);
+    expect(document.body.textContent).not.toContain('sensitive storage detail');
   });
 
   it('keeps the translation toggle optimistic while Main persists it and rolls back on failure', async () => {
@@ -316,6 +423,7 @@ describe('SettingsApp', () => {
       rejectAction = reject;
     }));
     render(<SettingsApp api={api} />);
+    openSettingsView('在线翻译');
 
     const enabled = await screen.findByRole('checkbox', { name: /启用百度在线翻译/u });
     await waitFor(() => expect((enabled as HTMLInputElement).disabled).toBe(false));
@@ -345,6 +453,7 @@ describe('SettingsApp', () => {
       }
     });
     render(<SettingsApp api={api} />);
+    openSettingsView('在线翻译');
 
     const appId = await screen.findByLabelText('APP ID');
     await waitFor(() => expect((appId as HTMLInputElement).disabled).toBe(false));
@@ -375,6 +484,7 @@ describe('SettingsApp', () => {
     const { api, setBallVisible } = createSettingsApi();
     api.getSnapshot = vi.fn(() => new Promise<UiShellSnapshot>(() => undefined));
     render(<SettingsApp api={api} />);
+    openSettingsView('常规与外观');
 
     const visibleToggle = screen.getByRole('checkbox', { name: /显示悬浮球/ });
     expect((visibleToggle as HTMLInputElement).disabled).toBe(true);

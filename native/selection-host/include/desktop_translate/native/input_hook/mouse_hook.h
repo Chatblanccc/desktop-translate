@@ -48,6 +48,8 @@ class MouseHook {
   }
 
  private:
+  friend class MouseHookTestPeer;
+
   static LRESULT CALLBACK HookProcedure(int code, WPARAM message, LPARAM data) noexcept;
   void ThreadMain(std::promise<bool> started) noexcept;
   void OnHookEvent(WPARAM message, const MSLLHOOKSTRUCT& data) noexcept;

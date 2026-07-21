@@ -39,6 +39,8 @@ const electron = vi.hoisted(() => {
     public static readonly instances: FakeBrowserWindow[] = [];
     private readonly contents = new FakeWebContents();
     public readonly setAlwaysOnTop = vi.fn();
+    public readonly setBackgroundColor = vi.fn();
+    public readonly setTitleBarOverlay = vi.fn();
     public readonly showInactive = vi.fn(() => { this.visible = true; });
     public readonly moveTop = vi.fn();
     public readonly show = vi.fn(() => { this.visible = true; });
@@ -177,6 +179,8 @@ describe('secure window options', () => {
       ...initialBounds,
       frame: false,
       transparent: true,
+      backgroundColor: '#00000000',
+      hasShadow: false,
       alwaysOnTop: true,
       skipTaskbar: true,
       resizable: false,
@@ -190,9 +194,15 @@ describe('secure window options', () => {
       frame: true,
       transparent: false,
       show: false,
-      width: 720,
-      height: 640,
-      backgroundColor: '#f3f3f3'
+      width: 1000,
+      height: 720,
+      titleBarStyle: 'hidden',
+      titleBarOverlay: {
+        color: '#f7f7f7',
+        symbolColor: '#202020',
+        height: 50
+      },
+      backgroundColor: '#f7f7f7'
     });
     electron.nativeTheme.shouldUseDarkColors = true;
     expect(createSettingsWindowOptions('C:\\settings.cjs').backgroundColor).toBe('#202020');
@@ -203,8 +213,8 @@ describe('secure window options', () => {
       .toMatchObject({
         x: 10,
         y: 20,
-        width: 380,
-        height: 320,
+        width: 300,
+        height: 160,
         frame: false,
         transparent: true,
         alwaysOnTop: true,
@@ -245,7 +255,7 @@ describe('WindowManager', () => {
     expect(ball.setAlwaysOnTop).toHaveBeenCalledWith(true, 'floating');
     expect(ball.loadedFile).toMatch(/ball[\\/]index\.html$/u);
     expect(ball.webContents.insertCSS).toHaveBeenCalledWith(
-      expect.stringContaining('--color-accent: #112233ff')
+      expect.stringContaining('--color-system-accent: #112233ff')
     );
 
     const deny = ball.webContents.setWindowOpenHandler.mock.calls[0]?.[0] as () => unknown;
@@ -368,12 +378,19 @@ describe('WindowManager', () => {
     manager.openSettings();
     await Promise.resolve();
     const settings = latestWindow();
+    electron.nativeTheme.shouldUseDarkColors = true;
     manager.broadcast(DEFAULT_UI_SHELL_SNAPSHOT);
     expect(ball.webContents.send).toHaveBeenCalledWith(
       UI_SHELL_CHANNELS.snapshotChanged,
       DEFAULT_UI_SHELL_SNAPSHOT
     );
     expect(settings.webContents.send).toHaveBeenCalledOnce();
+    expect(settings.setTitleBarOverlay).toHaveBeenCalledWith({
+      color: '#202020',
+      symbolColor: '#ffffff',
+      height: 50
+    });
+    expect(settings.setBackgroundColor).toHaveBeenCalledWith('#202020');
     settings.destroy();
     expect(manager.getSettingsWindow()).toBeUndefined();
     ball.destroy();

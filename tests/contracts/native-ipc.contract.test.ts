@@ -23,6 +23,31 @@ test("selection/result accepts physical coordinates, string handles and DPI meta
   );
 });
 
+test("input/pointer-down accepts only a strict physical-pixel point payload", () => {
+  const pointerDown = {
+    v: 1,
+    kind: "event",
+    seq: 1,
+    method: "input/pointer-down",
+    timestamp: "2026-07-16T08:00:00.000Z",
+    payload: {
+      point: { x: -12, y: 44 },
+      coordinateSpace: "physical-px",
+    },
+  };
+
+  assert.equal(isNativeMessage(pointerDown), true);
+  assert.equal(
+    isNativeMessage({ ...pointerDown, payload: { ...pointerDown.payload, coordinateSpace: "dip" } }),
+    false,
+  );
+  assert.equal(
+    isNativeMessage({ ...pointerDown, payload: { ...pointerDown.payload, button: "left" } }),
+    false,
+  );
+  assert.equal(isNativeMessage({ ...pointerDown, payload: { coordinateSpace: "physical-px" } }), false);
+});
+
 test("invalid or lossy selection values are rejected at the boundary", () => {
   assert.equal(isSelectionResult({ ...selectionFixture, target: { pid: 4242, hwnd: 1 } }), false);
   assert.equal(isSelectionResult({ ...selectionFixture, source: "clipboard" }), false);
@@ -92,6 +117,44 @@ test("hello requires at least 128 bits encoded as hexadecimal", () => {
   );
   assert.equal(isNativeMessage({ ...hello, timestamp: "2026-07-16T08:00:00" }), false);
   assert.equal(isNativeMessage({ ...hello, timestamp: "2026-02-30T08:00:00Z" }), false);
+});
+
+test("hello and ready negotiate pointer-down events as an explicit capability", () => {
+  const timestamp = "2026-07-16T08:00:00.000Z";
+  const sessionNonce = "0123456789abcdef0123456789abcdef";
+  assert.equal(
+    isNativeMessage({
+      v: 1,
+      kind: "request",
+      id: "hello:pointer-down",
+      method: "hello",
+      timestamp,
+      payload: {
+        desktopVersion: "0.5.0-phase5",
+        supportedVersions: [1],
+        sessionNonce,
+        requestedCapabilities: ["mouse-hook", "pointer-down-events"],
+      },
+    }),
+    true,
+  );
+  assert.equal(
+    isNativeMessage({
+      v: 1,
+      kind: "response",
+      id: "hello:pointer-down",
+      method: "ready",
+      timestamp,
+      payload: {
+        selectedVersion: 1,
+        hostVersion: "0.5.0-phase5",
+        hostPid: "4242",
+        sessionNonce,
+        capabilities: ["mouse-hook", "pointer-down-events"],
+      },
+    }),
+    true,
+  );
 });
 
 test("start exclusions are unique Windows process basenames", () => {

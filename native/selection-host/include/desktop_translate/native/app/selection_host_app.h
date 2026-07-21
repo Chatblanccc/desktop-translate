@@ -11,6 +11,7 @@
 #include "desktop_translate/native/core/host_state_machine.h"
 #include "desktop_translate/native/input_hook/mouse_hook.h"
 #include "desktop_translate/native/ipc/named_pipe_server.h"
+#include "desktop_translate/native/ipc/sequenced_event_writer.h"
 #include "desktop_translate/native/ocr/ocr_engine.h"
 #include "desktop_translate/native/selection/selection_pipeline.h"
 #include "desktop_translate/native/uia/uia_worker.h"
@@ -35,6 +36,7 @@ class SelectionHostApp {
  private:
   [[nodiscard]] bool HandleRequest(const Envelope& envelope);
   void HandlePipelineResult(SelectionPipelineResult result) noexcept;
+  void HandlePointerDown(PhysicalPoint point) noexcept;
   [[nodiscard]] bool StartListening(const Envelope& request);
   void StopListening() noexcept;
   [[nodiscard]] bool SendResponse(const Envelope& request, std::string method,
@@ -48,6 +50,7 @@ class SelectionHostApp {
   SelectionHostOptions options_;
   HostStateMachine state_;
   NamedPipeServer pipe_server_;
+  SequencedEventWriter event_writer_;
   ParentProcessMonitor parent_monitor_;
   MouseHook mouse_hook_;
   UiaWorker uia_worker_;
@@ -56,8 +59,7 @@ class SelectionHostApp {
   std::unique_ptr<SelectionPipeline> pipeline_;
   SelectionPipelineConfig effective_config_;
   std::atomic<bool> handshake_complete_{false};
-  std::atomic<std::uint64_t> next_event_sequence_{0};
-  std::atomic<std::uint64_t> last_event_sequence_{0};
+  std::atomic<bool> pointer_down_events_enabled_{false};
   std::uint64_t started_tick_ms_{};
 };
 

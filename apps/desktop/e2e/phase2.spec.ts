@@ -13,6 +13,7 @@ const BALL_SIZE_DIP = 56;
 const BALL_MARGIN_DIP = 12;
 const PRODUCT_EXIT_TIMEOUT_MS = 30_000;
 const HARNESS_RESIDUAL_TIMEOUT_MS = 40_000;
+const STORED_SECRET_MASK = '••••••••••••';
 const failedQuitApplications = new WeakSet<ElectronApplication>();
 const applicationProcesses = new WeakMap<ElectronApplication, ChildProcess>();
 const applicationMainProcessIds = new WeakMap<ElectronApplication, number>();
@@ -604,6 +605,14 @@ async function findWindow(application: ElectronApplication, title: string): Prom
   return match!;
 }
 
+type SettingsViewLabel = '常规与外观' | '划词取词' | '在线翻译' | '隐私与关于';
+
+async function openSettingsView(settings: Page, label: SettingsViewLabel): Promise<void> {
+  const navigationButton = settings.getByRole('button', { name: label, exact: true });
+  await navigationButton.click();
+  await expect(navigationButton).toHaveAttribute('aria-current', 'page');
+}
+
 async function expectBallRendered(ball: Page): Promise<void> {
   const appearance = await ball.getByRole('button').evaluate((button) => {
     const style = getComputedStyle(button);
@@ -678,7 +687,9 @@ test('Phase 2 shell stays usable without Native Host and persists UI settings @s
 
     await ball.getByRole('button').click();
     const settings = await findWindow(application, '桌面翻译设置');
+    await openSettingsView(settings, '隐私与关于');
     await expect(settings.getByText('原生服务：未连接')).toBeVisible();
+    await openSettingsView(settings, '常规与外观');
     await settings.getByRole('checkbox', { name: /显示悬浮球/u }).click();
     await expect.poll(() => debugState(application!)).toMatchObject({ ballVisible: false });
     await settings.getByRole('checkbox', { name: /显示悬浮球/u }).click();
@@ -760,6 +771,7 @@ test('Native fixture reports degraded OCR while UIA selection remains listening 
     });
     await runningApplication.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
     const settings = await findWindow(runningApplication, '桌面翻译设置');
+    await openSettingsView(settings, '隐私与关于');
     await expect(settings.getByText('原生服务：部分可用')).toBeVisible();
     await expect(settings.getByText('OCR 未配置')).toBeVisible();
     await quitApplication(runningApplication, userData);
@@ -798,8 +810,9 @@ test('Native selection event opens a sandboxed source-only card @smoke', async (
     const card = await findWindow(runningApplication, '桌面翻译识别结果');
     await expect(card.getByRole('heading', { name: '识别结果' })).toBeVisible();
     await expect(card.getByText('Phase 4 selection preview')).toBeVisible();
-    await expect(card.getByText('应用文字')).toBeVisible();
-    await expect(card.getByText('在线翻译未启用 · 原文预览')).toBeVisible();
+    await expect(card.getByText('应用文字')).toHaveCount(0);
+    await expect(card.getByText('识别到来自应用提供的文本内容。')).toHaveCount(0);
+    await expect(card.getByText('在线翻译：未启用 · 仅显示原文')).toBeVisible();
     expect(await card.evaluate(() => typeof window.require)).toBe('undefined');
     expect(await card.evaluate(() => typeof window.process)).toBe('undefined');
     expect(await card.evaluate(() => {
@@ -839,6 +852,36 @@ test('Native selection event opens a sandboxed source-only card @smoke', async (
   }
 });
 
+test('a Native pointer-down outside the visible card dismisses it without stopping selection', async () => {
+  const userData = await mkdtemp(join(tmpdir(), 'desktop-translate-card-dismiss-'));
+  let application: ElectronApplication | undefined;
+  try {
+    application = await launch(userData, 'selection-pointer-dismiss', 'block');
+    const runningApplication = application;
+    await waitForShell(runningApplication);
+    await expect.poll(() => debugState(runningApplication)).toMatchObject({
+      snapshot: { selection: { enabled: true, lifecycle: 'listening' } },
+      cardCreated: true,
+      cardVisible: true
+    });
+
+    const card = await findWindow(runningApplication, '桌面翻译识别结果');
+    await expect(card.getByText('Phase 4 selection preview')).toBeVisible();
+
+    await expect.poll(() => debugState(runningApplication), { timeout: 5_000 }).toMatchObject({
+      snapshot: { selection: { enabled: true, lifecycle: 'listening' } },
+      cardCreated: true,
+      cardVisible: false
+    });
+  } finally {
+    try {
+      if (application !== undefined) await quitApplication(application, userData);
+    } finally {
+      await removeUserData(userData);
+    }
+  }
+});
+
 test('Phase 4 translation is fail-closed until credentials and consent are saved', async () => {
   const userData = await mkdtemp(join(tmpdir(), 'desktop-translate-phase4-settings-'));
   let application: ElectronApplication | undefined;
@@ -860,21 +903,27 @@ test('Phase 4 translation is fail-closed until credentials and consent are saved
 
     await runningApplication.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
     const settings = await findWindow(runningApplication, '桌面翻译设置');
+    await openSettingsView(settings, '在线翻译');
     const translationToggle = settings.getByRole('checkbox', { name: /启用百度在线翻译/u });
     await expect(translationToggle).toBeDisabled();
     await expect(settings.locator('.provider-status')).toContainText('未配置凭据');
 
-    await settings.getByLabel('APP ID', { exact: true }).fill('phase4-e2e-app');
-    await settings.getByLabel('密钥', { exact: true }).fill('phase4-e2e-secret');
+    const appIdInput = settings.getByLabel('APP ID', { exact: true });
+    const secretInput = settings.getByLabel('密钥', { exact: true });
+    await appIdInput.fill('phase4-e2e-app');
+    await secretInput.fill('phase4-e2e-secret');
     await settings.getByRole('checkbox', { name: /我已了解/u }).check();
     await settings.getByRole('button', { name: '保存凭据' }).click();
 
     await expect(settings.locator('.provider-status')).toContainText('凭据已配置');
     await expect(settings.locator('.provider-status')).toContainText('凭据已安全保存');
-    await expect(settings.getByLabel('APP ID', { exact: true })).toHaveValue('');
-    await expect(settings.getByLabel('密钥', { exact: true })).toHaveValue('');
-    expect(await settings.locator('body').innerText()).not.toContain('phase4-e2e-app');
+    await expect(appIdInput).toHaveValue('phase4-e2e-app');
+    await expect(secretInput).toHaveValue('');
+    await expect(secretInput).toHaveAttribute('placeholder', STORED_SECRET_MASK);
+    await expect(settings.getByText('密钥已安全保存；输入新密钥将替换现有密钥。')).toBeVisible();
     expect(await settings.locator('body').innerText()).not.toContain('phase4-e2e-secret');
+    expect(await settings.locator('html').evaluate((element) => element.outerHTML))
+      .not.toContain('phase4-e2e-secret');
     await expectEncryptedStorageDoesNotContain(userData, 'phase4-e2e-app');
     await expectEncryptedStorageDoesNotContain(userData, 'phase4-e2e-secret');
     await expect.poll(() => debugState(runningApplication)).toMatchObject({
@@ -905,6 +954,11 @@ test('Phase 4 translation is fail-closed until credentials and consent are saved
       }
     });
     await expect(translationToggle).toBeDisabled();
+    await expect(appIdInput).toHaveValue('');
+    await expect(secretInput).toHaveValue('');
+    await expect(secretInput).not.toHaveAttribute('placeholder', STORED_SECRET_MASK);
+    await expect(settings.getByText('密钥已安全保存；输入新密钥将替换现有密钥。'))
+      .toHaveCount(0);
     expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
   } finally {
     try {
@@ -923,6 +977,7 @@ test('Phase 4 settings survive a full restart and credential deletion stays fail
     await waitForShell(application);
     await application.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
     const initialSettings = await findWindow(application, '桌面翻译设置');
+    await openSettingsView(initialSettings, '在线翻译');
 
     await initialSettings.locator('#translation-source-language').selectOption('en');
     await initialSettings.locator('#translation-target-language').selectOption('ja');
@@ -968,6 +1023,17 @@ test('Phase 4 settings survive a full restart and credential deletion stays fail
     });
     expect(await readJsonLines(join(userData, 'main-fetches.log'))).toEqual([]);
 
+    await application.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
+    const validRestartSettings = await findWindow(application, '桌面翻译设置');
+    await openSettingsView(validRestartSettings, '在线翻译');
+    const validRestartAppId = validRestartSettings.getByLabel('APP ID', { exact: true });
+    const validRestartSecret = validRestartSettings.getByLabel('密钥', { exact: true });
+    await expect(validRestartAppId).toHaveValue('phase4-restart-app');
+    await expect(validRestartSecret).toHaveValue('');
+    await expect(validRestartSecret).toHaveAttribute('placeholder', STORED_SECRET_MASK);
+    expect(await validRestartSettings.locator('html').evaluate((element) => element.outerHTML))
+      .not.toContain('phase4-restart-secret');
+
     await quitApplication(application, userData);
     corruptStoredBaiduCredentials(userData);
     application = await launch(userData, undefined, 'block');
@@ -988,6 +1054,7 @@ test('Phase 4 settings survive a full restart and credential deletion stays fail
 
     await application.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
     const restartedSettings = await findWindow(application, '桌面翻译设置');
+    await openSettingsView(restartedSettings, '在线翻译');
     await expect(restartedSettings.locator('#translation-source-language')).toHaveValue('en');
     await expect(restartedSettings.locator('#translation-target-language')).toHaveValue('ja');
     const restartedTranslationToggle = restartedSettings.getByRole('checkbox', {
@@ -996,6 +1063,10 @@ test('Phase 4 settings survive a full restart and credential deletion stays fail
     await expect(restartedTranslationToggle).not.toBeChecked();
     await expect(restartedTranslationToggle).toBeDisabled();
     await expect(restartedSettings.locator('.provider-status')).toContainText('不可用');
+    await expect(restartedSettings.getByLabel('APP ID', { exact: true })).toHaveValue('');
+    await expect(restartedSettings.getByLabel('密钥', { exact: true })).toHaveValue('');
+    await expect(restartedSettings.getByLabel('密钥', { exact: true }))
+      .not.toHaveAttribute('placeholder', STORED_SECRET_MASK);
     const recoveryDeleteButton = restartedSettings.getByRole('button', { name: '删除凭据' });
     await expect(recoveryDeleteButton).toBeEnabled();
     await recoveryDeleteButton.click();
@@ -1051,6 +1122,7 @@ test('Phase 4 runs the translated card chain through the allowlisted Main transp
 
     await runningApplication.evaluate(() => globalThis.__desktopTranslateTestApi?.openSettings());
     const settings = await findWindow(runningApplication, '桌面翻译设置');
+    await openSettingsView(settings, '在线翻译');
     await settings.getByLabel('APP ID', { exact: true }).fill('phase4-e2e-app');
     await settings.getByLabel('密钥', { exact: true }).fill('phase4-e2e-secret');
     await settings.getByRole('checkbox', { name: /我已了解/u }).check();
@@ -1065,6 +1137,7 @@ test('Phase 4 runs the translated card chain through the allowlisted Main transp
       snapshot: { translation: { enabled: true } }
     });
 
+    await openSettingsView(settings, '划词取词');
     const selectionToggle = settings.getByRole('checkbox', { name: /启用划词取词/u });
     await selectionToggle.uncheck();
     await expect.poll(() => debugState(runningApplication)).toMatchObject({
@@ -1079,7 +1152,7 @@ test('Phase 4 runs the translated card chain through the allowlisted Main transp
 
     const card = await findWindow(runningApplication, '桌面翻译识别结果');
     await expect(card.getByRole('heading', { name: '翻译结果' })).toBeVisible();
-    await expect(card.getByText('Phase 4 selection preview')).toBeVisible();
+    await expect(card.getByText('Phase 4 selection preview')).toHaveCount(0);
     await expect(card.getByText('E2E translated (25)')).toBeVisible();
     await expect(card.getByText('百度翻译')).toBeVisible();
 

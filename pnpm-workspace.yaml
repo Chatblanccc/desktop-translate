@@ -5,3 +5,5 @@ packages:
 onlyBuiltDependencies:
   - electron
   - esbuild
+patchedDependencies:
+  '@fluentui/react-icons@2.0.316': patches/@fluentui__react-icons@2.0.316.patch

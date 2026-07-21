@@ -178,12 +178,13 @@ bool SpansMultipleMonitors(PhysicalRect roi) {
 
 SelectionPipeline::SelectionPipeline(MouseHook& mouse_hook, UiaWorker& uia_worker,
                                      IScreenCapture& screen_capture, IOcrEngine& ocr_engine,
-                                     ResultSink result_sink)
+                                     ResultSink result_sink, PointerDownSink pointer_down_sink)
     : mouse_hook_(mouse_hook),
       uia_worker_(uia_worker),
       screen_capture_(screen_capture),
       ocr_engine_(ocr_engine),
-      result_sink_(std::move(result_sink)) {}
+      result_sink_(std::move(result_sink)),
+      pointer_down_sink_(std::move(pointer_down_sink)) {}
 
 SelectionPipeline::~SelectionPipeline() { Stop(); }
 
@@ -249,6 +250,9 @@ void SelectionPipeline::ThreadMain() noexcept {
 
     switch (event.kind) {
       case MouseEventKind::kLeftDown:
+        if (pointer_down_sink_) {
+          try { pointer_down_sink_(event.point); } catch (...) {}
+        }
         button_down = true;
         moved = false;
         current_alt_down = event.alt_down;

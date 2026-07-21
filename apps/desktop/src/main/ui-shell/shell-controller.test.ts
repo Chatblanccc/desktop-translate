@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => {
   const screen = {
     getPrimaryDisplay: vi.fn(() => primaryDisplay),
     getAllDisplays: vi.fn(() => [primaryDisplay, secondaryDisplay]),
+    getCursorScreenPoint: vi.fn(() => ({ x: 960, y: 516 })),
     screenToDipRect: vi.fn((_window: unknown, rect: object) => rect),
     getDisplayNearestPoint: vi.fn(() => primaryDisplay),
     on: vi.fn((event: string, handler: EventHandler) => {
@@ -281,7 +282,7 @@ const mocks = vi.hoisted(() => {
     }
   }
 
-  const existsSync = vi.fn(() => false);
+  const existsSync = vi.fn((_path: string) => false);
   const readyHealth: HealthResponse = {
     v: 1,
     kind: 'response',
@@ -585,6 +586,8 @@ describe('ShellController', () => {
     mocks.screen.getPrimaryDisplay.mockReturnValue(mocks.primaryDisplay);
     mocks.screen.getAllDisplays.mockClear();
     mocks.screen.getAllDisplays.mockReturnValue([mocks.primaryDisplay, mocks.secondaryDisplay]);
+    mocks.screen.getCursorScreenPoint.mockClear();
+    mocks.screen.getCursorScreenPoint.mockReturnValue({ x: 960, y: 516 });
     mocks.screen.screenToDipRect.mockClear();
     mocks.screen.screenToDipRect.mockImplementation((_window: unknown, rect: object) => rect);
     mocks.screen.getDisplayNearestPoint.mockClear();
@@ -793,6 +796,40 @@ describe('ShellController', () => {
     expect(preventDefault).toHaveBeenCalledOnce();
   });
 
+  it('discovers a built Native Host when a direct development launch omits the path', async () => {
+    const discoveredHost = [
+      'C:\\repo',
+      'native',
+      'out',
+      'build',
+      'windows-x64-llvm-mingw',
+      'selection-host',
+      'selection-host.exe'
+    ].join('\\');
+    mocks.existsSync.mockImplementation((path) => path === discoveredHost);
+    const controller = new ShellController({ requestQuit: vi.fn() });
+
+    await controller.start();
+    await flushAsyncWork();
+
+    expect(latestSupervisor().options).toMatchObject({ executablePath: discoveredHost });
+    expect(controller.getDebugState().snapshot.native.status).toBe('ready');
+    await controller.dispose();
+  });
+
+  it('keeps an explicitly empty Native Host path unavailable during isolated launches', async () => {
+    process.env.SELECTION_HOST_PATH = '';
+    mocks.existsSync.mockReturnValue(true);
+    const controller = new ShellController({ requestQuit: vi.fn() });
+
+    await controller.start();
+    await flushAsyncWork();
+
+    expect(mocks.existsSync).not.toHaveBeenCalled();
+    expect(mocks.FakeNativeHostSupervisor.instances).toHaveLength(0);
+    expect(controller.getDebugState().snapshot.native.status).toBe('unavailable');
+  });
+
   it('starts Tray and Ball window initialization concurrently', async () => {
     let releaseTrayStart: (() => void) | undefined;
     mocks.startupState.trayStart = new Promise<void>((resolve) => {
@@ -809,6 +846,96 @@ describe('ShellController', () => {
     await starting;
     expect(mocks.screen.on).toHaveBeenCalledTimes(3);
     await controller.dispose();
+  });
+
+  it('places and persists a missing Ball anchor on the display under the cursor', async () => {
+    mocks.screen.getCursorScreenPoint.mockReturnValue({ x: -640, y: 400 });
+    mocks.screen.getDisplayNearestPoint.mockReturnValue(mocks.secondaryDisplay);
+    const controller = new ShellController({ requestQuit: vi.fn() });
+
+    await controller.start();
+
+    expect(mocks.screen.getDisplayNearestPoint).toHaveBeenCalledWith({ x: -640, y: 400 });
+    expect(latestSettings().setBallAnchor).toHaveBeenCalledOnce();
+    expect(latestSettings().setBallAnchor).toHaveBeenCalledWith({
+      displayId: '2', edge: 'right', verticalRatio: 0.6
+    });
+    expect(latestWindows().options.initialBallBounds).toEqual({
+      x: -68, y: 554, width: 56, height: 56
+    });
+    expect(latestWindows().options.initialBallVisible).toBe(true);
+    expect(latestSettings().setBallVisible).not.toHaveBeenCalled();
+    expect(controller.getDebugState().snapshot.ball).toMatchObject({
+      visible: true,
+      anchor: { displayId: '2', edge: 'right', verticalRatio: 0.6 }
+    });
+  });
+
+  it('still starts and shows the Ball when the default anchor cannot be persisted', async () => {
+    mocks.settingsState.rejectAnchor = true;
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const controller = new ShellController({ requestQuit: vi.fn() });
+
+    await expect(controller.start()).resolves.toBeUndefined();
+
+    expect(warning).toHaveBeenCalledWith(
+      '[phase2:display] Failed to persist the default ball position.'
+    );
+    expect(latestWindows().start).toHaveBeenCalledOnce();
+    expect(latestWindows().options.initialBallVisible).toBe(true);
+    expect(controller.getDebugState().snapshot.ball.anchor).toEqual({
+      displayId: '1', edge: 'right', verticalRatio: 0.6
+    });
+    warning.mockRestore();
+  });
+
+  it('preserves a custom Ball anchor without consulting or rewriting the cursor display', async () => {
+    const anchor: BallAnchor = { displayId: '2', edge: 'left', verticalRatio: 0.25 };
+    mocks.settingsState.loadResult.ball = { visible: false, edgeSnap: true, anchor };
+    mocks.screen.getDisplayNearestPoint.mockReturnValue(mocks.primaryDisplay);
+    const controller = new ShellController({ requestQuit: vi.fn() });
+
+    await controller.start();
+
+    expect(mocks.screen.getCursorScreenPoint).not.toHaveBeenCalled();
+    expect(mocks.screen.getDisplayNearestPoint).not.toHaveBeenCalled();
+    expect(latestSettings().setBallAnchor).not.toHaveBeenCalled();
+    expect(latestWindows().options.initialBallBounds).toEqual({
+      x: -1268, y: 238, width: 56, height: 56
+    });
+    expect(controller.getDebugState().snapshot.ball).toEqual({
+      visible: false,
+      edgeSnap: true,
+      anchor
+    });
+  });
+
+  it('resets the Ball to the display under the cursor without changing visibility', async () => {
+    const anchor: BallAnchor = { displayId: '1', edge: 'left', verticalRatio: 0.2 };
+    mocks.settingsState.loadResult.ball = { visible: false, edgeSnap: true, anchor };
+    mocks.screen.getCursorScreenPoint.mockReturnValue({ x: -900, y: 300 });
+    mocks.screen.getDisplayNearestPoint.mockReturnValue(mocks.secondaryDisplay);
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    const settings = latestSettings();
+    const windows = latestWindows();
+
+    await controller.resetBallPosition();
+
+    expect(mocks.screen.getDisplayNearestPoint).toHaveBeenCalledWith({ x: -900, y: 300 });
+    expect(settings.setBallAnchor).toHaveBeenCalledOnce();
+    expect(settings.setBallAnchor).toHaveBeenCalledWith({
+      displayId: '2', edge: 'right', verticalRatio: 0.6
+    });
+    expect(windows.setBallBounds).toHaveBeenLastCalledWith({
+      x: -68, y: 554, width: 56, height: 56
+    });
+    expect(settings.setBallVisible).not.toHaveBeenCalled();
+    expect(controller.getDebugState().snapshot.ball).toMatchObject({
+      visible: false,
+      anchor: { displayId: '2', edge: 'right', verticalRatio: 0.6 }
+    });
+    expect(controller.getDebugState().ballVisible).toBe(false);
   });
 
   it('loads settings and synchronizes mutations across Window and Tray state', async () => {
@@ -886,6 +1013,10 @@ describe('ShellController', () => {
     const serializedSnapshot = JSON.stringify(controller.getDebugState().snapshot);
     expect(serializedSnapshot).not.toContain('phase4-app');
     expect(serializedSnapshot).not.toContain('phase4-key');
+    const credentialSummary = await controller.getBaiduCredentialSummary();
+    expect(credentialSummary).toEqual({ appId: 'phase4-app', secretConfigured: true });
+    expect(credentialSummary).not.toHaveProperty('secretKey');
+    expect(JSON.stringify(credentialSummary)).not.toContain('phase4-key');
 
     await controller.setTranslationEnabled(true);
     await controller.setTranslationSourceLanguage('ja');
@@ -918,6 +1049,10 @@ describe('ShellController', () => {
       credentialStatus: 'missing',
       consentVersion: 0
     });
+    await expect(controller.getBaiduCredentialSummary()).resolves.toEqual({
+      appId: '',
+      secretConfigured: false
+    });
   });
 
   it('starts fail-closed when the Electron async safeStorage backend rejects', async () => {
@@ -939,6 +1074,39 @@ describe('ShellController', () => {
       credentialStatus: 'unavailable',
       consentVersion: 1
     });
+  });
+
+  it('fails closed and returns no credential material when summary decryption fails', async () => {
+    mocks.credentialState.encrypted = Buffer.from(JSON.stringify({
+      version: 1,
+      appId: 'configured-app',
+      secretKey: 'configured-secret-sentinel'
+    }), 'utf8');
+    mocks.settingsState.loadResult.translation = {
+      enabled: true,
+      providerId: 'baidu',
+      sourceLanguage: 'auto',
+      targetLanguage: 'zh-CN',
+      consentVersion: 1
+    };
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      enabled: true,
+      credentialStatus: 'configured'
+    });
+    mocks.safeStorage.decryptStringAsync.mockRejectedValueOnce(
+      new Error('configured-secret-sentinel')
+    );
+
+    const read = controller.getBaiduCredentialSummary();
+    await expect(read).rejects.toThrow('Provider credential summary is unavailable');
+    await expect(read).rejects.not.toThrow('configured-secret-sentinel');
+    expect(controller.getDebugState().snapshot.translation).toMatchObject({
+      enabled: false,
+      credentialStatus: 'unavailable'
+    });
+    expect(latestSettings().setTranslationEnabled).toHaveBeenCalledWith(false);
   });
 
   it('disables repeated translation attempts after a runtime credential decrypt failure', async () => {
@@ -1150,6 +1318,10 @@ describe('ShellController', () => {
       { appId: 'phase4-ipc-app', secretKey: 'phase4-ipc-key' },
       1
     );
+    await expect(registration.actions.getBaiduCredentialSummary?.()).resolves.toEqual({
+      appId: 'phase4-ipc-app',
+      secretConfigured: true
+    });
     await registration.actions.setTranslationEnabled?.(true);
     await registration.actions.setTranslationSourceLanguage?.('ja');
     await registration.actions.setTranslationTargetLanguage?.('en');
@@ -1499,7 +1671,7 @@ describe('ShellController', () => {
       sourceText: 'Phase Three source text',
       source: 'ocr',
       confidence: 0.75
-    }, { x: 210, y: 175, width: 380, height: 320 });
+    }, { x: 250, y: 175, width: 300, height: 160 });
     expect(controller.getDebugState()).toMatchObject({ cardCreated: true, cardVisible: true });
 
     latestWindows().presentSelectionCard.mockClear();
@@ -1514,6 +1686,50 @@ describe('ShellController', () => {
     latestWindows().presentSelectionCard.mockClear();
     supervisor.emit('selection', selectionResult());
     expect(latestWindows().presentSelectionCard).not.toHaveBeenCalled();
+  });
+
+  it('dismisses a visible card on the next real pointer-down outside its bounds', async () => {
+    process.env.SELECTION_HOST_PATH = 'C:\\native\\selection-host.exe';
+    mocks.existsSync.mockReturnValue(true);
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    await flushAsyncWork();
+    const supervisor = latestSupervisor();
+    const windows = latestWindows();
+
+    supervisor.emit('pointerDown', {
+      point: { x: 100, y: 100 },
+      coordinateSpace: 'physical-px'
+    });
+    expect(windows.dismissSelectionCard).not.toHaveBeenCalled();
+
+    supervisor.emit('selection', selectionResult());
+    expect(controller.getDebugState()).toMatchObject({ cardVisible: true });
+    windows.dismissSelectionCard.mockClear();
+
+    supervisor.emit('pointerDown', {
+      point: { x: 700, y: 350 },
+      coordinateSpace: 'physical-px'
+    });
+    expect(windows.dismissSelectionCard).not.toHaveBeenCalled();
+
+    supervisor.emit('pointerDown', {
+      point: { x: 100, y: 100 },
+      coordinateSpace: 'physical-px'
+    });
+    expect(windows.dismissSelectionCard).toHaveBeenCalledOnce();
+    expect(controller.getDebugState()).toMatchObject({ cardVisible: false });
+
+    supervisor.emit('pointerDown', {
+      point: { x: 100, y: 100 },
+      coordinateSpace: 'physical-px'
+    });
+    expect(windows.dismissSelectionCard).toHaveBeenCalledOnce();
+
+    supervisor.emit('selection', selectionResult({
+      selectionId: '123e4567-e89b-42d3-a456-426614174001'
+    }));
+    expect(controller.getDebugState()).toMatchObject({ cardVisible: true });
   });
 
   it('contains Host errors, disconnects, and display-driven listener restarts', async () => {

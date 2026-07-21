@@ -56,7 +56,7 @@ export class TrayController {
     this.snapshot = snapshot;
     const tray = new Tray(await createTrayIcon());
     this.tray = tray;
-    tray.setToolTip('桌面翻译 · Phase 3');
+    tray.setToolTip('桌面翻译');
     tray.on('click', this.actions.openSettings);
     this.rebuild(snapshot);
   }

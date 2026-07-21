@@ -75,7 +75,7 @@ Main 连接后发送的第一帧必须是 `hello`：
     "desktopVersion": "0.1.0",
     "supportedVersions": [1],
     "sessionNonce": "7f4c7c8d4a7e4f76861e8e4cb3a6d901",
-    "requestedCapabilities": ["mouse-hook", "uia-selection", "desktop-capture", "ocr"]
+    "requestedCapabilities": ["mouse-hook", "pointer-down-events", "uia-selection", "desktop-capture", "ocr"]
   }
 }
 ```
@@ -94,14 +94,16 @@ Host 只有在以下条件都满足时返回 `ready`：client PID 正确、nonce
     "hostVersion": "0.1.0",
     "hostPid": "14240",
     "sessionNonce": "7f4c7c8d4a7e4f76861e8e4cb3a6d901",
-    "capabilities": ["mouse-hook", "uia-selection", "desktop-capture", "ocr"]
+    "capabilities": ["mouse-hook", "pointer-down-events", "uia-selection", "desktop-capture", "ocr"]
   }
 }
 ```
 
 Main 必须核对 nonce、`hostPid` 和选定版本。握手完成前除 `hello` 外的消息均非法；握手失败时 Host 不返回包含诊断细节的业务 payload，直接断开并在本地写入脱敏错误。
 
-能力枚举：`mouse-hook`、`uia-selection`、`uia-point-approximation`、`desktop-capture`、`ocr`。`ready.capabilities` 是实际可用能力，不保证等于请求列表；Main 不得调用/假设未声明能力。
+能力枚举：`mouse-hook`、`pointer-down-events`、`uia-selection`、`uia-point-approximation`、`desktop-capture`、`ocr`。`ready.capabilities` 是实际可用能力，不保证等于请求列表；Main 不得调用/假设未声明能力。
+
+`pointer-down-events` 是 v1 内显式协商的可选扩展：Main 需要该行为时必须把它放入 `hello.requestedCapabilities`，并在 `ready.capabilities` 中确认 Host 接受后才能依赖该事件。Host 只有在本次会话请求并接受该能力时才可发送 `input/pointer-down`；未请求时也不得在 `ready.capabilities` 中暴露它。这样旧 Main 不会收到未知事件，新 Main 遇到旧 Host 时会在握手阶段明确失败，而不是静默失去点击关闭能力。
 
 ## 4. 请求与响应
 
@@ -132,7 +134,29 @@ Host 返回 `effectiveConfig`，Main 以它作为实际配置来源。缺失字�
 
 ## 5. Event
 
-v1 只有两个 event method：
+v1 有三个 event method：
+
+### `input/pointer-down`
+
+```json
+{
+  "v": 1,
+  "kind": "event",
+  "seq": 11,
+  "method": "input/pointer-down",
+  "timestamp": "2026-07-16T08:30:02.100Z",
+  "payload": {
+    "point": {"x": 758, "y": 438},
+    "coordinateSpace": "physical-px"
+  }
+}
+```
+
+- Host 仅为真实、非 injected 的鼠标左键按下发送此事件。
+- `point` 使用 Windows 虚拟桌面的物理像素坐标，允许负 `x/y`。
+- 该事件用于关闭旧的结果卡等瞬时界面；不得在 Hook callback 内直接写 Pipe，必须由消费线程发送。
+- 同一次按下仍继续进入划词状态机，因此关闭旧卡不会吞掉下一次点击或拖选。
+- Main 收到未协商的 `input/pointer-down` 必须按协议错误断开，不能把它当作普通未知事件忽略。
 
 ### `selection/result`
 
@@ -204,6 +228,7 @@ Phase 3 Host 当前错误码（内部 snake_case 在协议边界转为以下大�
 ## 6. 顺序、取消与背压
 
 - Event `seq` 严格递增；Main 发现倒退或重复即视为协议错误。允许跳号，例如某些诊断事件未对外转发。
+- Host 必须把“分配 `seq`”和“向 Pipe 写入该 event frame”放在同一个串行化临界区内；`selection/result`、`input/pointer-down` 与 `host/error` 的并发生产不能造成线上顺序回退。
 - 新 selection 使旧 selection 失效；v1 没有显式 cancel method，由 Host 的 latest-wins 状态机和 `stop` 完成取消。
 - Pipe 输出队列必须有界。不能因 Main 读取过慢而阻塞 Hook；无法保持边界时 Host 先停止监听并发出 `HOST_BACKPRESSURE`，随后可断开。
 - `stop` 成功响应之后，不得再发布 stop 前任务的 `selection/result`。

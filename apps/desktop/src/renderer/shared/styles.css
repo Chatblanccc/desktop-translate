@@ -5,40 +5,59 @@
   font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --color-background: #f3f3f3;
-  --color-surface: rgba(255, 255, 255, 0.92);
+  --color-background: #fafafa;
+  --color-navigation: #fafafa;
+  --color-surface: rgba(255, 255, 255, 0.94);
   --color-surface-solid: #ffffff;
-  --color-surface-hover: #f7f7f7;
-  --color-text: #1b1b1b;
-  --color-text-secondary: #5d5d5d;
-  --color-border: rgba(0, 0, 0, 0.095);
-  --color-border-strong: rgba(0, 0, 0, 0.18);
-  --color-accent: #005fb8;
-  --color-accent-hover: #00549f;
+  --color-surface-hover: #f1f1f1;
+  --color-control-muted: #d8dde5;
+  --color-text: #202020;
+  --color-text-secondary: #666666;
+  --color-border: #e1e1e1;
+  --color-border-strong: #d0d0d0;
+  --color-accent: #0f6cbd;
+  --color-accent-hover: #0c5fa8;
+  --color-accent-subtle: #edf4fc;
   --color-accent-text: #ffffff;
-  --color-success: #0f7b0f;
+  --color-success: #107c10;
+  --color-success-text: #107c10;
+  --color-success-surface: #edf8f1;
   --color-warning: #9d5d00;
   --color-danger: #c42b1c;
-  --focus-ring: #005fb8;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 14px rgba(0, 0, 0, 0.045);
+  --color-danger-text: #a91f14;
+  --color-danger-surface: #fff1f0;
+  --focus-ring: #0f6cbd;
+  --radius-small: 6px;
+  --radius-medium: 9px;
+  --radius-large: 12px;
+  --radius-pill: 999px;
+  --motion-fast: 140ms ease;
+  --shadow-card: 0 1px 2px rgba(18, 32, 55, 0.05), 0 6px 18px rgba(18, 32, 55, 0.05);
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
   --color-background: #202020;
+  --color-navigation: #252525;
   --color-surface: rgba(45, 45, 45, 0.94);
   --color-surface-solid: #2d2d2d;
   --color-surface-hover: #383838;
+  --color-control-muted: #555555;
   --color-text: #ffffff;
   --color-text-secondary: #c7c7c7;
   --color-border: rgba(255, 255, 255, 0.085);
   --color-border-strong: rgba(255, 255, 255, 0.18);
   --color-accent: #60cdff;
   --color-accent-hover: #82d8ff;
+  --color-accent-subtle: #173d4d;
   --color-accent-text: #00344d;
   --color-success: #6ccb5f;
+  --color-success-text: #9ee493;
+  --color-success-surface: #213b25;
   --color-warning: #fce100;
   --color-danger: #ff99a4;
+  --color-danger-text: #ffb7bf;
+  --color-danger-surface: #4d252a;
   --focus-ring: #60cdff;
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 22px rgba(0, 0, 0, 0.2);
 }
@@ -47,19 +66,26 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
     --color-background: #202020;
+    --color-navigation: #252525;
     --color-surface: rgba(45, 45, 45, 0.94);
     --color-surface-solid: #2d2d2d;
     --color-surface-hover: #383838;
+    --color-control-muted: #555555;
     --color-text: #ffffff;
     --color-text-secondary: #c7c7c7;
     --color-border: rgba(255, 255, 255, 0.085);
     --color-border-strong: rgba(255, 255, 255, 0.18);
     --color-accent: #60cdff;
     --color-accent-hover: #82d8ff;
+    --color-accent-subtle: #173d4d;
     --color-accent-text: #00344d;
     --color-success: #6ccb5f;
+    --color-success-text: #9ee493;
+    --color-success-surface: #213b25;
     --color-warning: #fce100;
     --color-danger: #ff99a4;
+    --color-danger-text: #ffb7bf;
+    --color-danger-surface: #4d252a;
     --focus-ring: #60cdff;
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 22px rgba(0, 0, 0, 0.2);
   }
@@ -87,7 +113,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -115,19 +142,26 @@ button {
 @media (forced-colors: active) {
   :root {
     --color-background: Canvas;
+    --color-navigation: Canvas;
     --color-surface: Canvas;
     --color-surface-solid: Canvas;
     --color-surface-hover: Highlight;
+    --color-control-muted: ButtonFace;
     --color-text: CanvasText;
     --color-text-secondary: CanvasText;
     --color-border: ButtonBorder;
     --color-border-strong: ButtonText;
     --color-accent: Highlight;
     --color-accent-hover: Highlight;
+    --color-accent-subtle: Canvas;
     --color-accent-text: HighlightText;
     --color-success: CanvasText;
+    --color-success-text: CanvasText;
+    --color-success-surface: Canvas;
     --color-warning: CanvasText;
     --color-danger: CanvasText;
+    --color-danger-text: CanvasText;
+    --color-danger-surface: Canvas;
     --focus-ring: Highlight;
     --shadow-card: none;
   }

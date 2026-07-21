@@ -2,7 +2,11 @@ import { randomBytes } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { NativeHostClient } from './native-host-client.js';
-import type { HostErrorEvent, SelectionResultEvent } from '@desktop-translate/contracts/native-ipc';
+import type {
+  HostErrorEvent,
+  PointerDownEvent,
+  SelectionResultEvent
+} from '@desktop-translate/contracts/native-ipc';
 
 export interface NativeHostSupervisorOptions {
   executablePath: string;
@@ -133,6 +137,7 @@ export class NativeHostSupervisor extends EventEmitter {
         sessionNonce: nonce,
         requestedCapabilities: [
           'mouse-hook',
+          'pointer-down-events',
           'uia-selection',
           'uia-point-approximation',
           'desktop-capture',
@@ -156,6 +161,16 @@ export class NativeHostSupervisor extends EventEmitter {
           && this.child === child
         ) {
           this.emit('selection', event.payload);
+        }
+      });
+      client.on('input/pointer-down', (event: PointerDownEvent) => {
+        if (
+          this.active
+          && !this.stopping
+          && this.client === client
+          && this.child === child
+        ) {
+          this.emit('pointerDown', event.payload);
         }
       });
       client.on('host/error', (event: HostErrorEvent) => {
@@ -308,7 +323,12 @@ export function buildNativePipeName(mainPid: number, nonce: string): string {
 }
 
 export function validateReadyHandshake(
-  payload: { selectedVersion: number; sessionNonce: string; hostPid: string },
+  payload: {
+    selectedVersion: number;
+    sessionNonce: string;
+    hostPid: string;
+    capabilities: readonly string[];
+  },
   nonce: string,
   childPid: number
 ): void {
@@ -318,5 +338,8 @@ export function validateReadyHandshake(
     payload.hostPid !== String(childPid)
   ) {
     throw new Error('Native host returned an invalid or stale ready handshake');
+  }
+  if (!payload.capabilities.includes('pointer-down-events')) {
+    throw new Error('Native host does not support required pointer-down events');
   }
 }

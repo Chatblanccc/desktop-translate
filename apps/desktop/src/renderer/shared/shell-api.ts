@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   DEFAULT_UI_SHELL_SNAPSHOT,
   CLEAR_LOCAL_DATA_CONFIRMATION,
+  type BaiduCredentialSummary,
   type OcrActivation,
   type ThemeMode,
   type UiShellSnapshot
@@ -10,6 +11,7 @@ import {
 export {
   CLEAR_LOCAL_DATA_CONFIRMATION,
   DEFAULT_UI_SHELL_SNAPSHOT,
+  type BaiduCredentialSummary,
   type BallAnchor,
   type NativeUiStatus,
   type OcrActivation,
@@ -31,6 +33,7 @@ export interface BallRendererApi extends UiShellReaderApi {
 }
 
 export interface SettingsRendererApi extends UiShellReaderApi {
+  getBaiduCredentialSummary(): Promise<BaiduCredentialSummary>;
   setBallVisible(visible: boolean): Promise<void>;
   setEdgeSnap(enabled: boolean): Promise<void>;
   setTheme(theme: ThemeMode): Promise<void>;

@@ -9,6 +9,7 @@
     "@desktop-translate/contracts": "workspace:*",
     "@desktop-translate/storage": "workspace:*",
     "@desktop-translate/translation": "workspace:*",
+    "@fluentui/react-icons": "^2.0.316",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },
