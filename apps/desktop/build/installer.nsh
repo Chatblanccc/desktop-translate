@@ -19,7 +19,7 @@
 !define PHASE7_INSTALL_REGISTRY_PROBE_KEY "${INSTALL_REGISTRY_KEY}.Phase7WriteProbe"
 !define PHASE7_UNINSTALL_REGISTRY_PROBE_KEY "${UNINSTALL_REGISTRY_KEY}.Phase7WriteProbe"
 !define PHASE7_UNINSTALL_TRANSACTION_KEY "${INSTALL_REGISTRY_KEY}.Phase7UninstallTransaction"
-!define PHASE7_UNINSTALL_TRANSACTION_VALUE "DesktopTranslate.UninstallTransaction.v1|${APP_GUID}"
+!define PHASE7_UNINSTALL_TRANSACTION_VALUE "DesktopTranslate.UninstallTransaction.v2|${APP_GUID}"
 !define PHASE7_REGISTRY_BACKUP_CONTAINER "Software\DesktopTranslatePhase7RegistryBackups"
 !define PHASE7_REGISTRY_BACKUP_ROOT "${PHASE7_REGISTRY_BACKUP_CONTAINER}\${APP_GUID}"
 !define PHASE7_INSTALL_REGISTRY_BACKUP_KEY "${PHASE7_REGISTRY_BACKUP_ROOT}\Install"
@@ -68,6 +68,14 @@ Var phase7CleanupRootState
 Var phase7TransactionOwnerPid
 Var phase7TransactionOwnerCreationLow
 Var phase7TransactionOwnerCreationHigh
+Var phase7TransactionRootVolumeSerial
+Var phase7TransactionRootFileIndexHigh
+Var phase7TransactionRootFileIndexLow
+Var phase7CommittedRootHandle
+Var phase7CommittedMarkerHandle
+Var phase7CommittedLevel1Handle
+Var phase7CommittedLevel2Handle
+Var phase7CommittedFileHandle
 !ifdef BUILD_UNINSTALLER
   Var phase7TransactionClaimKey
   Var phase7OwnerIdentityState
@@ -1847,6 +1855,9 @@ FunctionEnd
   WriteRegStr HKCU "$phase7TransactionClaimKey" OwnerPid "$phase7TransactionOwnerPid"
   WriteRegStr HKCU "$phase7TransactionClaimKey" OwnerCreationLow "$phase7TransactionOwnerCreationLow"
   WriteRegStr HKCU "$phase7TransactionClaimKey" OwnerCreationHigh "$phase7TransactionOwnerCreationHigh"
+  WriteRegStr HKCU "$phase7TransactionClaimKey" RootVolumeSerial "$phase7TransactionRootVolumeSerial"
+  WriteRegStr HKCU "$phase7TransactionClaimKey" RootFileIndexHigh "$phase7TransactionRootFileIndexHigh"
+  WriteRegStr HKCU "$phase7TransactionClaimKey" RootFileIndexLow "$phase7TransactionRootFileIndexLow"
   WriteRegStr HKCU "$phase7TransactionClaimKey" CleanupVersion "$phase7TransactionCleanupVersion"
   WriteRegStr HKCU "$phase7TransactionClaimKey" KeepShortcuts "$phase7TransactionKeepShortcuts"
   WriteRegStr HKCU "$phase7TransactionClaimKey" ShortcutName "$phase7TransactionShortcutName"
@@ -1887,6 +1898,21 @@ FunctionEnd
     Goto phase7_tx_claim_cleanup_${PHASE7_TX_CLAIM_ID}
   ${EndIf}
   System::Call 'KERNEL32::lstrcmpW(w R6, w "$phase7TransactionOwnerCreationHigh") i.R7'
+  ${If} $R7 != 0
+    Goto phase7_tx_claim_cleanup_${PHASE7_TX_CLAIM_ID}
+  ${EndIf}
+  ReadRegStr $R0 HKCU "$phase7TransactionClaimKey" RootVolumeSerial
+  ReadRegStr $R1 HKCU "$phase7TransactionClaimKey" RootFileIndexHigh
+  ReadRegStr $R2 HKCU "$phase7TransactionClaimKey" RootFileIndexLow
+  System::Call 'KERNEL32::lstrcmpW(w R0, w "$phase7TransactionRootVolumeSerial") i.R7'
+  ${If} $R7 != 0
+    Goto phase7_tx_claim_cleanup_${PHASE7_TX_CLAIM_ID}
+  ${EndIf}
+  System::Call 'KERNEL32::lstrcmpW(w R1, w "$phase7TransactionRootFileIndexHigh") i.R7'
+  ${If} $R7 != 0
+    Goto phase7_tx_claim_cleanup_${PHASE7_TX_CLAIM_ID}
+  ${EndIf}
+  System::Call 'KERNEL32::lstrcmpW(w R2, w "$phase7TransactionRootFileIndexLow") i.R7'
   ${If} $R7 != 0
     Goto phase7_tx_claim_cleanup_${PHASE7_TX_CLAIM_ID}
   ${EndIf}
@@ -1979,6 +2005,21 @@ FunctionEnd
   ${If} $R7 != 0
     Goto phase7_tx_write_done_${PHASE7_TX_WRITE_ID}
   ${EndIf}
+  ReadRegStr $R0 HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootVolumeSerial
+  ReadRegStr $R1 HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootFileIndexHigh
+  ReadRegStr $R2 HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootFileIndexLow
+  System::Call 'KERNEL32::lstrcmpW(w R0, w "$phase7TransactionRootVolumeSerial") i.R7'
+  ${If} $R7 != 0
+    Goto phase7_tx_write_done_${PHASE7_TX_WRITE_ID}
+  ${EndIf}
+  System::Call 'KERNEL32::lstrcmpW(w R1, w "$phase7TransactionRootFileIndexHigh") i.R7'
+  ${If} $R7 != 0
+    Goto phase7_tx_write_done_${PHASE7_TX_WRITE_ID}
+  ${EndIf}
+  System::Call 'KERNEL32::lstrcmpW(w R2, w "$phase7TransactionRootFileIndexLow") i.R7'
+  ${If} $R7 != 0
+    Goto phase7_tx_write_done_${PHASE7_TX_WRITE_ID}
+  ${EndIf}
   ReadRegStr $R0 HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" CleanupVersion
   System::Call 'KERNEL32::lstrcmpW(w R0, w "$phase7TransactionCleanupVersion") i.R7'
   ${If} $R7 != 0
@@ -2035,6 +2076,9 @@ FunctionEnd
   StrCpy $phase7TransactionOwnerPid ""
   StrCpy $phase7TransactionOwnerCreationLow ""
   StrCpy $phase7TransactionOwnerCreationHigh ""
+  StrCpy $phase7TransactionRootVolumeSerial ""
+  StrCpy $phase7TransactionRootFileIndexHigh ""
+  StrCpy $phase7TransactionRootFileIndexLow ""
   StrCpy $phase7TransactionCleanupVersion ""
   StrCpy $phase7TransactionKeepShortcuts ""
   StrCpy $phase7TransactionShortcutName ""
@@ -2063,6 +2107,9 @@ FunctionEnd
     ReadRegStr $phase7TransactionOwnerPid HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" OwnerPid
     ReadRegStr $phase7TransactionOwnerCreationLow HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" OwnerCreationLow
     ReadRegStr $phase7TransactionOwnerCreationHigh HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" OwnerCreationHigh
+    ReadRegStr $phase7TransactionRootVolumeSerial HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootVolumeSerial
+    ReadRegStr $phase7TransactionRootFileIndexHigh HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootFileIndexHigh
+    ReadRegStr $phase7TransactionRootFileIndexLow HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootFileIndexLow
     ReadRegStr $phase7TransactionCleanupVersion HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" CleanupVersion
     ReadRegStr $phase7TransactionKeepShortcuts HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" KeepShortcuts
     ReadRegStr $phase7TransactionShortcutName HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" ShortcutName
@@ -2074,6 +2121,9 @@ FunctionEnd
     ${OrIf} $phase7TransactionOwnerPid == ""
     ${OrIf} $phase7TransactionOwnerCreationLow == ""
     ${OrIf} $phase7TransactionOwnerCreationHigh == ""
+    ${OrIf} $phase7TransactionRootVolumeSerial == ""
+    ${OrIf} $phase7TransactionRootFileIndexHigh == ""
+    ${OrIf} $phase7TransactionRootFileIndexLow == ""
     ${OrIf} $phase7TransactionCleanupVersion == ""
     ${OrIf} $phase7TransactionKeepShortcuts == ""
     ${OrIf} $phase7TransactionShortcutName == ""
@@ -2237,9 +2287,369 @@ FunctionEnd
   !insertmacro phase7NormalizeAndMatchRegisteredPath
 !macroend
 
+!macro phase7ReadCommittedDirectoryHandleIdentity HANDLE OUTPUT_VOLUME OUTPUT_HIGH OUTPUT_LOW OUTPUT
+  !define PHASE7_COMMITTED_IDENTITY_ID ${__LINE__}
+  StrCpy $${OUTPUT} "invalid"
+  System::Alloc 52
+  Pop $R3
+  ${If} $R3 == 0
+    Goto phase7_committed_identity_done_${PHASE7_COMMITTED_IDENTITY_ID}
+  ${EndIf}
+  System::Call 'KERNEL32::GetFileInformationByHandle(p ${HANDLE}, p R3) i.R4 ?e'
+  Pop $R9
+  ${If} $R4 == 0
+    System::Free $R3
+    Goto phase7_committed_identity_done_${PHASE7_COMMITTED_IDENTITY_ID}
+  ${EndIf}
+  System::Call '*$R3(i .R4, &v24, i .R5, &v12, i .R6, i .R7)'
+  System::Free $R3
+  IntOp $R4 $R4 & 0x410
+  ${If} $R4 != 16
+    Goto phase7_committed_identity_done_${PHASE7_COMMITTED_IDENTITY_ID}
+  ${EndIf}
+  StrCpy $${OUTPUT_VOLUME} "$R5"
+  StrCpy $${OUTPUT_HIGH} "$R6"
+  StrCpy $${OUTPUT_LOW} "$R7"
+  StrCpy $${OUTPUT} "valid"
+  phase7_committed_identity_done_${PHASE7_COMMITTED_IDENTITY_ID}:
+  ClearErrors
+  !undef PHASE7_COMMITTED_IDENTITY_ID
+!macroend
+
+!macro phase7CaptureTransactionSourceIdentity
+  StrCpy $phase7TransactionRootVolumeSerial ""
+  StrCpy $phase7TransactionRootFileIndexHigh ""
+  StrCpy $phase7TransactionRootFileIndexLow ""
+  # Capture the verified source directory identity before the transaction claim.
+  # The durable file ID is checked again after rename and on every crash replay,
+  # so a pathname replacement can never become eligible for committed cleanup.
+  System::Call 'KERNEL32::CreateFileW(w "$phase7TransactionSource", i 0x00100080, i 7, p 0, i 3, i 0x02200000, p 0) p.R0 ?e'
+  Pop $R9
+  ${If} $R0 == -1
+    !insertmacro phase7Fail "The uninstall source identity could not be opened."
+  ${EndIf}
+  !insertmacro phase7ReadCommittedDirectoryHandleIdentity $R0 phase7TransactionRootVolumeSerial phase7TransactionRootFileIndexHigh phase7TransactionRootFileIndexLow R8
+  System::Call 'KERNEL32::CloseHandle(p R0) i.R4'
+  ${If} $R4 == 0
+  ${OrIf} $R8 != "valid"
+  ${OrIf} $phase7TransactionRootVolumeSerial == ""
+  ${OrIf} $phase7TransactionRootFileIndexHigh == ""
+  ${OrIf} $phase7TransactionRootFileIndexLow == ""
+    !insertmacro phase7Fail "The uninstall source directory identity is invalid."
+  ${EndIf}
+!macroend
+
+!macro phase7AssertCommittedRootHandleIdentity HANDLE
+  !insertmacro phase7ReadCommittedDirectoryHandleIdentity ${HANDLE} R5 R6 R7 R8
+  ${If} $R8 != "valid"
+  ${OrIf} $R5 != $phase7TransactionRootVolumeSerial
+  ${OrIf} $R6 != $phase7TransactionRootFileIndexHigh
+  ${OrIf} $R7 != $phase7TransactionRootFileIndexLow
+    !insertmacro phase7Fail "The committed staging directory identity does not match the durable transaction."
+  ${EndIf}
+!macroend
+
+!macro phase7AssertTransactionRootPathIdentity PATH_VALUE
+  System::Call 'KERNEL32::CreateFileW(w "${PATH_VALUE}", i 0x00100080, i 7, p 0, i 3, i 0x02200000, p 0) p.R0 ?e'
+  Pop $R9
+  ${If} $R0 == -1
+    !insertmacro phase7Fail "The uninstall transaction root identity could not be opened."
+  ${EndIf}
+  !insertmacro phase7AssertCommittedRootHandleIdentity $R0
+  System::Call 'KERNEL32::CloseHandle(p R0) i.R4'
+  ${If} $R4 == 0
+    !insertmacro phase7Fail "The uninstall transaction root identity handle could not be closed."
+  ${EndIf}
+!macroend
+
+!macro phase7AssertCommittedStagePathIdentity
+  !insertmacro phase7AssertTransactionRootPathIdentity "$phase7TransactionStage"
+!macroend
+
+!macro phase7CloseCommittedHandleVariable HANDLE_VARIABLE OUTPUT
+  StrCpy $${OUTPUT} "closed"
+  ${If} $${HANDLE_VARIABLE} != -1
+    System::Call 'KERNEL32::CloseHandle(p $${HANDLE_VARIABLE}) i.R3'
+    ${If} $R3 == 0
+      StrCpy $${OUTPUT} "unsafe"
+    ${EndIf}
+    StrCpy $${HANDLE_VARIABLE} "-1"
+  ${EndIf}
+  ClearErrors
+!macroend
+
+!macro phase7SetCommittedHandleDeleteDispositionAndClose HANDLE_VARIABLE OUTPUT
+  !define PHASE7_COMMITTED_HANDLE_DELETE_ID ${__LINE__}
+  StrCpy $${OUTPUT} "unsafe"
+  ${If} $${HANDLE_VARIABLE} == -1
+    Goto phase7_committed_handle_delete_done_${PHASE7_COMMITTED_HANDLE_DELETE_ID}
+  ${EndIf}
+  System::Alloc 4
+  Pop $R3
+  ${If} $R3 == 0
+    !insertmacro phase7CloseCommittedHandleVariable ${HANDLE_VARIABLE} R8
+    Goto phase7_committed_handle_delete_done_${PHASE7_COMMITTED_HANDLE_DELETE_ID}
+  ${EndIf}
+  System::Call '*$R3(i 1)'
+  System::Call 'KERNEL32::SetFileInformationByHandle(p $${HANDLE_VARIABLE}, i 4, p R3, i 1) i.R4 ?e'
+  Pop $R9
+  System::Free $R3
+  ${If} $R4 == 0
+    !insertmacro phase7CloseCommittedHandleVariable ${HANDLE_VARIABLE} R8
+    Goto phase7_committed_handle_delete_done_${PHASE7_COMMITTED_HANDLE_DELETE_ID}
+  ${EndIf}
+  System::Call 'KERNEL32::CloseHandle(p $${HANDLE_VARIABLE}) i.R4'
+  StrCpy $${HANDLE_VARIABLE} "-1"
+  ${If} $R4 != 0
+    StrCpy $${OUTPUT} "deleted"
+  ${EndIf}
+  phase7_committed_handle_delete_done_${PHASE7_COMMITTED_HANDLE_DELETE_ID}:
+  ClearErrors
+  !undef PHASE7_COMMITTED_HANDLE_DELETE_ID
+!macroend
+
+!macro phase7OpenCommittedRelativeEntry PARENT_HANDLE LEAF_NAME EXPECTED_KIND SHARE_MODE HANDLE_VARIABLE OUTPUT
+  !define PHASE7_COMMITTED_RELATIVE_OPEN_ID ${__LINE__}
+  StrCpy $${OUTPUT} "unsafe"
+  StrCpy $${HANDLE_VARIABLE} "-1"
+  StrLen $R3 "${LEAF_NAME}"
+  ${If} $R3 == 0
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  IntOp $R5 $R3 * 2
+  IntOp $R6 $R5 + 2
+  System::Call '*(&w${NSIS_MAX_STRLEN} "${LEAF_NAME}") p.R4'
+  ${If} $R4 == 0
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  System::Call '*(h R5, h R6, p R4) p.R7'
+  ${If} $R7 == 0
+    System::Free $R4
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  System::Call '*(i 24, p ${PARENT_HANDLE}, p R7, i 0x40, p 0, p 0) p.R8'
+  ${If} $R8 == 0
+    System::Free $R7
+    System::Free $R4
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  System::Call '*(p 0, p 0) p.R9'
+  ${If} $R9 == 0
+    System::Free $R8
+    System::Free $R7
+    System::Free $R4
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  System::Alloc 4
+  Pop $R2
+  ${If} $R2 == 0
+    System::Free $R9
+    System::Free $R8
+    System::Free $R7
+    System::Free $R4
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  System::Call '*$R2(p -1)'
+  StrCpy $R1 0x00200060
+  ${If} "${EXPECTED_KIND}" == "directory"
+    StrCpy $R1 0x00200021
+  ${EndIf}
+  # FILE_OPEN + FILE_OPEN_REPARSE_POINT resolves only this immediate child
+  # against the already-pinned parent directory object. Omitting SHARE_DELETE
+  # keeps the opened name and identity stable through inspection/disposition.
+  System::Call 'ntdll::NtCreateFile(p R2, i 0x00110081, p R8, p R9, p 0, i 0, i ${SHARE_MODE}, i 1, i R1, p 0, i 0) i.R1'
+  System::Call '*$R2(p .R0)'
+  System::Free $R2
+  System::Free $R9
+  System::Free $R8
+  System::Free $R7
+  System::Free $R4
+  ${If} $R1 != 0
+    System::Call 'ntdll::RtlNtStatusToDosError(i R1) i.R5'
+    ${If} $R5 == 2
+    ${OrIf} $R5 == 3
+      StrCpy $${OUTPUT} "absent"
+    ${EndIf}
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  ${If} $R0 == -1
+  ${OrIf} $R0 == 0
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  StrCpy $${HANDLE_VARIABLE} "$R0"
+  System::Alloc 52
+  Pop $R3
+  ${If} $R3 == 0
+    !insertmacro phase7CloseCommittedHandleVariable ${HANDLE_VARIABLE} R8
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  System::Call 'KERNEL32::GetFileInformationByHandle(p $${HANDLE_VARIABLE}, p R3) i.R4 ?e'
+  Pop $R9
+  ${If} $R4 == 0
+    System::Free $R3
+    !insertmacro phase7CloseCommittedHandleVariable ${HANDLE_VARIABLE} R8
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  System::Call '*$R3(i .R4)'
+  System::Free $R3
+  IntOp $R5 $R4 & 0x400
+  ${If} $R5 != 0
+    !insertmacro phase7CloseCommittedHandleVariable ${HANDLE_VARIABLE} R8
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  IntOp $R5 $R4 & 0x10
+  ${If} "${EXPECTED_KIND}" == "directory"
+    ${If} $R5 == 0
+      !insertmacro phase7CloseCommittedHandleVariable ${HANDLE_VARIABLE} R8
+      Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+    ${EndIf}
+  ${ElseIf} $R5 != 0
+    !insertmacro phase7CloseCommittedHandleVariable ${HANDLE_VARIABLE} R8
+    Goto phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}
+  ${EndIf}
+  StrCpy $${OUTPUT} "opened"
+  phase7_committed_relative_open_done_${PHASE7_COMMITTED_RELATIVE_OPEN_ID}:
+  ClearErrors
+  !undef PHASE7_COMMITTED_RELATIVE_OPEN_ID
+!macroend
+
+!macro phase7VerifyCommittedMarkerHandle HANDLE OUTPUT
+  !define PHASE7_COMMITTED_MARKER_VERIFY_ID ${__LINE__}
+  StrCpy $${OUTPUT} "invalid"
+  System::Alloc 52
+  Pop $R3
+  ${If} $R3 == 0
+    Goto phase7_committed_marker_verify_done_${PHASE7_COMMITTED_MARKER_VERIFY_ID}
+  ${EndIf}
+  System::Call 'KERNEL32::GetFileInformationByHandle(p ${HANDLE}, p R3) i.R4 ?e'
+  Pop $R9
+  ${If} $R4 == 0
+    System::Free $R3
+    Goto phase7_committed_marker_verify_done_${PHASE7_COMMITTED_MARKER_VERIFY_ID}
+  ${EndIf}
+  System::Call '*$R3(i .R4, &v24, i .R5, &v8, i .R6, i .R7, i .R8)'
+  System::Free $R3
+  IntOp $R4 $R4 & 0x410
+  ${If} $R4 != 0
+  ${OrIf} $R6 != 1
+    Goto phase7_committed_marker_verify_done_${PHASE7_COMMITTED_MARKER_VERIFY_ID}
+  ${EndIf}
+  StrLen $R4 "${PHASE7_INSTALL_MARKER_VALUE}"
+  System::Call 'KERNEL32::GetFileSize(p ${HANDLE}, *i .R6) i.R5 ?e'
+  Pop $R9
+  ${If} $R5 == -1
+  ${AndIf} $R9 != 0
+    Goto phase7_committed_marker_verify_done_${PHASE7_COMMITTED_MARKER_VERIFY_ID}
+  ${EndIf}
+  ${If} $R6 != 0
+  ${OrIf} $R5 != $R4
+    Goto phase7_committed_marker_verify_done_${PHASE7_COMMITTED_MARKER_VERIFY_ID}
+  ${EndIf}
+  System::Call 'KERNEL32::SetFilePointer(p ${HANDLE}, i 0, p 0, i 0) i.R5 ?e'
+  Pop $R9
+  ${If} $R5 != 0
+    Goto phase7_committed_marker_verify_done_${PHASE7_COMMITTED_MARKER_VERIFY_ID}
+  ${EndIf}
+  System::Alloc ${NSIS_MAX_STRLEN}
+  Pop $R3
+  ${If} $R3 == 0
+    Goto phase7_committed_marker_verify_done_${PHASE7_COMMITTED_MARKER_VERIFY_ID}
+  ${EndIf}
+  IntOp $R5 $R3 + $R4
+  System::Call '*$R5(b 0)'
+  System::Call 'KERNEL32::ReadFile(p ${HANDLE}, p R3, i R4, *i .R5, p 0) i.R6 ?e'
+  Pop $R9
+  ${If} $R6 == 0
+  ${OrIf} $R5 != $R4
+    System::Free $R3
+    Goto phase7_committed_marker_verify_done_${PHASE7_COMMITTED_MARKER_VERIFY_ID}
+  ${EndIf}
+  System::Call '*$R3(&m${NSIS_MAX_STRLEN} .R6)'
+  System::Free $R3
+  StrCmpS "$R6" "${PHASE7_INSTALL_MARKER_VALUE}" 0 phase7_committed_marker_verify_done_${PHASE7_COMMITTED_MARKER_VERIFY_ID}
+  StrCpy $${OUTPUT} "valid"
+  phase7_committed_marker_verify_done_${PHASE7_COMMITTED_MARKER_VERIFY_ID}:
+  ClearErrors
+  !undef PHASE7_COMMITTED_MARKER_VERIFY_ID
+!macroend
+
+!macro phase7OpenCommittedStageRoot OUTPUT
+  !define PHASE7_COMMITTED_ROOT_OPEN_ID ${__LINE__}
+  StrCpy $${OUTPUT} "unsafe"
+  StrCpy $phase7CommittedRootHandle "-1"
+  System::Call 'KERNEL32::CreateFileW(w "$phase7TransactionStage", i 0x00110081, i 3, p 0, i 3, i 0x02200000, p 0) p.R0 ?e'
+  Pop $R9
+  ${If} $R0 == -1
+    Goto phase7_open_committed_root_done_${PHASE7_COMMITTED_ROOT_OPEN_ID}
+  ${EndIf}
+  StrCpy $phase7CommittedRootHandle "$R0"
+  !insertmacro phase7AssertCommittedRootHandleIdentity $phase7CommittedRootHandle
+  StrCpy $${OUTPUT} "opened"
+  phase7_open_committed_root_done_${PHASE7_COMMITTED_ROOT_OPEN_ID}:
+  ClearErrors
+  !undef PHASE7_COMMITTED_ROOT_OPEN_ID
+!macroend
+
+!macro phase7DeleteCommittedRelativeFile PARENT_HANDLE LEAF_NAME OUTPUT
+  !define PHASE7_COMMITTED_FILE_DELETE_ID ${__LINE__}
+  StrCpy $${OUTPUT} "cleanup-failed"
+  !insertmacro phase7CloseCommittedHandleVariable phase7CommittedFileHandle R8
+  !insertmacro phase7OpenCommittedRelativeEntry ${PARENT_HANDLE} "${LEAF_NAME}" "file" 3 phase7CommittedFileHandle R8
+  ${If} $R8 == "absent"
+    StrCpy $${OUTPUT} "clean"
+    Goto phase7_committed_file_delete_done_${PHASE7_COMMITTED_FILE_DELETE_ID}
+  ${ElseIf} $R8 != "opened"
+    Goto phase7_committed_file_delete_done_${PHASE7_COMMITTED_FILE_DELETE_ID}
+  ${EndIf}
+  !insertmacro phase7SetCommittedHandleDeleteDispositionAndClose phase7CommittedFileHandle R8
+  ${If} $R8 != "deleted"
+    Goto phase7_committed_file_delete_done_${PHASE7_COMMITTED_FILE_DELETE_ID}
+  ${EndIf}
+  !insertmacro phase7OpenCommittedRelativeEntry ${PARENT_HANDLE} "${LEAF_NAME}" "file" 3 phase7CommittedFileHandle R8
+  ${If} $R8 == "absent"
+    StrCpy $${OUTPUT} "clean"
+  ${ElseIf} $R8 == "opened"
+    !insertmacro phase7CloseCommittedHandleVariable phase7CommittedFileHandle R9
+  ${EndIf}
+  phase7_committed_file_delete_done_${PHASE7_COMMITTED_FILE_DELETE_ID}:
+  ClearErrors
+  !undef PHASE7_COMMITTED_FILE_DELETE_ID
+!macroend
+
+!macro phase7DeleteCommittedOpenedDirectory HANDLE_VARIABLE PARENT_HANDLE LEAF_NAME OUTPUT
+  !define PHASE7_COMMITTED_DIRECTORY_DELETE_ID ${__LINE__}
+  StrCpy $${OUTPUT} "cleanup-failed"
+  !insertmacro phase7SetCommittedHandleDeleteDispositionAndClose ${HANDLE_VARIABLE} R8
+  ${If} $R8 != "deleted"
+    Goto phase7_committed_directory_delete_done_${PHASE7_COMMITTED_DIRECTORY_DELETE_ID}
+  ${EndIf}
+  !insertmacro phase7OpenCommittedRelativeEntry ${PARENT_HANDLE} "${LEAF_NAME}" "directory" 3 ${HANDLE_VARIABLE} R8
+  ${If} $R8 == "absent"
+    StrCpy $${OUTPUT} "clean"
+  ${ElseIf} $R8 == "opened"
+    !insertmacro phase7CloseCommittedHandleVariable ${HANDLE_VARIABLE} R9
+  ${EndIf}
+  phase7_committed_directory_delete_done_${PHASE7_COMMITTED_DIRECTORY_DELETE_ID}:
+  ClearErrors
+  !undef PHASE7_COMMITTED_DIRECTORY_DELETE_ID
+!macroend
+
+!macro phase7ReleaseCommittedCleanupHandles
+  !insertmacro phase7CloseCommittedHandleVariable phase7CommittedFileHandle R8
+  !insertmacro phase7CloseCommittedHandleVariable phase7CommittedLevel2Handle R8
+  !insertmacro phase7CloseCommittedHandleVariable phase7CommittedLevel1Handle R8
+  !insertmacro phase7CloseCommittedHandleVariable phase7CommittedMarkerHandle R8
+  !insertmacro phase7CloseCommittedHandleVariable phase7CommittedRootHandle R8
+!macroend
+
 !macro phase7CleanupCommittedStage OUTPUT
   !define PHASE7_COMMITTED_CLEANUP_ID ${__LINE__}
   StrCpy $phase7StageCleanupPending "clean"
+  StrCpy $phase7CommittedRootHandle "-1"
+  StrCpy $phase7CommittedMarkerHandle "-1"
+  StrCpy $phase7CommittedLevel1Handle "-1"
+  StrCpy $phase7CommittedLevel2Handle "-1"
+  StrCpy $phase7CommittedFileHandle "-1"
   !insertmacro phase7ReadPathState "$phase7TransactionStage" R2 R0 R1
   ${If} $R2 == "error"
     !insertmacro phase7Fail "The committed Phase 7 staging path could not be inspected."
@@ -2253,15 +2663,24 @@ FunctionEnd
     Call ${PHASE7_ANCESTOR_FUNCTION}
     !insertmacro phase7RejectReparseTree "$phase7TransactionStage"
 
-    !insertmacro phase7ReadPathState "$phase7TransactionStage\${PHASE7_INSTALL_MARKER_NAME}" R5 R3 R4
-    ${If} $R5 == "error"
-      !insertmacro phase7Fail "The committed staging marker could not be inspected."
-    ${ElseIf} $R5 == "present"
-      StrCpy $INSTDIR "$phase7TransactionStage"
-      !insertmacro phase7ReadAndVerifyMarker
-      ${If} $R0 != "valid"
+    # Open the durable stage identity once and retain a no-SHARE_DELETE lease
+    # until the exact directory object has been disposed. Every owned child is
+    # resolved relative to this handle, never from the mutable stage pathname.
+    !insertmacro phase7OpenCommittedStageRoot R5
+    ${If} $R5 != "opened"
+      StrCpy $phase7StageCleanupPending "cleanup-failed"
+      Goto phase7_committed_cleanup_done_${PHASE7_COMMITTED_CLEANUP_ID}
+    ${EndIf}
+    !insertmacro phase7OpenCommittedRelativeEntry $phase7CommittedRootHandle "${PHASE7_INSTALL_MARKER_NAME}" "file" 0 phase7CommittedMarkerHandle R5
+    ${If} $R5 == "opened"
+      !insertmacro phase7VerifyCommittedMarkerHandle $phase7CommittedMarkerHandle R5
+      ${If} $R5 != "valid"
         !insertmacro phase7Fail "The committed staging marker is invalid."
       ${EndIf}
+      # The marker and root leases stay open while the fixed allowlist is
+      # removed. A concurrent marker/root rename or replacement is therefore
+      # denied by the kernel instead of racing a pathname check.
+      StrCpy $INSTDIR "$phase7TransactionStage"
       !insertmacro phase7AssertKnownRootEntries "$phase7TransactionStage"
       Push ""
       Call ${PHASE7_COMMITTED_DELETE_FUNCTION}
@@ -2269,41 +2688,34 @@ FunctionEnd
         Goto phase7_committed_cleanup_done_${PHASE7_COMMITTED_CLEANUP_ID}
       ${EndIf}
 
-      # Re-enumerate after deletion. The stable marker must be the only entry
-      # before it is removed, so a crash never leaves a markerless nonempty
-      # directory eligible for recursive cleanup.
-      !insertmacro phase7RejectReparseTree "$phase7TransactionStage"
-      !insertmacro phase7AssertKnownRootEntries "$phase7TransactionStage"
-      !insertmacro phase7ReadAndVerifyMarker
-      ${If} $R0 != "valid"
+      # Re-enumerate while both leases are still held. The stable marker must
+      # be the only entry before its exact handle receives delete disposition.
+      !insertmacro phase7VerifyCommittedMarkerHandle $phase7CommittedMarkerHandle R5
+      ${If} $R5 != "valid"
         !insertmacro phase7Fail "The stable marker changed during committed cleanup."
       ${EndIf}
       !insertmacro phase7InspectCleanupRoot "$phase7TransactionStage"
       ${If} $phase7CleanupRootState != "marker-only"
         !insertmacro phase7Fail "Committed cleanup did not reduce staging to the stable marker."
       ${EndIf}
-      ClearErrors
-      Delete "$phase7TransactionStage\${PHASE7_INSTALL_MARKER_NAME}"
-      ${If} ${Errors}
+      !insertmacro phase7SetCommittedHandleDeleteDispositionAndClose phase7CommittedMarkerHandle R5
+      ${If} $R5 != "deleted"
         StrCpy $phase7StageCleanupPending "cleanup-failed"
         Goto phase7_committed_cleanup_done_${PHASE7_COMMITTED_CLEANUP_ID}
       ${EndIf}
-      !insertmacro phase7ReadPathState "$phase7TransactionStage\${PHASE7_INSTALL_MARKER_NAME}" R5 R3 R4
-      ${If} $R5 != "absent"
-        StrCpy $phase7StageCleanupPending "cleanup-failed"
-        Goto phase7_committed_cleanup_done_${PHASE7_COMMITTED_CLEANUP_ID}
-      ${EndIf}
+    ${ElseIf} $R5 != "absent"
+      StrCpy $phase7StageCleanupPending "cleanup-failed"
+      Goto phase7_committed_cleanup_done_${PHASE7_COMMITTED_CLEANUP_ID}
     ${EndIf}
 
     # Markerless recovery is accepted only for the exact empty-root crash
-    # window between marker deletion and the final non-recursive RMDir.
+    # window between marker-handle disposition and root-handle disposition.
     !insertmacro phase7InspectCleanupRoot "$phase7TransactionStage"
     ${If} $phase7CleanupRootState != "empty"
       !insertmacro phase7Fail "Markerless committed staging is not empty; cleanup was refused."
     ${EndIf}
-    ClearErrors
-    RMDir "$phase7TransactionStage"
-    ${If} ${Errors}
+    !insertmacro phase7SetCommittedHandleDeleteDispositionAndClose phase7CommittedRootHandle R5
+    ${If} $R5 != "deleted"
       StrCpy $phase7StageCleanupPending "cleanup-failed"
     ${Else}
       !insertmacro phase7ReadPathState "$phase7TransactionStage" R2 R0 R1
@@ -2314,6 +2726,7 @@ FunctionEnd
   ${EndIf}
 
   phase7_committed_cleanup_done_${PHASE7_COMMITTED_CLEANUP_ID}:
+  !insertmacro phase7ReleaseCommittedCleanupHandles
   StrCpy $INSTDIR "$phase7TransactionSource"
   StrCpy $${OUTPUT} "$phase7StageCleanupPending"
   ClearErrors
@@ -2511,6 +2924,7 @@ FunctionEnd
     ${If} $R5 != "present"
       Goto phase7_shared_rollback_done_${PHASE7_SHARED_ROLLBACK_ID}
     ${EndIf}
+    !insertmacro phase7AssertTransactionRootPathIdentity "$phase7TransactionStage"
     !insertmacro phase7ValidateStableRoot "$phase7TransactionStage"
     StrCpy $INSTDIR "$phase7TransactionSource"
     ClearErrors
@@ -2522,6 +2936,7 @@ FunctionEnd
     Goto phase7_shared_rollback_done_${PHASE7_SHARED_ROLLBACK_ID}
   ${EndIf}
 
+  !insertmacro phase7AssertTransactionRootPathIdentity "$phase7TransactionSource"
   !insertmacro phase7ValidateStableRoot "$phase7TransactionSource"
   ${If} $phase7TransactionState == "rollback-rebuild-ready"
     !insertmacro phase7RestoreProductRegistryBackup R4
@@ -2689,6 +3104,27 @@ FunctionEnd
   !insertmacro phase7ReadAndVerifyFileMarker "${PHASE7_RECOVERY_MARKER_NAME}" "${PHASE7_RECOVERY_MARKER_VALUE}"
 !macroend
 
+!macro phase7DeleteCommittedAllowlistedFile PARENT_HANDLE LEAF_NAME
+  !insertmacro phase7DeleteCommittedRelativeFile ${PARENT_HANDLE} "${LEAF_NAME}" R8
+  ${If} $R8 != "clean"
+    StrCpy $phase7StageCleanupPending "cleanup-failed"
+    Goto phase7_committed_delete_done
+  ${EndIf}
+!macroend
+
+!macro phase7OpenCommittedAllowlistedDirectory PARENT_HANDLE LEAF_NAME HANDLE_VARIABLE OUTPUT
+  !insertmacro phase7CloseCommittedHandleVariable ${HANDLE_VARIABLE} R8
+  !insertmacro phase7OpenCommittedRelativeEntry ${PARENT_HANDLE} "${LEAF_NAME}" "directory" 3 ${HANDLE_VARIABLE} ${OUTPUT}
+!macroend
+
+!macro phase7DeleteCommittedAllowlistedDirectory HANDLE_VARIABLE PARENT_HANDLE LEAF_NAME
+  !insertmacro phase7DeleteCommittedOpenedDirectory ${HANDLE_VARIABLE} ${PARENT_HANDLE} "${LEAF_NAME}" R8
+  ${If} $R8 != "clean"
+    StrCpy $phase7StageCleanupPending "cleanup-failed"
+    Goto phase7_committed_delete_done
+  ${EndIf}
+!macroend
+
 Function ${PHASE7_COMMITTED_DELETE_FUNCTION}
   Exch $R0
   Push $R1
@@ -2704,118 +3140,112 @@ Function ${PHASE7_COMMITTED_DELETE_FUNCTION}
   ${If} $phase7StageCleanupPending != "clean"
     Goto phase7_committed_delete_done
   ${EndIf}
-  StrCpy $R1 "$phase7TransactionStage"
-  ${If} $R0 != ""
-    StrCpy $R1 "$phase7TransactionStage\$R0"
-  ${EndIf}
-  !insertmacro phase7ReadPathState "$R1" R5 R8 R9
-  ${If} $R5 != "present"
-    StrCpy $phase7StageCleanupPending "cleanup-failed"
-    Goto phase7_committed_delete_done
-  ${EndIf}
-  IntOp $R8 $R8 & 0x410
-  ${If} $R8 != 16
+  ${If} $phase7CommittedRootHandle == -1
     StrCpy $phase7StageCleanupPending "cleanup-failed"
     Goto phase7_committed_delete_done
   ${EndIf}
 
-  !insertmacro phase7FindFirst "$R1\*" R2 R7 R8 R3 R9
-  ${If} $R2 == -1
+  # Root files. Absence is accepted for crash replay after a prior exact-handle
+  # deletion; an unexpected type, reparse point, or open failure is fail-closed.
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "${PRODUCT_FILENAME}.exe"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "Uninstall ${PRODUCT_FILENAME}.exe"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "${PHASE7_RECOVERY_MARKER_NAME}"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "chrome_100_percent.pak"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "chrome_200_percent.pak"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "d3dcompiler_47.dll"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "dxcompiler.dll"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "dxil.dll"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "ffmpeg.dll"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "icudtl.dat"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "libEGL.dll"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "libGLESv2.dll"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "LICENSE"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "LICENSE.electron.txt"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "LICENSES.chromium.html"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "resources.pak"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "snapshot_blob.bin"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "v8_context_snapshot.bin"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "version"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "vk_swiftshader.dll"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "vk_swiftshader_icd.json"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "vulkan-1.dll"
+  !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedRootHandle "uninstallerIcon.ico"
+
+  # locales
+  !insertmacro phase7OpenCommittedAllowlistedDirectory $phase7CommittedRootHandle "locales" phase7CommittedLevel1Handle R8
+  ${If} $R8 == "opened"
+    !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel1Handle "en-US.pak"
+    !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel1Handle "zh-CN.pak"
+    !insertmacro phase7DeleteCommittedAllowlistedDirectory phase7CommittedLevel1Handle $phase7CommittedRootHandle "locales"
+  ${ElseIf} $R8 != "absent"
     StrCpy $phase7StageCleanupPending "cleanup-failed"
-    Goto phase7_committed_delete_close
+    Goto phase7_committed_delete_done
   ${EndIf}
 
-  phase7_committed_delete_loop:
-    StrCmp $R3 "" phase7_committed_delete_close
-    StrCmp $R3 "." phase7_committed_delete_next
-    StrCmp $R3 ".." phase7_committed_delete_next
-    ${If} $R0 == ""
-    ${AndIf} $R3 == "${PHASE7_INSTALL_MARKER_NAME}"
-      Goto phase7_committed_delete_next
-    ${EndIf}
+  # resources and its fixed depth-two directories
+  !insertmacro phase7OpenCommittedAllowlistedDirectory $phase7CommittedRootHandle "resources" phase7CommittedLevel1Handle R8
+  ${If} $R8 == "opened"
+    !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel1Handle "app.asar"
 
-    StrCpy $R4 "$R3"
-    ${If} $R0 != ""
-      StrCpy $R4 "$R0\$R3"
-    ${EndIf}
-    Push "$R4"
-    Call ${PHASE7_CLASSIFY_FUNCTION}
-    Pop $R5
-    ${If} $R5 == ""
+    !insertmacro phase7OpenCommittedAllowlistedDirectory $phase7CommittedLevel1Handle "selection-host" phase7CommittedLevel2Handle R8
+    ${If} $R8 == "opened"
+      !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel2Handle "selection-host.exe"
+      !insertmacro phase7DeleteCommittedAllowlistedDirectory phase7CommittedLevel2Handle $phase7CommittedLevel1Handle "selection-host"
+    ${ElseIf} $R8 != "absent"
       StrCpy $phase7StageCleanupPending "cleanup-failed"
-      Goto phase7_committed_delete_close
+      Goto phase7_committed_delete_done
     ${EndIf}
 
-    StrCpy $R6 "$phase7TransactionStage\$R4"
-    System::Call 'KERNEL32::GetFileAttributesW(w R6) i.R8 ?e'
-    Pop $R9
-    ${If} $R8 == -1
+    !insertmacro phase7OpenCommittedAllowlistedDirectory $phase7CommittedLevel1Handle "migrations" phase7CommittedLevel2Handle R8
+    ${If} $R8 == "opened"
+      !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel2Handle "0001_initial.sql"
+      !insertmacro phase7DeleteCommittedAllowlistedDirectory phase7CommittedLevel2Handle $phase7CommittedLevel1Handle "migrations"
+    ${ElseIf} $R8 != "absent"
       StrCpy $phase7StageCleanupPending "cleanup-failed"
-      Goto phase7_committed_delete_close
+      Goto phase7_committed_delete_done
     ${EndIf}
-    StrCpy $R9 $R8
-    IntOp $R8 $R8 & 0x400
-    ${If} $R8 != 0
+
+    !insertmacro phase7OpenCommittedAllowlistedDirectory $phase7CommittedLevel1Handle "licenses" phase7CommittedLevel2Handle R8
+    ${If} $R8 == "opened"
+      !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel2Handle "THIRD_PARTY_NOTICES.txt"
+      !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel2Handle "ELECTRON_LICENSE.txt"
+      !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel2Handle "LICENSES.chromium.html"
+      !insertmacro phase7DeleteCommittedAllowlistedDirectory phase7CommittedLevel2Handle $phase7CommittedLevel1Handle "licenses"
+    ${ElseIf} $R8 != "absent"
       StrCpy $phase7StageCleanupPending "cleanup-failed"
-      Goto phase7_committed_delete_close
-    ${EndIf}
-    IntOp $R8 $R9 & 0x10
-    ${If} $R8 != 0
-      ${If} $R5 != "directory"
-        StrCpy $phase7StageCleanupPending "cleanup-failed"
-        Goto phase7_committed_delete_close
-      ${EndIf}
-      Push "$R4"
-      Call ${PHASE7_COMMITTED_DELETE_FUNCTION}
-      ${If} $phase7StageCleanupPending != "clean"
-        Goto phase7_committed_delete_close
-      ${EndIf}
-    ${Else}
-      ${If} $R5 != "file"
-        StrCpy $phase7StageCleanupPending "cleanup-failed"
-        Goto phase7_committed_delete_close
-      ${EndIf}
-      ClearErrors
-      Delete "$R6"
-      ${If} ${Errors}
-        StrCpy $phase7StageCleanupPending "cleanup-failed"
-        Goto phase7_committed_delete_close
-      ${EndIf}
-      !insertmacro phase7ReadPathState "$R6" R9 R8 R4
-      ${If} $R9 != "absent"
-        StrCpy $phase7StageCleanupPending "cleanup-failed"
-        Goto phase7_committed_delete_close
-      ${EndIf}
+      Goto phase7_committed_delete_done
     ${EndIf}
 
-  phase7_committed_delete_next:
-    !insertmacro phase7FindNext R2 R7 R4 R8 R3 R9
-    ${If} $R4 == 0
-      ${If} $R9 != 18
-        StrCpy $phase7StageCleanupPending "cleanup-failed"
-      ${EndIf}
-      StrCpy $R3 ""
+    !insertmacro phase7OpenCommittedAllowlistedDirectory $phase7CommittedLevel1Handle "supply-chain" phase7CommittedLevel2Handle R8
+    ${If} $R8 == "opened"
+      !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel2Handle "sbom.cdx.json"
+      !insertmacro phase7DeleteCommittedAllowlistedDirectory phase7CommittedLevel2Handle $phase7CommittedLevel1Handle "supply-chain"
+    ${ElseIf} $R8 != "absent"
+      StrCpy $phase7StageCleanupPending "cleanup-failed"
+      Goto phase7_committed_delete_done
     ${EndIf}
-    Goto phase7_committed_delete_loop
 
-  phase7_committed_delete_close:
-    !insertmacro phase7FindClose R2 R7
-    ClearErrors
-    ${If} $phase7StageCleanupPending == "clean"
-    ${AndIf} $R0 != ""
-      ClearErrors
-      RMDir "$R1"
-      ${If} ${Errors}
-        StrCpy $phase7StageCleanupPending "cleanup-failed"
-      ${Else}
-        !insertmacro phase7ReadPathState "$R1" R5 R8 R9
-        ${If} $R5 != "absent"
-          StrCpy $phase7StageCleanupPending "cleanup-failed"
-        ${EndIf}
-      ${EndIf}
+    !insertmacro phase7OpenCommittedAllowlistedDirectory $phase7CommittedLevel1Handle "manifest" phase7CommittedLevel2Handle R8
+    ${If} $R8 == "opened"
+      !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel2Handle "product-manifest.json"
+      !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel2Handle "component-manifest.json"
+      !insertmacro phase7DeleteCommittedAllowlistedFile $phase7CommittedLevel2Handle "file-manifest.sha256"
+      !insertmacro phase7DeleteCommittedAllowlistedDirectory phase7CommittedLevel2Handle $phase7CommittedLevel1Handle "manifest"
+    ${ElseIf} $R8 != "absent"
+      StrCpy $phase7StageCleanupPending "cleanup-failed"
+      Goto phase7_committed_delete_done
     ${EndIf}
+
+    !insertmacro phase7DeleteCommittedAllowlistedDirectory phase7CommittedLevel1Handle $phase7CommittedRootHandle "resources"
+  ${ElseIf} $R8 != "absent"
+    StrCpy $phase7StageCleanupPending "cleanup-failed"
+    Goto phase7_committed_delete_done
+  ${EndIf}
 
   phase7_committed_delete_done:
+    !insertmacro phase7CloseCommittedHandleVariable phase7CommittedFileHandle R8
+    !insertmacro phase7CloseCommittedHandleVariable phase7CommittedLevel2Handle R8
+    !insertmacro phase7CloseCommittedHandleVariable phase7CommittedLevel1Handle R8
     ClearErrors
     Pop $R9
     Pop $R8
@@ -3839,6 +4269,7 @@ FunctionEnd
       StrCpy $phase7TransactionStage "$R3\${PHASE7_STAGE_PREFIX}-$R1-$R2"
     ${EndIf}
     !insertmacro phase7ValidateUninstallTransactionPaths
+    !insertmacro phase7CaptureTransactionSourceIdentity
 
     !insertmacro phase7ReadPathState "$phase7TransactionStage" R5 R3 R4
     ${If} $R5 == "error"
@@ -3876,6 +4307,7 @@ FunctionEnd
     ${ElseIf} $R4 == "present"
       !insertmacro phase7Fail "The source root still exists after atomic staging."
     ${EndIf}
+    !insertmacro phase7AssertCommittedStagePathIdentity
     !insertmacro phase7ValidateStableRoot "$phase7TransactionStage"
     StrCpy $INSTDIR "$phase7TransactionSource"
 

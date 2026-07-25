@@ -1,6 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter()][string]$PocAuthorizationPath,
+    [Parameter()][string]$CandidateGenerationEnZhPath,
+    [Parameter()][string]$CandidateGenerationZhEnPath,
     [Parameter()][ValidateRange(1, 100)][int]$TrialsPerDirection = 20,
     [Parameter()][ValidateRange(50, 1000)][int]$SampleIntervalMilliseconds = 100,
     [Parameter()][ValidateRange(30, 600)][int]$TrialTimeoutSeconds = 360,
@@ -13,7 +15,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-$script:SchemaVersion = 'phase7-bergamot-cold-pws-v2'
+$script:SchemaVersion = 'phase7-offline-cold-pws-v3'
 $script:SuccessPocStatus = 'PARTIAL_M4_DIRECTION_COLD_TRIAL'
 $script:Sha256Pattern = '^[a-f0-9]{64}$'
 $script:MinimumValidSamples = 10
@@ -869,6 +871,7 @@ function Get-HarnessIdentity {
         main = 'bergamot-electron-poc.mjs'
         library = 'bergamot-electron-poc-lib.mjs'
         renderer = 'bergamot-electron-poc-renderer.mjs'
+        bindings = 'gate-a-candidate-bindings.mjs'
     }
     $identities = [ordered]@{}
     $lines = [Collections.Generic.List[string]]::new()
@@ -888,6 +891,7 @@ function Get-HarnessIdentity {
         electronMainSha256 = $identities.main
         electronLibrarySha256 = $identities.library
         electronRendererSha256 = $identities.renderer
+        candidateBindingsSha256 = $identities.bindings
     }
 }
 
@@ -3639,9 +3643,14 @@ if (-not [string]::IsNullOrWhiteSpace([string]$env:ELECTRON_RUN_AS_NODE)) {
 if ([string]::IsNullOrWhiteSpace($PocAuthorizationPath)) {
     throw 'BERGAMOT_COLD_PWS_AUTHORIZATION_REQUIRED'
 }
-if ($Directions.Count -lt 1 -or $Directions.Count -gt 2 -or
-    @($Directions | Select-Object -Unique).Count -ne $Directions.Count) {
-    throw 'BERGAMOT_COLD_PWS_DIRECTIONS_INVALID'
+if ([string]::IsNullOrWhiteSpace($CandidateGenerationEnZhPath) -or
+    [string]::IsNullOrWhiteSpace($CandidateGenerationZhEnPath)) {
+    throw 'BERGAMOT_COLD_PWS_CANDIDATE_GENERATIONS_REQUIRED'
+}
+if ($Directions.Count -ne 2 -or
+    @($Directions | Select-Object -Unique).Count -ne 2 -or
+    ((@($Directions | Sort-Object) -join ',') -ne 'en-zh,zh-en')) {
+    throw 'BERGAMOT_COLD_PWS_V3_BOTH_DIRECTIONS_REQUIRED'
 }
 
 $measurementRoot = Join-Path $artifactRoot 'measurements'
@@ -3669,6 +3678,35 @@ $authorizationPath = if ([IO.Path]::IsPathRooted($PocAuthorizationPath)) {
     Resolve-NormalizedPath -Path (Join-Path $repositoryRoot $PocAuthorizationPath)
 }
 $authorizationIdentity = Get-FileIdentity -Path $authorizationPath
+$candidateGenerationPaths = [ordered]@{
+    'en-zh' = if ([IO.Path]::IsPathRooted($CandidateGenerationEnZhPath)) {
+        Resolve-NormalizedPath -Path $CandidateGenerationEnZhPath
+    } else {
+        Resolve-NormalizedPath -Path (
+            Join-Path $repositoryRoot $CandidateGenerationEnZhPath
+        )
+    }
+    'zh-en' = if ([IO.Path]::IsPathRooted($CandidateGenerationZhEnPath)) {
+        Resolve-NormalizedPath -Path $CandidateGenerationZhEnPath
+    } else {
+        Resolve-NormalizedPath -Path (
+            Join-Path $repositoryRoot $CandidateGenerationZhEnPath
+        )
+    }
+}
+foreach ($generationPath in $candidateGenerationPaths.Values) {
+    $resolvedGenerationPath = Assert-PathWithinRoot `
+        -Path $generationPath `
+        -Root $artifactRoot
+    Assert-NoReparsePointsInParentChain `
+        -Path $resolvedGenerationPath `
+        -RepositoryRoot $repositoryRoot
+    $null = Assert-RegularFile -Path $resolvedGenerationPath
+}
+$candidateBindingToolPath = Resolve-NormalizedPath -Path (
+    Join-Path $PSScriptRoot 'gate-a-candidate-bindings.mjs'
+)
+$null = Assert-RegularFile -Path $candidateBindingToolPath
 $electronPath = Resolve-NormalizedPath -Path (
     Join-Path $repositoryRoot 'node_modules\electron\dist\electron.exe'
 )
@@ -3793,6 +3831,11 @@ if ($postElectronDistBinding.Report.treeSha256 -ne
 $postAuthorizationIdentity = Get-FileIdentity -Path $authorizationPath
 if ($postAuthorizationIdentity.sha256 -ne $authorizationIdentity.sha256) {
     throw 'BERGAMOT_COLD_PWS_AUTHORIZATION_CHANGED_DURING_RUN'
+}
+$candidateBindingToolIdentity = Get-FileIdentity -Path $candidateBindingToolPath
+if ($candidateBindingToolIdentity.sha256 -ne
+    $harnessIdentity.candidateBindingsSha256) {
+    throw 'BERGAMOT_COLD_PWS_BINDING_TOOL_CHANGED_DURING_RUN'
 }
 
 $directionReports = [Collections.Generic.List[object]]::new()
@@ -3963,6 +4006,58 @@ foreach ($direction in @('en-zh', 'zh-en')) {
     } else { $null }
 }
 
+$nodeCommand = Get-Command -Name node -CommandType Application `
+    -ErrorAction Stop
+$candidateBindingOutput = & $nodeCommand.Source $candidateBindingToolPath `
+    --authorization $authorizationPath `
+    --generation-en-zh $candidateGenerationPaths['en-zh'] `
+    --generation-zh-en $candidateGenerationPaths['zh-en'] `
+    --manifest-sha256 $identityState['manifestSha256'] `
+    --materialized-runtime-tree-sha256 `
+        $identityState['materializedRuntimeTreeSha256'] `
+    --served-runtime-tree-sha256 `
+        $identityState['servedRuntimeTreeSha256'] `
+    --model-tree-sha256-en-zh `
+        $identityState['supplyTreeSha256_en-zh'] `
+    --model-tree-sha256-zh-en `
+        $identityState['supplyTreeSha256_zh-en'] `
+    --source-chars-en-zh `
+        $workloadIdentityByDirection['en-zh'].sourceChars `
+    --source-sha256-en-zh `
+        $workloadIdentityByDirection['en-zh'].sourceSha256 `
+    --sample-identity-sha256-en-zh `
+        $workloadIdentityByDirection['en-zh'].sampleIdentitySha256 `
+    --workload-config-sha256-en-zh `
+        $workloadIdentityByDirection['en-zh'].workloadConfigSha256 `
+    --source-chars-zh-en `
+        $workloadIdentityByDirection['zh-en'].sourceChars `
+    --source-sha256-zh-en `
+        $workloadIdentityByDirection['zh-en'].sourceSha256 `
+    --sample-identity-sha256-zh-en `
+        $workloadIdentityByDirection['zh-en'].sampleIdentitySha256 `
+    --workload-config-sha256-zh-en `
+        $workloadIdentityByDirection['zh-en'].workloadConfigSha256
+if ($LASTEXITCODE -ne 0) {
+    throw 'BERGAMOT_COLD_PWS_CANDIDATE_GENERATION_BINDING_FAILED'
+}
+$candidateBindingReport = (
+    @($candidateBindingOutput) -join [Environment]::NewLine
+) | ConvertFrom-Json
+if ($candidateBindingReport.schemaVersion -ne
+        'phase7-gate-a-candidate-binding-set-v1' -or
+    $candidateBindingReport.authorizationSha256 -ne
+        $authorizationIdentity.sha256 -or
+    $candidateBindingReport.manifestSha256 -ne
+        $identityState['manifestSha256'] -or
+    $candidateBindingReport.integrationOrDistributionAuthorized -ne $false -or
+    $candidateBindingReport.rawTextEmitted -ne $false -or
+    $candidateBindingReport.absolutePathsEmitted -ne $false -or
+    @($candidateBindingReport.bindings).Count -ne 2 -or
+    [string]$candidateBindingReport.bindingSetSha256 -notmatch
+        $script:Sha256Pattern) {
+    throw 'BERGAMOT_COLD_PWS_CANDIDATE_GENERATION_BINDING_INVALID'
+}
+
 $report = [ordered]@{
     schemaVersion = $script:SchemaVersion
     status = if ($failureCount -gt 0 -or $forcedKillCount -gt 0) {
@@ -4030,7 +4125,10 @@ $report = [ordered]@{
             'zh-en' = $identityState['supplyTreeSha256_zh-en']
         }
         workloadIdentityByDirection = $workloadIdentityByDirection
+        candidateGenerationBindingSetSha256 =
+            [string]$candidateBindingReport.bindingSetSha256
     }
+    candidateGenerationBindings = @($candidateBindingReport.bindings)
     environment = [ordered]@{
         platform = 'win32'
         architecture =

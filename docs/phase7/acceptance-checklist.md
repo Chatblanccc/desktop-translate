@@ -56,7 +56,10 @@ git SHA、binary/model hash、设备/环境、命令或操作步骤、退出码/
   选项、无 machine-wide 注册，且包内不含 elevate helper。
 - [ ] 覆盖安装复用原 `InstallLocation`，不重复注册、不静默搬家。
 - [x] 普通交互卸载、同用户重装与 userData 保留语义已在当前默认目录候选上验证。
-- [ ] 已登记安装上的同版本 installer 重跑与升级语义已验证。
+- [x] 第六版 exact unsigned candidate 已在默认 CurrentUser 根完成两次已登记同版本 installer 重跑；
+  七项 registry snapshot 逐字不变、复用原 `InstallLocation`，无 transaction/backup/stage/残留进程。
+  证据见 [第六版 handle-relative uninstall](m3-validation.md#27-sixth-candidate-handle-relative-committed-uninstall)。
+- [ ] 跨版本升级语义已验证。
 - [ ] 受保护/不可写路径安全失败，且不留下半安装和残留进程。
 - [ ] fresh/registered/recovering、uninstall staging 只接受本机 fixed NTFS；UNC/network、removable、
   ReFS、reparse 与未知文件/目录在首次 mutation 前 fail closed。
@@ -74,11 +77,17 @@ git SHA、binary/model hash、设备/环境、命令或操作步骤、退出码/
   held-parent relative `NtCreateFile`、volume/file ID 复验和 exact-handle disposition；标准用户 7/7
   runtime selftest、x86 MakeNSIS probe、四类 pathname/early-close 负向 mutation 及第五版 exact package
   gates 通过。证据见 [M3 开发验证](m3-validation.md#24-fifth-installer-identity-package)。
-- [ ] committed uninstall staging 的 allowlist tree、marker-last 与最终 empty-root cleanup 仍含 pathname
-  identity；必须以独立 handle-relative protocol 和崩溃重放身份完成，不能由上一条 fresh/marker PASS
-  或一次成功卸载代替。
+- [x] committed uninstall staging 已绑定 transaction v2 durable volume/file identity；stage root 与
+  stable marker 全程持有 no-delete-share handle，固定 allowlist 只通过 pinned parent-relative
+  `NtCreateFile` 打开并按 exact handle disposition，marker-last 与 empty-root cleanup 不再使用
+  pathname delete/RMDir。9/9 runtime、x86 NSIS probes、九类负向 policy mutations、完整 package、
+  已登记重跑、未知 file/empty-directory fail-closed、busy-file pre-commit failure、正常 Quiet
+  uninstall 与 stage-file delete-share post-commit failure/recovery 通过。逐 checkpoint process-kill
+  crash 仍由故障矩阵保持开放。
 - [ ] `committed-postcleanup` 可重放 shortcut、AppUserModelId、shell notify 与用户选择的 exact AppData
-  cleanup；普通 product registry 已删除，canonical transaction 只在全部完成后清除。
+  cleanup；默认 retain-userData 路线已通过 `committed-cleanup → recovery → fresh install` 真实重放，
+  普通 product registry 已删除且 transaction 只在 root/postcleanup 完成后清除；用户选择
+  delete-AppData 的 exact leaf 路线仍未实测。
 - [ ] unsigned NSIS harness 的 Defender 拦截不作为安全通过；最终签名 exact candidate 在 clean VM
   完成扫描、运行、两遍 uninstaller 生成及落地 uninstaller Authenticode 验证。
 
@@ -97,6 +106,9 @@ git SHA、binary/model hash、设备/环境、命令或操作步骤、退出码/
 
 POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 
+- [x] formal PWS v3 与 blind report v2 已通过同一组两方向 candidate-generation raw hash、
+  authorization、manifest、model/runtime、workload 和 candidate/run identity 交叉绑定；静态正负测通过，
+  但真实生成 artifact、formal run 与人工评审仍未执行。
 - [ ] 至少一个候选记录 model/runtime ID、上游 revision、许可证和再分发条件。
 - [ ] base installer 不含模型且 `≤150 MiB`。
 - [ ] core pack 目标 `≤300 MiB`，硬上限 `≤400 MiB`，同时记录 archive/解包体积。
@@ -112,7 +124,7 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 
 | 指标 | 门槛 | 实际值 | 状态/证据 |
 |---|---:|---:|---|
-| Base installer | `≤150 MiB` | `NOT RUN` | `NOT RUN` |
+| Base installer | `≤150 MiB` | `130,711,602` bytes / `124.656 MiB` | `DEVELOPMENT OBSERVATION`; unsigned dirty-worktree package gates PASS, Gate A cross-binding not complete |
 | Core pack | target `≤300 MiB`; hard `≤400 MiB` | `NOT RUN` | `NOT RUN` |
 | Cold p95 | `≤3.0 s` | `NOT RUN` | `NOT RUN` |
 | Warm p95 | `≤1.5 s` | `NOT RUN` | `NOT RUN` |

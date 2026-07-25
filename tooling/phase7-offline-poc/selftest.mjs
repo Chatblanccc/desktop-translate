@@ -364,6 +364,29 @@ assert.equal(
   'GATE_A_INPUT_INCOMPLETE'
 );
 
+const candidateBindingsSelfTest = await execFileAsync(
+  process.execPath,
+  [resolve(scriptRoot, 'gate-a-candidate-bindings-selftest.mjs')],
+  { maxBuffer: 1024 * 1024 }
+);
+const candidateBindingsReport = JSON.parse(
+  candidateBindingsSelfTest.stdout
+);
+assert.equal(
+  candidateBindingsReport.status,
+  'CANDIDATE_BINDING_SELF_TEST_PASS'
+);
+assert.equal(
+  candidateBindingsReport.formalColdSchema,
+  'phase7-offline-cold-pws-v3'
+);
+assert.equal(candidateBindingsReport.rawTextEmitted, false);
+assert.equal(candidateBindingsReport.absolutePathsEmitted, false);
+assert.equal(
+  candidateBindingsReport.integrationOrDistributionAuthorized,
+  false
+);
+
 const qvacRuntimeSelfTest = await execFileAsync(
   process.execPath,
   [resolve(scriptRoot, 'qvac-runtime-selftest.mjs')],
@@ -413,6 +436,7 @@ process.stdout.write(`${JSON.stringify({
     'firefox-bergamot-fresh-process-query-working-set-runner',
     'argos-ctranslate2-supply-archive-and-direct-poc-static-harness',
     'human-blind-evaluation-randomization-and-privacy-harness',
+    'candidate-generation-cross-evidence-binding',
     'qvac-bare-runtime-candidate-supply-and-boundaries'
   ],
   networkActivityVerification: 'NOT_PERFORMED_STATIC_SCHEMA_SELFTEST',

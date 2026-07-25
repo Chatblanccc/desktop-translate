@@ -24,6 +24,10 @@ import {
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
+import { canonicalJson } from './lib.mjs';
+import {
+  deriveGateACandidateBindings
+} from './gate-a-candidate-bindings.mjs';
 
 export const INPUT_SCHEMA_VERSION = 'phase7-blind-eval-input-item-v1';
 export const BATCH_SCHEMA_VERSION = 'phase7-blind-eval-review-batch-item-v1';
@@ -31,6 +35,7 @@ export const SCORE_SCHEMA_VERSION = 'phase7-blind-eval-score-v1';
 export const MANIFEST_SCHEMA_VERSION = 'phase7-blind-eval-manifest-v1';
 export const ANSWER_KEY_SCHEMA_VERSION = 'phase7-blind-eval-private-answer-key-v1';
 export const REPORT_SCHEMA_VERSION = 'phase7-blind-eval-report-v1';
+export const REPORT_V2_SCHEMA_VERSION = 'phase7-blind-eval-report-v2';
 export const MINIMUM_ITEMS_PER_DIRECTION = 200;
 export const REQUIRED_DIRECTIONS = Object.freeze(['en-zh', 'zh-en']);
 export const POC_SCOPE = 'POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION';
@@ -715,6 +720,160 @@ export async function summarizeHumanScores({
   };
 }
 
+export async function summarizeHumanScoresV2({
+  candidateBindingReport,
+  ...summaryInput
+}) {
+  assertCandidateBindingReport(candidateBindingReport);
+  const base = await summarizeHumanScores(summaryInput);
+  if (
+    base.report.status !== 'HUMAN_BLIND_EVALUATION_COMPONENT_COMPLETE'
+    || base.report.counts.pendingHumanReviewCount !== 0
+  ) {
+    throw new BlindEvalError('V2_REQUIRES_COMPLETE_HUMAN_REVIEW');
+  }
+  const bindingByDirection = new Map(
+    candidateBindingReport.bindings.map((binding) => [
+      binding.direction,
+      binding
+    ])
+  );
+  const answerKey = JSON.parse(summaryInput.answerKeyContent);
+  const itemIdentitySetSha256ByDirection = Object.fromEntries(
+    REQUIRED_DIRECTIONS.map((direction) => {
+      const binding = bindingByDirection.get(direction);
+      const itemIdentities = answerKey.records
+        .filter((record) => record.direction === direction)
+        .map((record) => ({
+          direction: record.direction,
+          itemId: record.itemId,
+          sourceSha256: record.sourceSha256
+        }))
+        .sort((left, right) => left.itemId.localeCompare(right.itemId));
+      const itemIdentitySetSha256 = sha256(canonicalJson(itemIdentities));
+      if (
+        !binding
+        || itemIdentities.length !== binding.sourceSetRecordCount
+        || itemIdentitySetSha256
+          !== binding.candidateOutputItemIdentitySetSha256
+      ) {
+        throw new BlindEvalError(
+          'V2_REVIEWED_ITEM_SET_CANDIDATE_OUTPUT_MISMATCH',
+          { direction }
+        );
+      }
+      return [direction, itemIdentitySetSha256];
+    })
+  );
+  const report = structuredClone(base.report);
+  report.schemaVersion = REPORT_V2_SCHEMA_VERSION;
+  report.candidateGenerationBindings =
+    structuredClone(candidateBindingReport.bindings);
+  report.rawScores = report.rawScores.map((score) => {
+    const binding = bindingByDirection.get(score.direction);
+    if (
+      !binding
+      || score.candidateId !== binding.candidateId
+      || score.generationRunId !== binding.generationRunId
+    ) {
+      throw new BlindEvalError(
+        'V2_RAW_SCORE_CANDIDATE_GENERATION_MISMATCH',
+        { direction: score.direction }
+      );
+    }
+    return {
+      ...score,
+      generationIdentitySha256: binding.generationIdentitySha256
+    };
+  });
+  report.directions = report.directions.map((direction) => {
+    const binding = bindingByDirection.get(direction.direction);
+    if (
+      !binding
+      || direction.candidates.length !== 1
+      || direction.candidates[0].candidateId !== binding.candidateId
+      || direction.candidates[0].generationRunIds.length !== 1
+      || direction.candidates[0].generationRunIds[0]
+        !== binding.generationRunId
+    ) {
+      throw new BlindEvalError(
+        'V2_DIRECTION_CANDIDATE_GENERATION_SET_MISMATCH',
+        { direction: direction.direction }
+      );
+    }
+    return {
+      ...direction,
+      candidates: [{
+        ...direction.candidates[0],
+        generationIdentitySha256: binding.generationIdentitySha256
+      }]
+    };
+  });
+  report.audit.candidateGenerationBindingSetSha256 =
+    candidateBindingReport.bindingSetSha256;
+  report.audit.candidateOutputItemIdentitySetSha256ByDirection =
+    itemIdentitySetSha256ByDirection;
+  report.audit.rawScoresSha256 = sha256(JSON.stringify(report.rawScores));
+
+  const { validateReportV2 } = await loadValidators();
+  if (!validateReportV2(report)) {
+    throw new BlindEvalError('REPORT_V2_SCHEMA_VALIDATION_FAILED', {
+      schemaKeyword: validateReportV2.errors?.[0]?.keyword ?? 'unknown'
+    });
+  }
+  const reportContent = toPrettyJson(report);
+  assertReportPrivacy(reportContent);
+  return { report, reportContent };
+}
+
+function assertCandidateBindingReport(report) {
+  const bindings = Array.isArray(report?.bindings) ? report.bindings : [];
+  const normalized = bindings.map((binding) => ({
+    direction: binding?.direction,
+    candidateId: binding?.candidateId,
+    generationRunId: binding?.generationRunId,
+    generationArtifactSha256: binding?.generationArtifactSha256,
+    generationIdentitySha256: binding?.generationIdentitySha256,
+    sourceSetIdentitySha256: binding?.sourceSetIdentitySha256,
+    sourceSetRecordCount: binding?.sourceSetRecordCount,
+    candidateOutputArtifactSha256:
+      binding?.candidateOutputArtifactSha256,
+    candidateOutputItemIdentitySetSha256:
+      binding?.candidateOutputItemIdentitySetSha256
+  })).sort((left, right) => left.direction.localeCompare(right.direction));
+  if (
+    report?.schemaVersion !== 'phase7-gate-a-candidate-binding-set-v1'
+    || report?.integrationOrDistributionAuthorized !== false
+    || report?.rawTextEmitted !== false
+    || report?.absolutePathsEmitted !== false
+    || bindings.length !== REQUIRED_DIRECTIONS.length
+    || new Set(bindings.map((binding) => binding.direction)).size
+      !== REQUIRED_DIRECTIONS.length
+    || !REQUIRED_DIRECTIONS.every(
+      (direction) => bindings.some((binding) => binding.direction === direction)
+    )
+    || bindings.some((binding) => (
+      typeof binding.candidateId !== 'string'
+      || typeof binding.generationRunId !== 'string'
+      || !/^[a-f0-9]{64}$/u.test(binding.generationArtifactSha256 ?? '')
+      || !/^[a-f0-9]{64}$/u.test(binding.generationIdentitySha256 ?? '')
+      || !/^[a-f0-9]{64}$/u.test(binding.sourceSetIdentitySha256 ?? '')
+      || !Number.isSafeInteger(binding.sourceSetRecordCount)
+      || binding.sourceSetRecordCount < MINIMUM_ITEMS_PER_DIRECTION
+      || !/^[a-f0-9]{64}$/u.test(
+        binding.candidateOutputArtifactSha256 ?? ''
+      )
+      || !/^[a-f0-9]{64}$/u.test(
+        binding.candidateOutputItemIdentitySetSha256 ?? ''
+      )
+    ))
+    || report.bindingSetSha256
+      !== sha256(canonicalJson(normalized))
+  ) {
+    throw new BlindEvalError('CANDIDATE_BINDING_REPORT_INVALID');
+  }
+}
+
 async function validatePreparedArtifacts({
   manifest,
   batchRecords,
@@ -1216,16 +1375,107 @@ async function loadValidators() {
     const ajv = new Ajv2020({ allErrors: true, strict: true });
     addFormats(ajv);
     const schemas = Object.fromEntries(entries);
+    const reportV2Schema = buildReportV2Schema(schemas.report);
     return {
       validateInput: ajv.compile(schemas.input),
       validateBatch: ajv.compile(schemas.batch),
       validateScore: ajv.compile(schemas.score),
       validateManifest: ajv.compile(schemas.manifest),
       validateAnswerKey: ajv.compile(schemas.answerKey),
-      validateReport: ajv.compile(schemas.report)
+      validateReport: ajv.compile(schemas.report),
+      validateReportV2: ajv.compile(reportV2Schema)
     };
   })();
   return validatorsPromise;
+}
+
+function buildReportV2Schema(reportV1Schema) {
+  const schema = structuredClone(reportV1Schema);
+  schema.$id =
+    'https://desktop-translate.invalid/schemas/phase7-blind-eval-report-v2.json';
+  schema.title = 'Phase 7 cross-bound human blind evaluation report';
+  schema.properties.schemaVersion.const = REPORT_V2_SCHEMA_VERSION;
+  schema.required.push('candidateGenerationBindings');
+  schema.properties.candidateGenerationBindings = {
+    type: 'array',
+    minItems: 2,
+    maxItems: 2,
+    items: { $ref: '#/$defs/candidateBinding' }
+  };
+  schema.properties.audit.required.push(
+    'candidateGenerationBindingSetSha256',
+    'candidateOutputItemIdentitySetSha256ByDirection'
+  );
+  schema.properties.audit.properties
+    .candidateGenerationBindingSetSha256 = { $ref: '#/$defs/sha256' };
+  schema.properties.audit.properties
+    .candidateOutputItemIdentitySetSha256ByDirection = {
+      type: 'object',
+      additionalProperties: false,
+      required: REQUIRED_DIRECTIONS,
+      properties: Object.fromEntries(
+        REQUIRED_DIRECTIONS.map((direction) => [
+          direction,
+          { $ref: '#/$defs/sha256' }
+        ])
+      )
+    };
+  schema.$defs.rawScore.required.push('generationIdentitySha256');
+  schema.$defs.rawScore.properties.generationIdentitySha256 = {
+    $ref: '#/$defs/sha256'
+  };
+  schema.$defs.candidateReport.required.push(
+    'generationIdentitySha256'
+  );
+  schema.$defs.candidateReport.properties.generationIdentitySha256 = {
+    $ref: '#/$defs/sha256'
+  };
+  schema.$defs.candidateBinding = {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'direction',
+      'candidateId',
+      'generationRunId',
+      'generationArtifactSha256',
+      'generationIdentitySha256',
+      'sourceSetIdentitySha256',
+      'sourceSetRecordCount',
+      'candidateOutputArtifactSha256',
+      'candidateOutputItemIdentitySetSha256'
+    ],
+    properties: {
+      direction: {
+        enum: REQUIRED_DIRECTIONS
+      },
+      candidateId: {
+        $ref: '#/$defs/slug'
+      },
+      generationRunId: {
+        $ref: '#/$defs/slug'
+      },
+      generationArtifactSha256: {
+        $ref: '#/$defs/sha256'
+      },
+      generationIdentitySha256: {
+        $ref: '#/$defs/sha256'
+      },
+      sourceSetIdentitySha256: {
+        $ref: '#/$defs/sha256'
+      },
+      sourceSetRecordCount: {
+        type: 'integer',
+        minimum: MINIMUM_ITEMS_PER_DIRECTION
+      },
+      candidateOutputArtifactSha256: {
+        $ref: '#/$defs/sha256'
+      },
+      candidateOutputItemIdentitySetSha256: {
+        $ref: '#/$defs/sha256'
+      }
+    }
+  };
+  return schema;
 }
 
 async function prepareCommand(options) {
@@ -1303,6 +1553,103 @@ async function summarizeCommand(options) {
     gateAInputStatus: report.gateA.inputStatus,
     overallGateAStatus: report.gateA.overallGateAStatus
   };
+}
+
+async function summarizeV2Command(options) {
+  const runId = requiredOption(options, 'run-id');
+  const authorizationPath = await resolveSafeEvidencePath(
+    requiredOption(options, 'authorization')
+  );
+  const generationPaths = {
+    'en-zh': await resolveSafeEvidencePath(
+      requiredOption(options, 'generation-en-zh')
+    ),
+    'zh-en': await resolveSafeEvidencePath(
+      requiredOption(options, 'generation-zh-en')
+    )
+  };
+  const candidateBindingReport = await deriveGateACandidateBindings({
+    authorizationPath,
+    generationPaths
+  });
+  const reportId = `report-${randomBytes(8).toString('hex')}`;
+  assertRunId(runId);
+  assertReportId(reportId);
+  const runDirectory = await resolveSafeRunDirectory(runId);
+  const [
+    manifestContent,
+    batchContent,
+    scoreTemplateContent,
+    answerKeyContent,
+    scoresContent
+  ] = await Promise.all([
+    readRunFile(runDirectory, 'manifest.json'),
+    readRunFile(runDirectory, 'review-batch.jsonl'),
+    readRunFile(runDirectory, 'score-template.jsonl'),
+    readRunFile(runDirectory, 'private-answer-key.json'),
+    readRunFile(runDirectory, 'scores.jsonl')
+  ]);
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestContent);
+  } catch {
+    throw new BlindEvalError('MANIFEST_PARSE_FAILED');
+  }
+  const { report, reportContent } = await summarizeHumanScoresV2({
+    manifest,
+    manifestContent,
+    batchContent,
+    scoreTemplateContent,
+    answerKeyContent,
+    scoresContent,
+    reportId,
+    candidateBindingReport
+  });
+  const outputPath = resolve(runDirectory, `report-${reportId}-v2.json`);
+  await assertDirectChildPath(runDirectory, outputPath);
+  await writeFile(outputPath, reportContent, {
+    encoding: 'utf8',
+    flag: 'wx'
+  }).catch((error) => {
+    if (error?.code === 'EEXIST') {
+      throw new BlindEvalError('REPORT_ALREADY_EXISTS');
+    }
+    throw new BlindEvalError('REPORT_WRITE_FAILED');
+  });
+  return {
+    status: report.status,
+    schemaVersion: report.schemaVersion,
+    reportId,
+    runId,
+    blindEvaluationComponentComplete:
+      report.gateA.blindEvaluationComponentComplete,
+    validHumanReviewCount: report.counts.validHumanReviewCount,
+    pendingHumanReviewCount: report.counts.pendingHumanReviewCount,
+    candidateGenerationBindingSetSha256:
+      report.audit.candidateGenerationBindingSetSha256,
+    reportSha256: sha256(reportContent),
+    logicalName: basename(outputPath),
+    gateAInputStatus: report.gateA.inputStatus,
+    overallGateAStatus: report.gateA.overallGateAStatus
+  };
+}
+
+async function resolveSafeEvidencePath(inputOption) {
+  if (extname(inputOption).toLowerCase() !== '.json') {
+    throw new BlindEvalError('EVIDENCE_EXTENSION_INVALID');
+  }
+  const candidatePath = resolve(repositoryRoot, inputOption);
+  const candidateStat = await lstat(candidatePath).catch(() => null);
+  if (!candidateStat?.isFile() || candidateStat.isSymbolicLink()) {
+    throw new BlindEvalError('EVIDENCE_FILE_MISSING_OR_UNSAFE');
+  }
+  const rootRealPath = await realpath(artifactRoot);
+  const candidateRealPath = await realpath(candidatePath);
+  if (!isWithin(rootRealPath, candidateRealPath)) {
+    throw new BlindEvalError('EVIDENCE_FILE_OUTSIDE_ARTIFACT_ROOT');
+  }
+  await assertNoLinkSegments(rootRealPath, candidateRealPath);
+  return candidateRealPath;
 }
 
 async function reviewCommand(options) {
@@ -1771,7 +2118,7 @@ function requiredOption(options, name) {
 
 function parseCliArguments(args) {
   const [command, ...rest] = args;
-  if (!['prepare', 'review', 'summarize'].includes(command)) {
+  if (!['prepare', 'review', 'summarize', 'summarize-v2'].includes(command)) {
     throw new BlindEvalError('COMMAND_INVALID');
   }
   const options = new Map();
@@ -1791,7 +2138,14 @@ function parseCliArguments(args) {
     ? new Set(['input'])
     : command === 'review'
       ? new Set(['run-id'])
-      : new Set(['run-id']);
+      : command === 'summarize'
+        ? new Set(['run-id'])
+        : new Set([
+          'run-id',
+          'authorization',
+          'generation-en-zh',
+          'generation-zh-en'
+        ]);
   for (const name of options.keys()) {
     if (!allowed.has(name)) {
       throw new BlindEvalError('UNKNOWN_OPTION_REJECTED', { option: name });
@@ -1807,6 +2161,8 @@ async function main() {
     result = await prepareCommand(options);
   } else if (command === 'review') {
     result = await reviewCommand(options);
+  } else if (command === 'summarize-v2') {
+    result = await summarizeV2Command(options);
   } else {
     result = await summarizeCommand(options);
   }

@@ -1,0 +1,233 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-07-25T19:49:22.2472487+08:00",
+  "status": "HANDLE-RELATIVE COMMITTED UNINSTALL DEVELOPMENT PASS; M3 AND RELEASE REMAIN BLOCKED",
+  "source": {
+    "branch": "codex/phase7-first-beta",
+    "headSha": "8636fc0e542841e4689103c37a0588edfc6411f8",
+    "candidateBuildSourceIdentity": "HEAD+WORKTREE:b4e26d0100abe40a1a3439acbd02f92ddadaae7bfcff8ebfe4ed0fe00b511f69",
+    "developmentDirty": true,
+    "installerInclude": {
+      "sizeBytes": 179205,
+      "sha256": "472fc63c30de98d09710cc7867bc0cdfaf2c725571dfb1bc1c2d6f6e009c91bf"
+    },
+    "appBuilderPatch": {
+      "sizeBytes": 18933,
+      "sha256": "e506aad9c1ae833d706cd54dd20da67ec94176bdcdf30f01a300092a0043e357"
+    }
+  },
+  "candidate": {
+    "path": "artifacts/phase5/package/dist/Desktop-Translate-0.5.0-phase5-x64-setup.exe",
+    "sizeBytes": 130711653,
+    "sha256": "a52c767fffbea90acb884b56209fa741aadf982b473ed514df69d91483a22ffa",
+    "authenticodeStatus": "NotSigned",
+    "packageEvidence": "artifacts/phase5/8636fc0e542841e4689103c37a0588edfc6411f8/local-20260725T1105553096635Z-347545ffa3b54f879cab3c0e4bad4fbf",
+    "packagePipelineExitCode": 0,
+    "releaseStatus": "RELEASE BLOCKED"
+  },
+  "implementation": {
+    "transactionVersion": "DesktopTranslate.UninstallTransaction.v2",
+    "durableRootIdentity": [
+      "RootVolumeSerial",
+      "RootFileIndexHigh",
+      "RootFileIndexLow"
+    ],
+    "committedCleanup": [
+      "open and pin the stage root without FILE_SHARE_DELETE",
+      "verify the pinned root volume and file identity against the durable transaction",
+      "open and pin the stable marker with no sharing",
+      "open only hard-coded allowlist entries relative to already-pinned parent handles",
+      "set FileDispositionInfo only on exact opened handles",
+      "delete the stable marker last and dispose the root only when empty"
+    ],
+    "forbiddenFallbacks": [
+      "pathname Delete in committed tree cleanup",
+      "pathname RMDir in committed tree cleanup",
+      "recursive root deletion",
+      "closing the root or stable-marker lease before allowlist cleanup completes"
+    ]
+  },
+  "automatedGates": {
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "tests": "PASS: 432/432",
+    "releaseSelftest": "PASS; release remains blocked",
+    "installerIdentitySelftest": "PASS: 9/9",
+    "installerAtomicDirectorySelftest": {
+      "status": "PASS",
+      "makeNsisVersion": "3.04",
+      "probeExitCode": 0,
+      "tempLeakCount": 0,
+      "probeSha256": "18210e7e35736bca2b966c9f1eddd3f82fd7819a820825e87b76826f91877d88"
+    },
+    "installerTransactionPathSelftest": {
+      "status": "PASS",
+      "validCases": 4,
+      "rejectedCases": 11,
+      "probeExitCode": 0,
+      "probeSha256": "2439e154c1c380ba6f472dc973f1020e3162092f1d68f1d523954d2a4845dfd9"
+    },
+    "fullElectronBuilderNsisCompile": "PASS: intermediate uninstaller and final installer",
+    "negativePolicyMutations": [
+      "transaction v2 downgrade",
+      "durable root identity omission",
+      "source identity capture removal",
+      "root FILE_SHARE_DELETE",
+      "shared stable marker",
+      "pathname disposition fallback",
+      "pathname allowlist deletion",
+      "early root-handle close",
+      "rollback identity check removal"
+    ]
+  },
+  "realHost": {
+    "freshInstall": {
+      "arguments": [
+        "/S",
+        "/currentuser"
+      ],
+      "exitCode": 0,
+      "installRoot": "<USERPROFILE>\\AppData\\Local\\Programs\\desktop-translate",
+      "canonicalRegistryKeysPresent": true,
+      "transactionKeyPresent": false,
+      "backupKeyPresent": false,
+      "productProcessCount": 0
+    },
+    "sameVersionRegisteredRerun": {
+      "cyclesCompleted": 2,
+      "installerExitCode": 0,
+      "registrySnapshotFieldsCompared": 7,
+      "registrySnapshotEqual": true,
+      "installLocationReused": true,
+      "transactionKeyPresent": false,
+      "backupKeyPresent": false,
+      "productProcessCount": 0
+    },
+    "installedAppStartup": {
+      "windowTitle": "桌面翻译悬浮球",
+      "uiaStatus": "打开桌面翻译设置，划词取词监听中",
+      "startupStatus": "PASS",
+      "interactionStatus": "NOT PASSED: Codex click hit-test remained over the ChatGPT window",
+      "cleanupStatus": "FORCED EXACT-PROCESS CLEANUP ONLY",
+      "residualProductProcessCount": 0
+    },
+    "unknownFileFailClosed": {
+      "innerTempCopyExitCode": 1,
+      "rootPreserved": true,
+      "unknownFilePreserved": true,
+      "productRegistryPreserved": true,
+      "transactionKeyPresent": false
+    },
+    "unknownEmptyDirectoryFailClosed": {
+      "innerTempCopyExitCode": 1,
+      "rootPreserved": true,
+      "unknownDirectoryPreserved": true,
+      "productRegistryPreserved": true,
+      "transactionKeyPresent": false
+    },
+    "inRootNoSelfCopyRefusal": {
+      "arguments": [
+        "/S",
+        "/currentuser",
+        "_?=<INSTALL_ROOT>"
+      ],
+      "exitCode": 1,
+      "rootEntryCountEqual": true,
+      "stableMarkerHashEqual": true,
+      "applicationHashEqual": true,
+      "uninstallerHashEqual": true,
+      "registrySnapshotEqual": true,
+      "transactionKeyPresent": false
+    },
+    "busyFilePreCommitFailureAndReplay": {
+      "busyAllowlistFile": "version",
+      "openShareMode": "FileShare.Read without FileShare.Delete",
+      "failureInnerExitCode": 1,
+      "rootPreserved": true,
+      "stableMarkerHashEqual": true,
+      "busyFileHashEqual": true,
+      "productRegistryPreserved": true,
+      "transactionKeyPresentAfterFailure": false,
+      "backupKeyPresentAfterFailure": false,
+      "handleReleasedBeforeReplay": true,
+      "replayInnerExitCode": 0,
+      "finalRootPresent": false,
+      "finalCanonicalRegistryPresent": false,
+      "finalTransactionKeyPresent": false,
+      "finalBackupKeyPresent": false,
+      "userDataHashEqual": true
+    },
+    "postCommitDeletionFailureAndRecovery": {
+      "injectionMethod": "after whole-root rename, hold stage/version with FileShare.Read and without FileShare.Delete",
+      "productionTestHookAdded": false,
+      "leaseAcquiredAtPollIteration": 70,
+      "failureInnerExitCode": 1,
+      "sourceRootPresentAfterFailure": false,
+      "correctStageCountAfterFailure": 1,
+      "stageEntryCountAfterPartialCleanup": 24,
+      "stageVersionSha256": "ea211af86632a4f224220e398e4b388f25be9a64b5391eccc22837df49a82769",
+      "productRegistryPresentAfterCommit": false,
+      "appsAndFeaturesRegistryPresentAfterCommit": false,
+      "transactionState": "committed-cleanup",
+      "transactionDurableRootIdentityComplete": true,
+      "backupKeyPresent": true,
+      "recoveryLauncher": "the exact candidate installer with /S /currentuser",
+      "recoveryInstallerExitCode": 0,
+      "rootPresentAfterRecoveryAndFreshInstall": true,
+      "canonicalRegistryPresentAfterRecoveryAndFreshInstall": true,
+      "transactionPresentAfterRecovery": false,
+      "backupPresentAfterRecovery": false,
+      "correctStageCountAfterRecovery": 0,
+      "stableMarkerSha256AfterRecovery": "e310533fbf802e73f5c5ce24f0687a5ff7969daf591f9e1280b9d14bcd402b6d",
+      "userDataHashEqual": true,
+      "finalInnerUninstallExitCode": 0,
+      "finalCorrectStageCount": 0
+    },
+    "successfulQuietUninstall": {
+      "outerNsisBootstrapExitCode": 0,
+      "settled": true,
+      "rootPresent": false,
+      "productRegistryPresent": false,
+      "appsAndFeaturesRegistryPresent": false,
+      "transactionKeyPresent": false,
+      "backupKeyPresent": false,
+      "stageCount": 0,
+      "shortcutPresent": false,
+      "productOrUninstallerProcessCount": 0,
+      "userDataRetained": true,
+      "userDataHashEqual": true
+    },
+    "nsisExitCodeBoundary": {
+      "officialDocumentation": "https://nsis.sourceforge.io/Docs/AppendixD.html",
+      "registeredUninstallerBehavior": "the original launcher reports only whether NSIS temporary self-copy succeeded",
+      "transactionExitCodeMethod": "copy the exact installed uninstaller outside the root and execute it with _?=<INSTALL_ROOT>",
+      "observedOuterFailureCaseExitCode": 0,
+      "observedInnerFailureCaseExitCode": 1,
+      "productStateWasPreserved": true
+    },
+    "postEvidenceCleanup": {
+      "testFixturesRemoved": true,
+      "nsisTempDirectoriesMovedToRecycleBin": 2,
+      "recoverable": true,
+      "finalInstallRootPresent": false,
+      "finalCanonicalRegistryPresent": false,
+      "authoritativeStagePrefix": ".desktop-translate-stage-5baab977-0efe-5c82-9f9c-b3786aa388e3-",
+      "finalCorrectStageCount": 0,
+      "finalProductProcessCount": 0
+    },
+    "stageProbeCorrection": {
+      "invalidLegacyPattern": ".desktop-translate.phase7-uninstall-*",
+      "authoritativePattern": ".desktop-translate-stage-5baab977-0efe-5c82-9f9c-b3786aa388e3-*",
+      "action": "removed per-step stage counts produced by the invalid pattern and repeated the final and post-commit audits with the source-defined prefix",
+      "correctFinalStageCount": 0
+    }
+  },
+  "openBoundaries": [
+    "candidate is unsigned and was built from a dirty development source identity",
+    "explicit process-kill crash injection at each durable checkpoint is not complete on a real host",
+    "ACL, marker failure, shortcut traversal, volume and reparse matrix are incomplete",
+    "clean-VM standard-user and elevated-launch matrix is not complete",
+    "installed app interaction and graceful UI exit were not passed in this run",
+    "physical mouse, physical touchpad, mixed-DPI, multi-display and hot-plug evidence is open"
+  ]
+}

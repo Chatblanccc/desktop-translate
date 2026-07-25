@@ -188,8 +188,8 @@ accepts only exact raw bytes paired with their SHA-256 values, then derives
 cold-trial count, successful/failed attempts, warm failures, Private Working
 Set samples, normal exit, residual cleanup, forced cleanup, and
 human-blind-review counts from known schemas. It also hashes the supplied
-runner, native helper, Electron main/library/renderer sources and the raw POC
-authorization record. Their individual digests and canonical five-file-set
+runner, native helper, Electron main/library/renderer sources, candidate-binding
+helper and the raw POC authorization record. Their individual digests and canonical six-file-set
 digest must match the identities emitted by the raw measurement. The reader
 recomputes every logical sample's per-process PWS sum, peak, cadence, span,
 query skew, coverage, discarded count, pre/post Job membership, Job
@@ -199,8 +199,7 @@ cleanup result; producer summary fields cannot replace those records.
 Convenience flags such as `candidateIdentityComplete`,
 `artifactSizingComplete`, and `rawResultsAttached` are ignored.
 
-The cross-bound input contract is intentionally versioned separately from the
-current development producers:
+The cross-bound input contract uses the formal producer versions below:
 
 - formal cold/PWS must use `phase7-offline-cold-pws-v3`;
 - the human report must use `phase7-blind-eval-report-v2`;
@@ -212,6 +211,10 @@ current development producers:
 - cold, blind and generation artifacts must contain the same two-direction
   candidate binding set. Missing, duplicate, remapped, stale-schema or
   hash-rewritten bindings fail closed;
+- each binding also carries the source-set identity/count, private candidate
+  output hash and item-identity-set hash. Blind v2 recomputes the latter from
+  the already-verified private answer key, so reviews of a substituted item
+  set cannot satisfy the generation evidence;
 - a valid M0 authorization must cover exactly that manifest and candidate set;
 - legal/NOTICE/SBOM review, an attached OS-level Windows firewall plus packet
   capture record, and final base-installer/core-pack sizing must bind to the
@@ -226,12 +229,16 @@ returns `GATE_A_INPUT_READY` only as
 `integrationOrDistributionAuthorized: false`. It never records the user's
 Gate A choice and never authorizes M5, packaging or redistribution.
 
-All currently recorded development artifacts remain ineligible: the cold/PWS
-artifact is v2, the blind report is v1, no formal 20-by-2 candidate-matched
-run or 200-by-2 human report exists, and legal, OS-level network-capture and
-final package-size inputs are absent. The positive completeness self-test uses
-only in-memory, explicitly synthetic fixtures; it writes no authorization,
-measurement, legal, network or size evidence.
+All currently recorded development artifacts remain ineligible: the preserved
+cold/PWS artifacts are v2, the preserved blind report is v1, and no formal
+20-by-2 candidate-matched run or 200-by-2 human report exists. The current
+runner emits v3 only after validating two exact candidate-generation
+artifacts; `summarize-v2` similarly binds the human score report to those same
+artifacts. Neither bridge creates the missing candidate generations, human
+reviews, legal approval, OS-level network capture, or final package-size
+evidence. The positive completeness self-test uses only in-memory, explicitly
+synthetic fixtures; it writes no authorization, measurement, legal, network
+or size evidence.
 
 Do not add downloaded wheels, weights, converted models, authorization records,
 or measurements to Git. Their default locations are already ignored under
@@ -359,6 +366,8 @@ per direction and writes only under the ignored Phase 7 artifact root:
 powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass `
   -File tooling/phase7-offline-poc/bergamot-cold-pws-runner.ps1 `
   -PocAuthorizationPath artifacts/phase7/offline-poc/authorizations/bergamot.json `
+  -CandidateGenerationEnZhPath artifacts/phase7/offline-poc/gate-a/generation-en-zh.json `
+  -CandidateGenerationZhEnPath artifacts/phase7/offline-poc/gate-a/generation-zh-en.json `
   -TrialsPerDirection 20 `
   -SampleIntervalMilliseconds 100 `
   -OutputPath artifacts/phase7/offline-poc/measurements/bergamot-cold-pws-formal-20260723.json
@@ -740,11 +749,19 @@ Static verification:
 node tooling/phase7-offline-poc/blind-eval-selftest.mjs
 ```
 
-The self-test does not run a model or a human review. A real blind-evaluation
-report remains unavailable until an eligible 200-item-per-direction dataset,
-candidate outputs, and independent bilingual reviewers exist. Even a complete
-quality component deliberately leaves the overall Gate A input incomplete
-until the other M4 evidence and the user's decision are present.
+Candidate-generation cross-binding static verification:
+
+```powershell
+node tooling/phase7-offline-poc/gate-a-candidate-bindings-selftest.mjs
+```
+
+The self-tests do not run a model or a human review. A real v2
+blind-evaluation report remains unavailable until an eligible
+200-item-per-direction dataset, two matching
+`phase7-gate-a-candidate-generation-v1` artifacts, candidate outputs, and
+independent bilingual reviewers exist. Even a complete quality component
+deliberately leaves the overall Gate A input incomplete until the other M4
+evidence and the user's decision are present.
 
 ## Controlled QVAC/Bare alternative
 

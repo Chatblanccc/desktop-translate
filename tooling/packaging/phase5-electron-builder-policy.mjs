@@ -12,7 +12,7 @@ export const auditedAfterExtractHookSha256 =
   '2e25f6b8b538a7799c45e8153497262505102d42bb60c63b32846a7a421d920e';
 export const auditedAppBuilderPatchPath = 'patches/app-builder-lib@26.15.3.patch';
 export const auditedGitAttributesSha256 =
-  '37814623bde35041399e8eda92d95d017ddba33084bfac21c6b182cda4c84a84';
+  '3c6d6fec9888df7d66421d336e739c5a9b3e02adbe8022728b8415d5fa817a9a';
 export const auditedFluentIconsPatchPath =
   'patches/@fluentui__react-icons@2.0.316.patch';
 export const auditedAppBuilderPatchSha256 =
@@ -22,7 +22,7 @@ export const auditedFluentIconsPatchSha256 =
 export const auditedFluentIconsPnpmPatchHash =
   '8d7df040fe72d3d557bd823b5f87ee8080e23bdc97d645cad856df2c744d259a';
 export const auditedInstallerIncludeSha256 =
-  '313c6e1231b35c986ff168d4985c77145e3c90bb8a2bdbf5d66750baf9b711e4';
+  '472fc63c30de98d09710cc7867bc0cdfaf2c725571dfb1bc1c2d6f6e009c91bf';
 export const auditedPatchedAssistedInstallerTemplateSha256 =
   '253c35920ee98cb18cff1241d4feba7abc806324ed7699e82bccc7bf6c380467';
 export const auditedPatchedInstallerTemplateSha256 =
@@ -144,6 +144,15 @@ function extractNsisMacro(value, declaration, label) {
   const end = value.indexOf('!macroend', start + startToken.length);
   if (end === -1) throw new Error(`${label} has an unterminated ${startToken}`);
   return value.slice(start, end + '!macroend'.length);
+}
+
+function extractNsisFunction(value, declaration, label) {
+  const startToken = `Function ${declaration}`;
+  const start = value.indexOf(startToken);
+  if (start === -1) throw new Error(`${label} lacks ${startToken}`);
+  const end = value.indexOf('FunctionEnd', start + startToken.length);
+  if (end === -1) throw new Error(`${label} has an unterminated ${startToken}`);
+  return value.slice(start, end + 'FunctionEnd'.length);
 }
 
 export function normalizePhase7FreshTargetForPolicy(selectedPath, appFilename) {
@@ -404,8 +413,13 @@ export function assertPhase7InstallerIncludeSemantics(installerIncludeContent) {
     'rollback-registry-restored',
     'committed-cleanup',
     'committed-postcleanup',
-    'Delete "$phase7TransactionStage\\${PHASE7_INSTALL_MARKER_NAME}"',
-    'RMDir "$phase7TransactionStage"',
+    '!define PHASE7_UNINSTALL_TRANSACTION_VALUE "DesktopTranslate.UninstallTransaction.v2|${APP_GUID}"',
+    'RootVolumeSerial',
+    'RootFileIndexHigh',
+    'RootFileIndexLow',
+    '!macro phase7OpenCommittedStageRoot OUTPUT',
+    '!macro phase7OpenCommittedRelativeEntry PARENT_HANDLE LEAF_NAME',
+    '!macro phase7SetCommittedHandleDeleteDispositionAndClose HANDLE_VARIABLE OUTPUT',
     'QuietUninstallString',
     'HKCU KeepShortcuts does not match the registered installation.',
     'HKCU ShortcutName does not match the registered installation.',
@@ -1079,17 +1093,17 @@ export function assertPhase7InstallerIncludeSemantics(installerIncludeContent) {
     );
   }
 
-  if (countExactOccurrences(normalized, 'KERNEL32::CreateFileW') !== 5
-      || countExactOccurrences(normalized, 'KERNEL32::SetFileInformationByHandle') !== 2) {
+  if (countExactOccurrences(normalized, 'KERNEL32::CreateFileW') !== 8
+      || countExactOccurrences(normalized, 'KERNEL32::SetFileInformationByHandle') !== 3) {
     throw new Error(
-      'Phase 7 must bind exactly the audited parent, probe, stable, and recovery handles'
+      'Phase 7 must bind exactly the audited install and committed-uninstall handles'
     );
   }
-  if (countExactOccurrences(normalized, 'ntdll::NtCreateFile') !== 1
+  if (countExactOccurrences(normalized, 'ntdll::NtCreateFile') !== 2
       || countExactOccurrences(normalized, 'KERNEL32::CreateDirectoryW') !== 0
       || /(?:^|\n)[ \t]*CreateDirectory[ \t]/u.test(normalized)) {
     throw new Error(
-      'Phase 7 fresh directories must be created only by the one audited parent-relative NtCreateFile macro'
+      'Phase 7 directory creation and committed cleanup must use only the audited parent-relative NtCreateFile macros'
     );
   }
 
@@ -1119,7 +1133,9 @@ export function assertPhase7InstallerIncludeSemantics(installerIncludeContent) {
     'Phase 7 installer include'
   );
   assertOrderedTokens(stagedRoot, [
+    '!insertmacro phase7ClaimUninstallTransaction R4',
     'Rename "$phase7TransactionSource" "$phase7TransactionStage"',
+    '!insertmacro phase7AssertCommittedStagePathIdentity',
     '!insertmacro phase7PersistUninstallTransaction "staged-uncommitted" R4',
     '!insertmacro phase7FindExactAppProcessAtRoot "$phase7TransactionSource" R4',
     '!insertmacro phase7FindExactAppProcessAtRoot "$phase7TransactionStage" R4',
@@ -1222,8 +1238,155 @@ export function assertPhase7InstallerIncludeSemantics(installerIncludeContent) {
     'StrCpy $phase7TransactionStage "$R3${PHASE7_STAGE_PREFIX}-$R1-$R2"',
     'StrCpy $phase7TransactionStage "$R3\\${PHASE7_STAGE_PREFIX}-$R1-$R2"',
     '!insertmacro phase7ValidateUninstallTransactionPaths',
+    '!insertmacro phase7CaptureTransactionSourceIdentity',
     '!insertmacro phase7ReadPathState "$phase7TransactionStage"'
   ], 'Phase 7 absent-stage-safe atomic staging preparation');
+
+  const transactionIdentityCapture = extractNsisMacro(
+    normalized,
+    'phase7CaptureTransactionSourceIdentity',
+    'Phase 7 installer include'
+  );
+  assertOrderedTokens(transactionIdentityCapture, [
+    'CreateFileW(w "$phase7TransactionSource", i 0x00100080, i 7,',
+    '!insertmacro phase7ReadCommittedDirectoryHandleIdentity $R0'
+      + ' phase7TransactionRootVolumeSerial phase7TransactionRootFileIndexHigh'
+      + ' phase7TransactionRootFileIndexLow R8',
+    'KERNEL32::CloseHandle(p R0)',
+    '$phase7TransactionRootVolumeSerial == ""',
+    '$phase7TransactionRootFileIndexHigh == ""',
+    '$phase7TransactionRootFileIndexLow == ""'
+  ], 'Phase 7 durable uninstall-root identity capture');
+
+  const transactionClaim = extractNsisMacro(
+    normalized,
+    'phase7ClaimUninstallTransaction OUTPUT',
+    'Phase 7 installer include'
+  );
+  assertOrderedTokens(transactionClaim, [
+    'WriteRegStr HKCU "$phase7TransactionClaimKey" RootVolumeSerial',
+    'WriteRegStr HKCU "$phase7TransactionClaimKey" RootFileIndexHigh',
+    'WriteRegStr HKCU "$phase7TransactionClaimKey" RootFileIndexLow',
+    'ReadRegStr $R0 HKCU "$phase7TransactionClaimKey" RootVolumeSerial',
+    'ReadRegStr $R1 HKCU "$phase7TransactionClaimKey" RootFileIndexHigh',
+    'ReadRegStr $R2 HKCU "$phase7TransactionClaimKey" RootFileIndexLow',
+    'lstrcmpW(w R0, w "$phase7TransactionRootVolumeSerial")',
+    'lstrcmpW(w R1, w "$phase7TransactionRootFileIndexHigh")',
+    'lstrcmpW(w R2, w "$phase7TransactionRootFileIndexLow")',
+    '!insertmacro phase7RenameRegistryKey'
+  ], 'Phase 7 durable uninstall-root transaction claim');
+
+  const transactionPersist = extractNsisMacro(
+    normalized,
+    'phase7PersistUninstallTransaction TRANSACTION_STATE OUTPUT',
+    'Phase 7 installer include'
+  );
+  assertOrderedTokens(transactionPersist, [
+    'ReadRegStr $R0 HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootVolumeSerial',
+    'ReadRegStr $R1 HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootFileIndexHigh',
+    'ReadRegStr $R2 HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootFileIndexLow',
+    'lstrcmpW(w R0, w "$phase7TransactionRootVolumeSerial")',
+    'lstrcmpW(w R1, w "$phase7TransactionRootFileIndexHigh")',
+    'lstrcmpW(w R2, w "$phase7TransactionRootFileIndexLow")',
+    'StrCpy $phase7TransactionState "${TRANSACTION_STATE}"',
+    'StrCpy $phase7TransactionWriteResult "written"'
+  ], 'Phase 7 immutable uninstall-root identity state transition');
+
+  const transactionRead = extractNsisMacro(
+    normalized,
+    'phase7ReadUninstallTransaction',
+    'Phase 7 installer include'
+  );
+  assertOrderedTokens(transactionRead, [
+    'ReadRegStr $phase7TransactionRootVolumeSerial'
+      + ' HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootVolumeSerial',
+    'ReadRegStr $phase7TransactionRootFileIndexHigh'
+      + ' HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootFileIndexHigh',
+    'ReadRegStr $phase7TransactionRootFileIndexLow'
+      + ' HKCU "${PHASE7_UNINSTALL_TRANSACTION_KEY}" RootFileIndexLow',
+    '${OrIf} $phase7TransactionRootVolumeSerial == ""',
+    '${OrIf} $phase7TransactionRootFileIndexHigh == ""',
+    '${OrIf} $phase7TransactionRootFileIndexLow == ""',
+    'The Phase 7 uninstall transaction is incomplete.'
+  ], 'Phase 7 crash-replay durable uninstall-root identity read');
+
+  const committedRelativeOpen = extractNsisMacro(
+    normalized,
+    'phase7OpenCommittedRelativeEntry PARENT_HANDLE LEAF_NAME'
+      + ' EXPECTED_KIND SHARE_MODE HANDLE_VARIABLE OUTPUT',
+    'Phase 7 installer include'
+  );
+  assertOrderedTokens(committedRelativeOpen, [
+    '*(&w${NSIS_MAX_STRLEN} "${LEAF_NAME}") p.R4',
+    '*(i 24, p ${PARENT_HANDLE}, p R7, i 0x40, p 0, p 0) p.R8',
+    'ntdll::NtCreateFile(p R2, i 0x00110081, p R8, p R9, p 0,'
+      + ' i 0, i ${SHARE_MODE}, i 1, i R1, p 0, i 0) i.R1',
+    'ntdll::RtlNtStatusToDosError',
+    'KERNEL32::GetFileInformationByHandle',
+    'IntOp $R5 $R4 & 0x400',
+    'IntOp $R5 $R4 & 0x10',
+    'StrCpy $${OUTPUT} "opened"'
+  ], 'Phase 7 committed child parent-relative open');
+  if (/(?:^|\n)[ \t]*(?:Delete|RMDir|FileOpen)[ \t]/u.test(committedRelativeOpen)) {
+    throw new Error(
+      'Phase 7 committed child open must not fall back to pathname mutation or reopen'
+    );
+  }
+
+  const committedRootOpen = extractNsisMacro(
+    normalized,
+    'phase7OpenCommittedStageRoot OUTPUT',
+    'Phase 7 installer include'
+  );
+  assertOrderedTokens(committedRootOpen, [
+    'CreateFileW(w "$phase7TransactionStage", i 0x00110081, i 3,',
+    'StrCpy $phase7CommittedRootHandle "$R0"',
+    '!insertmacro phase7AssertCommittedRootHandleIdentity $phase7CommittedRootHandle',
+    'StrCpy $${OUTPUT} "opened"'
+  ], 'Phase 7 committed root identity lease');
+  if (committedRootOpen.includes(', i 7, p 0, i 3,')) {
+    throw new Error('Phase 7 committed root lease must never allow FILE_SHARE_DELETE');
+  }
+
+  const committedHandleDisposition = extractNsisMacro(
+    normalized,
+    'phase7SetCommittedHandleDeleteDispositionAndClose HANDLE_VARIABLE OUTPUT',
+    'Phase 7 installer include'
+  );
+  assertOrderedTokens(committedHandleDisposition, [
+    'SetFileInformationByHandle(p $${HANDLE_VARIABLE}, i 4, p R3, i 1)',
+    'KERNEL32::CloseHandle(p $${HANDLE_VARIABLE})',
+    'StrCpy $${HANDLE_VARIABLE} "-1"',
+    'StrCpy $${OUTPUT} "deleted"'
+  ], 'Phase 7 committed exact-handle delete disposition');
+
+  const committedDeleteTree = extractNsisFunction(
+    normalized,
+    '${PHASE7_COMMITTED_DELETE_FUNCTION}',
+    'Phase 7 installer include'
+  );
+  for (const required of [
+    '!insertmacro phase7DeleteCommittedAllowlistedFile'
+      + ' $phase7CommittedRootHandle "${PRODUCT_FILENAME}.exe"',
+    '!insertmacro phase7OpenCommittedAllowlistedDirectory'
+      + ' $phase7CommittedRootHandle "locales"',
+    '!insertmacro phase7OpenCommittedAllowlistedDirectory'
+      + ' $phase7CommittedRootHandle "resources"',
+    '!insertmacro phase7DeleteCommittedAllowlistedFile'
+      + ' $phase7CommittedLevel2Handle "file-manifest.sha256"',
+    '!insertmacro phase7DeleteCommittedAllowlistedDirectory'
+      + ' phase7CommittedLevel1Handle $phase7CommittedRootHandle "resources"'
+  ]) {
+    if (!committedDeleteTree.includes(required)) {
+      throw new Error(`Phase 7 committed handle-relative allowlist lacks ${required}`);
+    }
+  }
+  if (/(?:^|\n)[ \t]*(?:Delete|RMDir|FileOpen)[ \t]/u.test(committedDeleteTree)
+      || committedDeleteTree.includes('$phase7TransactionStage\\')) {
+    throw new Error(
+      'Phase 7 committed allowlist deletion must never mutate or reopen by staging pathname'
+    );
+  }
 
   const committedCleanup = extractNsisMacro(
     normalized,
@@ -1231,16 +1394,52 @@ export function assertPhase7InstallerIncludeSemantics(installerIncludeContent) {
     'Phase 7 installer include'
   );
   assertOrderedTokens(committedCleanup, [
+    '!insertmacro phase7OpenCommittedStageRoot R5',
+    '!insertmacro phase7OpenCommittedRelativeEntry'
+      + ' $phase7CommittedRootHandle "${PHASE7_INSTALL_MARKER_NAME}" "file" 0'
+      + ' phase7CommittedMarkerHandle R5',
+    '!insertmacro phase7VerifyCommittedMarkerHandle $phase7CommittedMarkerHandle R5',
     'Call ${PHASE7_COMMITTED_DELETE_FUNCTION}',
     '!insertmacro phase7InspectCleanupRoot "$phase7TransactionStage"',
     '$phase7CleanupRootState != "marker-only"',
-    'Delete "$phase7TransactionStage\\${PHASE7_INSTALL_MARKER_NAME}"',
-    '!insertmacro phase7ReadPathState'
-      + ' "$phase7TransactionStage\\${PHASE7_INSTALL_MARKER_NAME}"',
+    '!insertmacro phase7SetCommittedHandleDeleteDispositionAndClose'
+      + ' phase7CommittedMarkerHandle R5',
     '!insertmacro phase7InspectCleanupRoot "$phase7TransactionStage"',
     '$phase7CleanupRootState != "empty"',
-    'RMDir "$phase7TransactionStage"'
-  ], 'Phase 7 marker-last committed cleanup');
+    '!insertmacro phase7SetCommittedHandleDeleteDispositionAndClose'
+      + ' phase7CommittedRootHandle R5',
+    '!insertmacro phase7ReadPathState "$phase7TransactionStage"',
+    '!insertmacro phase7ReleaseCommittedCleanupHandles'
+  ], 'Phase 7 identity-bound marker-last committed cleanup');
+  if (/(?:^|\n)[ \t]*(?:Delete|RMDir|FileOpen)[ \t]/u.test(committedCleanup)) {
+    throw new Error(
+      'Phase 7 committed cleanup must dispose marker and root only through pinned handles'
+    );
+  }
+  if (committedCleanup.includes(
+    'KERNEL32::CloseHandle(p $phase7CommittedRootHandle'
+  ) || committedCleanup.includes(
+    'KERNEL32::CloseHandle(p $phase7CommittedMarkerHandle'
+  )) {
+    throw new Error(
+      'Phase 7 committed root and marker leases must remain pinned through exact-handle disposition'
+    );
+  }
+
+  const transactionRollback = extractNsisMacro(
+    normalized,
+    'phase7RollbackUninstallTransaction OUTPUT',
+    'Phase 7 installer include'
+  );
+  assertOrderedTokens(transactionRollback, [
+    '!insertmacro phase7AssertTransactionRootPathIdentity'
+      + ' "$phase7TransactionStage"',
+    '!insertmacro phase7ValidateStableRoot "$phase7TransactionStage"',
+    'Rename "$phase7TransactionStage" "$phase7TransactionSource"',
+    '!insertmacro phase7AssertTransactionRootPathIdentity'
+      + ' "$phase7TransactionSource"',
+    '!insertmacro phase7ValidateStableRoot "$phase7TransactionSource"'
+  ], 'Phase 7 rollback durable uninstall-root identity');
 
   for (const [declaration, resultVariable, initialResult] of [
     ['phase7ReadRegistryBackupLayout OUTPUT', 'phase7RegistryLayoutResult', 'error'],
@@ -1610,7 +1809,7 @@ export function assertAppBuilderPatchPolicy({
   const rootPackage = parseJsonObject(rootPackageBytes, 'root package.json');
   if (sha256(gitAttributesBytes) !== auditedGitAttributesSha256
       || gitAttributesBytes.toString('utf8')
-        !== 'patches/app-builder-lib@26.15.3.patch text eol=lf\n') {
+        !== 'patches/app-builder-lib@26.15.3.patch text eol=lf whitespace=-blank-at-eol\n') {
     throw new Error(
       'repository .gitattributes must pin the app-builder-lib patch to exact LF bytes'
     );

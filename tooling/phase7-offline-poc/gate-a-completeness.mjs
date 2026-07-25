@@ -31,13 +31,14 @@ const HARNESS_SOURCES = Object.freeze([
   ['native', 'coldPwsNative', 'nativeSha256'],
   ['main', 'electronMain', 'electronMainSha256'],
   ['library', 'electronLibrary', 'electronLibrarySha256'],
-  ['renderer', 'electronRenderer', 'electronRendererSha256']
+  ['renderer', 'electronRenderer', 'electronRendererSha256'],
+  ['bindings', 'candidateBindings', 'candidateBindingsSha256']
 ]);
 
 /*
  * This is deliberately a non-authorizing raw-artifact reader, not a Gate A
  * decision maker. It accepts exact raw bytes plus their SHA-256 digests and
- * re-derives the v2 cold-PWS result from the logical samples. Convenience
+ * re-derives the v3 cold-PWS result from the logical samples. Convenience
  * booleans and producer summaries are never accepted as proof.
  */
 export function evaluateGateAInputCompleteness(input) {
@@ -347,7 +348,14 @@ function deriveCandidateGenerationEvidence(artifacts, unmet) {
     candidateId: summary.identity.candidateId,
     generationRunId: summary.identity.generationRunId,
     generationArtifactSha256: summary.artifactSha256,
-    generationIdentitySha256: summary.identity.identitySha256
+    generationIdentitySha256: summary.identity.identitySha256,
+    sourceSetIdentitySha256:
+      summary.identity.sourceSet.identitySha256,
+    sourceSetRecordCount: summary.identity.sourceSet.recordCount,
+    candidateOutputArtifactSha256:
+      summary.candidateOutput.artifactSha256,
+    candidateOutputItemIdentitySetSha256:
+      summary.candidateOutput.itemIdentitySetSha256
   })).sort(compareCandidateBinding);
   return {
     schemaVersion: 'phase7-gate-a-candidate-generation-set-v1',
@@ -791,7 +799,13 @@ function validateCandidateGenerationBindings(
       candidateId: binding?.candidateId,
       generationRunId: binding?.generationRunId,
       generationArtifactSha256: binding?.generationArtifactSha256,
-      generationIdentitySha256: binding?.generationIdentitySha256
+      generationIdentitySha256: binding?.generationIdentitySha256,
+      sourceSetIdentitySha256: binding?.sourceSetIdentitySha256,
+      sourceSetRecordCount: binding?.sourceSetRecordCount,
+      candidateOutputArtifactSha256:
+        binding?.candidateOutputArtifactSha256,
+      candidateOutputItemIdentitySetSha256:
+        binding?.candidateOutputItemIdentitySetSha256
     }))
     : [];
   requireCondition(
@@ -803,13 +817,23 @@ function validateCandidateGenerationBindings(
           'candidateId',
           'generationRunId',
           'generationArtifactSha256',
-          'generationIdentitySha256'
+          'generationIdentitySha256',
+          'sourceSetIdentitySha256',
+          'sourceSetRecordCount',
+          'candidateOutputArtifactSha256',
+          'candidateOutputItemIdentitySetSha256'
         ])
         && DIRECTIONS.includes(binding.direction)
         && validSafeId(binding.candidateId)
         && validSafeId(binding.generationRunId)
         && validSha(binding.generationArtifactSha256)
         && validSha(binding.generationIdentitySha256)
+        && validSha(binding.sourceSetIdentitySha256)
+        && Number.isSafeInteger(binding.sourceSetRecordCount)
+        && binding.sourceSetRecordCount
+          >= MIN_BLIND_REVIEWS_PER_DIRECTION
+        && validSha(binding.candidateOutputArtifactSha256)
+        && validSha(binding.candidateOutputItemIdentitySetSha256)
       )),
     `${prefix}_BINDINGS_INVALID`,
     unmet
@@ -944,13 +968,19 @@ function validateMeasurementMethod(method, prefix, unmet) {
       && method?.exitAccountingLagRecovery
         === 'STABLE_DOUBLE_ACCOUNTING_AND_BOUND_ACTIVE_IDENTITY_ENUMERATION'
       && method?.logicalSampleMembership
-        === 'PRE_POST_COMPLETE_OR_BOUNDED_VERIFIED_MEMBERSHIP_TRANSITION_GAP'
+        === 'PRE_POST_COMPLETE_OR_BOUNDED_VERIFIED_TRANSITION_WITH_TERMINAL_ZERO'
       && method?.membershipTransitionPolicy
-        === 'BOUNDED_COMPLETE_HISTORY_OR_ACCOUNTING_EXIT_LAG'
+        === 'COMPLETE_BOUND_OR_STRICT_EXIT_ONLY_MARKER_BOUND_TERMINAL_ZERO'
       && method?.qwsJobMembershipValidation
         === 'SAME_HANDLE_PRE_AND_POST_IS_PROCESS_IN_JOB'
       && method?.warmCompletionBoundary
         === 'CREATE_NEW_MARKER_BOUND_TO_FINAL_CHILD_REPORT'
+      && method?.terminalBoundary
+        === 'MARKER_VALIDATED_EXIT_ZERO_EXACT_HISTORY_THREE_ZERO_POLLS'
+      && method?.jobProcessQueryRetryPolicy
+        === 'ONE_IMMEDIATE_RETRY_PRE_AND_POST_FAIL_CLOSED'
+      && method?.postExitJobQueryFailurePolicy
+        === 'NO_RETRY_FAIL_FAST_TO_CLEANUP'
       && method?.recursiveDescendantTracking === true,
     `${prefix}_JOB_PROCESS_TREE_BINDING_MISSING`,
     unmet
@@ -2087,6 +2117,19 @@ function deriveBlindEvidence(report, candidateGenerations, unmet) {
       unmet
     );
   }
+  requireCondition(
+    exactKeys(
+      report?.audit?.candidateOutputItemIdentitySetSha256ByDirection,
+      DIRECTIONS
+    )
+      && DIRECTIONS.every((direction) => validSha(
+        report.audit.candidateOutputItemIdentitySetSha256ByDirection[
+          direction
+        ]
+      )),
+    `${prefix}_REVIEWED_ITEM_SET_HASHES_INVALID`,
+    unmet
+  );
   const generationBindings = validateCandidateGenerationBindings(
     report?.candidateGenerationBindings,
     candidateGenerations,
@@ -2114,6 +2157,13 @@ function deriveBlindEvidence(report, candidateGenerations, unmet) {
     )?.candidates;
     const directionBinding = generationBindings.find(
       (binding) => binding.direction === direction
+    );
+    requireCondition(
+      report?.audit?.candidateOutputItemIdentitySetSha256ByDirection
+        ?.[direction]
+        === directionBinding?.candidateOutputItemIdentitySetSha256,
+      `${prefix}_REVIEWED_ITEM_SET_CANDIDATE_OUTPUT_MISMATCH:${direction}`,
+      unmet
     );
     requireCondition(
       directionScores.length >= MIN_BLIND_REVIEWS_PER_DIRECTION,
@@ -2613,7 +2663,13 @@ function candidateBindingSetSha256(bindings) {
       candidateId: binding.candidateId,
       generationRunId: binding.generationRunId,
       generationArtifactSha256: binding.generationArtifactSha256,
-      generationIdentitySha256: binding.generationIdentitySha256
+      generationIdentitySha256: binding.generationIdentitySha256,
+      sourceSetIdentitySha256: binding.sourceSetIdentitySha256,
+      sourceSetRecordCount: binding.sourceSetRecordCount,
+      candidateOutputArtifactSha256:
+        binding.candidateOutputArtifactSha256,
+      candidateOutputItemIdentitySetSha256:
+        binding.candidateOutputItemIdentitySetSha256
     }))
   );
 }
@@ -2633,6 +2689,14 @@ function candidateBindingsEqual(left, right) {
       === rightSorted[index]?.generationArtifactSha256
     && binding.generationIdentitySha256
       === rightSorted[index]?.generationIdentitySha256
+    && binding.sourceSetIdentitySha256
+      === rightSorted[index]?.sourceSetIdentitySha256
+    && binding.sourceSetRecordCount
+      === rightSorted[index]?.sourceSetRecordCount
+    && binding.candidateOutputArtifactSha256
+      === rightSorted[index]?.candidateOutputArtifactSha256
+    && binding.candidateOutputItemIdentitySetSha256
+      === rightSorted[index]?.candidateOutputItemIdentitySetSha256
   ));
 }
 

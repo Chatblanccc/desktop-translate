@@ -534,6 +534,107 @@ canonical registry identity、scratch/transaction/claim/backup、stage、快捷�
 - `/S /allusers`、registry/marker/reparse 错误必须在 `un.checkAppRunning` 前拒绝，不得先关闭应用、
   触发 UAC 或产生 machine-wide 变更。
 
+### 2.7 Sixth candidate handle-relative committed uninstall
+
+第六版把上一版仍开放的 committed staging pathname identity P2 改为独立 handle-relative
+protocol。事务版本升级为 `DesktopTranslate.UninstallTransaction.v2`，在 whole-root rename 前捕获
+source root 的 volume serial 与 file index，claim、canonical transaction、状态迁移、rollback 和 crash
+read 全部回读同一 durable identity。Committed cleanup 只打开一次 stage root，禁止
+`FILE_SHARE_DELETE`，并在该 root handle 上相对打开 stable marker、固定 allowlist 文件和目录；删除只对
+已打开 handle 设置 `FileDispositionInfo`。Marker 始终持有 exclusive lease 并最后删除，root 只有在
+exact empty 后才由原 handle disposition。该路径不再调用 pathname `Delete`、pathname `RMDir` 或递归
+删除。
+
+定向门禁结果：
+
+```text
+pnpm lint
+PASS
+
+pnpm typecheck
+PASS
+
+pnpm test
+PASS: 432/432
+
+pnpm phase5:release:selftest
+PASS; release remains BLOCKED
+
+pnpm phase7:installer-identity:selftest
+PASS: 9/9
+
+pnpm phase7:installer-atomic-directory:selftest
+PASS: MakeNSIS 3.04; exit 0; leaks 0
+
+pnpm phase7:installer-transaction-path:selftest
+PASS: valid 4; rejected 11; exit 0
+
+electron-builder two-pass NSIS compile and full package pipeline
+PASS
+```
+
+Exact unsigned candidate：
+
+```text
+path:
+artifacts/phase5/package/dist/Desktop-Translate-0.5.0-phase5-x64-setup.exe
+
+bytes:
+130711653
+
+SHA-256:
+A52C767FFFBEA90ACB884B56209FA741AADF982B473ED514DF69D91483A22FFA
+
+source identity:
+HEAD+WORKTREE:b4e26d0100abe40a1a3439acbd02f92ddadaae7bfcff8ebfe4ed0fe00b511f69
+
+Authenticode:
+NotSigned / RELEASE BLOCKED
+```
+
+普通 CurrentUser host 上的 fresh install、两次已登记同版本重跑和最终 Quiet uninstall 均为
+installer/bootstrap exit `0`；每次重跑的 `InstallLocation`、`KeepShortcuts`、`ShortcutName`、
+`MenuDirectory`、`UninstallString`、`QuietUninstallString`、`DisplayVersion` 快照逐字不变，且没有
+transaction、backup、stage 或产品进程。最终正常卸载后 root、两个 canonical registry key、
+transaction、backup、stage、shortcut 与产品/卸载进程均为零，userData SQLite 前后 hash 一致。
+
+真实负测另行区分 NSIS 两层退出语义。官方 NSIS
+[Error Levels](https://nsis.sourceforge.io/Docs/AppendixD.html) 明确说明：落地 uninstaller 会先复制到
+Temp，原始 launcher 的 error level 只表示复制启动是否成功；要取得事务本身的 error level，必须显式
+复制 exact uninstaller 并以 `_?=<INSTALL_ROOT>` 运行。实测结果为：
+
+- root 内直接添加未知 regular file：Temp inner exit `1`，未知文件、root、registry 全部保留；
+- root 内直接添加未知空目录：Temp inner exit `1`，未知目录、root、registry 全部保留；
+- 从 root 内以 `_?=<INSTALL_ROOT>` 禁止 self-copy：exit `1`，root entry count、marker/app/uninstaller
+  hashes、registry、transaction 和 stage 全部不变；
+- 已知 `version` 文件保持 read-only handle 且不允许 delete-share：Temp inner exit `1`，whole-root rename
+  未发生，marker/file hashes 与两个 registry key 完整，transaction/backup/stage 为零；释放 handle 后以
+  同一 Temp copy 重放 exit `0`，root/registry/transaction/backup/stage 全部收净且 userData hash 不变；
+- 上述未知项负测直接启动注册的原始 launcher 时 outer exit `0`，但 inner exit `1` 且产品状态完整保留；
+  这是 NSIS 固定 bootstrap 语义，不记录成产品事务 exit `0`。
+
+同一候选安装后的 Ball 可访问性树报告“划词取词监听中”，startup 通过；但 Codex 点击命中仍落在
+ChatGPT 窗口，未取得点击或 graceful UI exit 证据。进程通过 exact PID 强制收净，不能写成正常产品
+退出。完整结构化记录见
+[sixth handle-relative uninstall evidence](evidence/m3-sixth-handle-relative-uninstall-20260725.json)。
+
+随后使用源码定义的正确 stage 前缀
+`.desktop-translate-stage-5baab977-0efe-5c82-9f9c-b3786aa388e3-*` 做真实 post-commit fault replay：
+whole-root rename 出现后立即打开 `stage\version`，允许 read 但拒绝 delete-share。Temp inner exit `1`；
+source 与两个普通 registry key 已按 commit 语义消失，stage 保留 24 个尚未清理条目，
+transaction=`committed-cleanup`，durable root identity 与外置 backup 完整。释放 handle 后，同一 exact
+installer `/S /currentuser` exit `0`，先重放 root/postcleanup，再完成 fresh install；transaction、
+backup、stage 清零，canonical registry、stable marker 和 userData hash 正常。最终 inner uninstall
+exit `0`，正确前缀 stage count 为零。
+
+初轮现场采样曾错误使用旧 pattern `.desktop-translate.phase7-uninstall-*`。结构化证据已删除由该 pattern
+产生的逐步 count，并以源码常量重做最终 audit 与 post-commit replay；不得引用旧 pattern 的零计数。
+
+该结果关闭 committed-stage pathname identity 定向实现项，并补齐默认目录已登记同版本重跑及一条真实
+post-commit deletion-failure replay；仍不解除 `P7-R-020`：逐 checkpoint 的 process-kill crash、
+ACL/marker/shortcut/volume/reparse 完整矩阵、clean VM、签名落地 uninstaller、正常 installed-app
+交互退出和物理输入仍开放。
+
 ## 3. Ball automated gates
 
 实现结果：
@@ -628,7 +729,7 @@ pnpm --filter @desktop-translate/desktop phase2:smoke
 ## 5. M3 exit status
 
 代码、契约、持久化、开发态 Electron 自动化拖动、重启恢复、第三版真实宿主 custom-root fresh install、
-第五版 fresh-directory/marker identity-bound exact unsigned package gates，以及当前修复候选默认
-CurrentUser install + 两轮 Quiet uninstall + 一轮普通交互安装/卸载达到 `DEVELOPMENT PASS`。M3
-的最终退出条件尚未满足：真实 registered 同版本升级、committed-stage pathname identity、
-完整目录/故障矩阵、正常 sandbox installed-app startup、clean VM、物理鼠标和物理触控板证据仍然开放。
+第五版 fresh-directory/marker identity-bound gates、第六版 committed-stage handle-relative protocol，
+以及当前候选默认 CurrentUser install、已登记同版本重跑、普通/Quiet uninstall 达到
+`DEVELOPMENT PASS`。M3 的最终退出条件尚未满足：逐 durable checkpoint 的 process-kill crash、完整
+目录/ACL/进程竞态矩阵、clean VM、正常 installed-app 交互退出、物理鼠标和物理触控板证据仍然开放。

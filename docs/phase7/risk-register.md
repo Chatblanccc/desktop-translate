@@ -56,6 +56,25 @@ installer 绑定 `HEAD+WORKTREE:2eb074a29b2b5e9019d1385d4cf504fea12a27e82d0db059
 卸载、故障注入、完整目录矩阵与 clean VM 尚未完成。P7-R-020 因此继续为
 `CONTROLLED DEVELOPMENT`，不能因第五版 package gate 或一次成功卸载改成 PASS。
 
+2026-07-25 第六版更新：committed uninstall transaction 升级为 v2，在 staging 前持久化 source
+volume/file identity；cleanup 对 stage root 与 stable marker 持有 no-delete-share handle，所有固定
+allowlist entry 只通过 pinned parent-relative `NtCreateFile` 打开并按 exact handle disposition，
+marker-last 与 final empty-root 不再调用 pathname delete/RMDir。9/9 runtime、x86 probes、九类负向
+mutations、完整 package、真实默认目录已登记同版本重跑、未知 file/empty-directory fail-closed 与正常
+Quiet uninstall 均通过。NSIS 原始 launcher 的外层退出码只表示 Temp self-copy 成功，事务退出码由 exact
+Temp copy + `_?=<INSTALL_ROOT>` 取得；负测 inner exit 为 `1` 且现场完整保留。
+真实 post-commit delete-share 注入也已取得 `committed-cleanup` + partial stage + durable backup，
+释放 handle 后由 exact installer 重放清理并 fresh install，最终 transaction/backup/stage 为零。
+`P7-R-020` 仍保持 `CONTROLLED DEVELOPMENT`：逐 checkpoint process-kill crash、ACL/marker/shortcut/
+volume/reparse 矩阵、跨版本升级、clean VM、签名候选和正常 installed-app 退出仍未完成。
+
+2026-07-25 M4 交叉绑定更新：formal cold/PWS producer 升级到 v3，blind summarizer 增加 v2；
+两者必须绑定同一两方向 authorization、generation raw hash、candidate/run、manifest、model/runtime、
+cold workload、source-set、private candidate-output 和 canonical item-identity set。缺失 generation
+artifact 的 Windows preflight、candidate remap、authorization candidate-set mismatch 与 reviewed-item-set
+substitution 均 fail-closed。真实 200×2 generation/review、20×2 formal run、legal、OS network capture
+和 cross-bound package sizing 尚未完成，P7-R-001/002/003/004/005 保持 OPEN。
+
 ## Gate 相关停止条件
 
 - M4 报告缺许可证、真实体积、每方向 200 盲测、延迟或 PWS 时，不得请求 Gate A 决策。

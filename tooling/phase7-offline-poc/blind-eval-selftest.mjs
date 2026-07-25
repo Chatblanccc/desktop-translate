@@ -8,12 +8,15 @@ import {
   BlindEvalError,
   INPUT_SCHEMA_VERSION,
   MINIMUM_ITEMS_PER_DIRECTION,
+  REPORT_V2_SCHEMA_VERSION,
   SCORE_SCHEMA_VERSION,
   buildEvaluationArtifacts,
   sha256,
   summarizeHumanScores,
+  summarizeHumanScoresV2,
   validateInputRecords
 } from './blind-eval.mjs';
+import { canonicalJson } from './lib.mjs';
 
 const execFileAsync = promisify(execFile);
 const scriptRoot = fileURLToPath(new URL('.', import.meta.url));
@@ -167,6 +170,158 @@ assert.doesNotMatch(complete.reportContent, /[A-Za-z]:[\\/]/u);
 assert.doesNotMatch(
   complete.reportContent,
   /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/iu
+);
+
+const v2Records = records.map((record) => ({
+  ...record,
+  candidates: [{
+    ...record.candidates[0],
+    candidateId: `candidate-${record.direction}`,
+    generationRunId: `generation-${record.direction}`
+  }]
+}));
+const v2InputContent = toJsonLines(v2Records);
+const v2Artifacts = await buildEvaluationArtifacts(v2Records, {
+  runId: `run-${'71'.repeat(8)}`,
+  inputSha256: sha256(v2InputContent),
+  createdAt: '2026-07-23T03:00:00.000Z',
+  seed: '72'.repeat(32),
+  reviewerToken: `reviewer-${'73'.repeat(12)}`
+});
+const v2ScoresContent = toJsonLines(
+  v2Artifacts.scoreTemplateRecords.map((record) => ({
+    schemaVersion: SCORE_SCHEMA_VERSION,
+    status: 'HUMAN_REVIEWED',
+    evaluationId: record.evaluationId,
+    reviewerToken: record.reviewerToken,
+    reviewMode: 'HUMAN_ONLY_NO_AUTOMATED_SCORING',
+    blindnessAttestation: 'CANDIDATE_IDENTITY_NOT_VIEWED',
+    humanReviewAttestation:
+      'I_REVIEWED_THIS_ITEM_WITHOUT_AUTOMATED_SCORING',
+    reviewedAt: '2026-07-23T04:00:00.000Z',
+    acceptability: 'ACCEPTABLE',
+    adequacyScore: 5,
+    fluencyScore: 5,
+    errors: {
+      severeMistranslation: false,
+      untranslated: false,
+      garbled: false,
+      properNounError: false,
+      longSentenceError: false
+    }
+  }))
+);
+const v2Bindings = ['en-zh', 'zh-en'].map((direction, index) => {
+  const itemIdentities = v2Artifacts.answerKey.records
+    .filter((record) => record.direction === direction)
+    .map((record) => ({
+      direction: record.direction,
+      itemId: record.itemId,
+      sourceSha256: record.sourceSha256
+    }))
+    .sort((left, right) => left.itemId.localeCompare(right.itemId));
+  return {
+    direction,
+    candidateId: `candidate-${direction}`,
+    generationRunId: `generation-${direction}`,
+    generationArtifactSha256:
+      index === 0 ? '74'.repeat(32) : '75'.repeat(32),
+    generationIdentitySha256:
+      index === 0 ? '76'.repeat(32) : '77'.repeat(32),
+    sourceSetIdentitySha256:
+      index === 0 ? '81'.repeat(32) : '82'.repeat(32),
+    sourceSetRecordCount: itemIdentities.length,
+    candidateOutputArtifactSha256:
+      index === 0 ? '83'.repeat(32) : '84'.repeat(32),
+    candidateOutputItemIdentitySetSha256:
+      sha256(canonicalJson(itemIdentities))
+  };
+});
+const candidateBindingReport = {
+  schemaVersion: 'phase7-gate-a-candidate-binding-set-v1',
+  authorizationSha256: '78'.repeat(32),
+  authorizationRecordId: 'blind-v2-selftest',
+  manifestSha256: '79'.repeat(32),
+  bindingSetSha256: sha256(canonicalJson(v2Bindings)),
+  bindings: v2Bindings,
+  rawTextEmitted: false,
+  absolutePathsEmitted: false,
+  integrationOrDistributionAuthorized: false
+};
+const completeV2 = await summarizeHumanScoresV2({
+  manifest: v2Artifacts.manifest,
+  batchContent: v2Artifacts.batchContent,
+  scoreTemplateContent: v2Artifacts.scoreTemplateContent,
+  answerKeyContent: v2Artifacts.answerKeyContent,
+  scoresContent: v2ScoresContent,
+  reportId: `report-${'80'.repeat(8)}`,
+  summarizedAt: '2026-07-23T05:00:00.000Z',
+  candidateBindingReport
+});
+assert.equal(completeV2.report.schemaVersion, REPORT_V2_SCHEMA_VERSION);
+assert.equal(completeV2.report.rawScores.length, 400);
+assert.equal(completeV2.report.candidateGenerationBindings.length, 2);
+assert.equal(
+  completeV2.report.audit.candidateGenerationBindingSetSha256,
+  candidateBindingReport.bindingSetSha256
+);
+assert.deepEqual(
+  completeV2.report.audit
+    .candidateOutputItemIdentitySetSha256ByDirection,
+  Object.fromEntries(v2Bindings.map((binding) => [
+    binding.direction,
+    binding.candidateOutputItemIdentitySetSha256
+  ]))
+);
+assert.ok(completeV2.report.rawScores.every(
+  (score) => /^[a-f0-9]{64}$/u.test(score.generationIdentitySha256)
+));
+assert.ok(completeV2.report.directions.every(
+  (direction) => direction.candidates.length === 1
+    && /^[a-f0-9]{64}$/u.test(
+      direction.candidates[0].generationIdentitySha256
+    )
+));
+assert.doesNotMatch(completeV2.reportContent, /"source":/u);
+assert.doesNotMatch(completeV2.reportContent, /"translation":/u);
+
+const mismatchedV2Bindings = structuredClone(candidateBindingReport);
+mismatchedV2Bindings.bindings[0].candidateId = 'candidate-remapped';
+mismatchedV2Bindings.bindingSetSha256 = sha256(
+  canonicalJson(mismatchedV2Bindings.bindings)
+);
+await expectBlindEvalFailure(
+  () => summarizeHumanScoresV2({
+    manifest: v2Artifacts.manifest,
+    batchContent: v2Artifacts.batchContent,
+    scoreTemplateContent: v2Artifacts.scoreTemplateContent,
+    answerKeyContent: v2Artifacts.answerKeyContent,
+    scoresContent: v2ScoresContent,
+    reportId: `report-${'81'.repeat(8)}`,
+    summarizedAt: '2026-07-23T05:00:00.000Z',
+    candidateBindingReport: mismatchedV2Bindings
+  }),
+  'V2_RAW_SCORE_CANDIDATE_GENERATION_MISMATCH'
+);
+
+const mismatchedV2ItemSet = structuredClone(candidateBindingReport);
+mismatchedV2ItemSet.bindings[0].candidateOutputItemIdentitySetSha256 =
+  '85'.repeat(32);
+mismatchedV2ItemSet.bindingSetSha256 = sha256(
+  canonicalJson(mismatchedV2ItemSet.bindings)
+);
+await expectBlindEvalFailure(
+  () => summarizeHumanScoresV2({
+    manifest: v2Artifacts.manifest,
+    batchContent: v2Artifacts.batchContent,
+    scoreTemplateContent: v2Artifacts.scoreTemplateContent,
+    answerKeyContent: v2Artifacts.answerKeyContent,
+    scoresContent: v2ScoresContent,
+    reportId: `report-${'86'.repeat(8)}`,
+    summarizedAt: '2026-07-23T05:30:00.000Z',
+    candidateBindingReport: mismatchedV2ItemSet
+  }),
+  'V2_REVIEWED_ITEM_SET_CANDIDATE_OUTPUT_MISMATCH'
 );
 
 const partial = await summarizeHumanScores({

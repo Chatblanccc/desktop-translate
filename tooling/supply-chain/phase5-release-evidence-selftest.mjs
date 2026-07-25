@@ -625,6 +625,106 @@ for (const [name, mutatedInclude, expectedError] of [
     /marker-last committed cleanup ordering lacks/u
   ],
   [
+    'uninstall transaction durable identity version downgraded',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      'DesktopTranslate.UninstallTransaction.v2|${APP_GUID}',
+      'DesktopTranslate.UninstallTransaction.v1|${APP_GUID}',
+      'uninstall transaction durable identity version downgraded'
+    ),
+    /lacks !define PHASE7_UNINSTALL_TRANSACTION_VALUE .*v2/u
+  ],
+  [
+    'transaction claim omits durable root file id',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      'WriteRegStr HKCU "$phase7TransactionClaimKey" RootFileIndexLow'
+        + ' "$phase7TransactionRootFileIndexLow"',
+      'WriteRegStr HKCU "$phase7TransactionClaimKey" UnsafeRootFileIndexLow'
+        + ' "$phase7TransactionRootFileIndexLow"',
+      'transaction claim omits durable root file id'
+    ),
+    /durable uninstall-root transaction claim ordering lacks/u
+  ],
+  [
+    'transaction source identity capture removed',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      '!insertmacro phase7CaptureTransactionSourceIdentity',
+      '# durable source identity capture removed',
+      'transaction source identity capture removed'
+    ),
+    /atomic staging preparation ordering lacks/u
+  ],
+  [
+    'committed root lease permits rename delete sharing',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      'CreateFileW(w "$phase7TransactionStage", i 0x00110081, i 3,'
+        + ' p 0, i 3, i 0x02200000, p 0)',
+      'CreateFileW(w "$phase7TransactionStage", i 0x00110081, i 7,'
+        + ' p 0, i 3, i 0x02200000, p 0)',
+      'committed root lease permits rename delete sharing'
+    ),
+    /committed root identity lease ordering lacks|must never allow FILE_SHARE_DELETE/u
+  ],
+  [
+    'committed stable marker permits sharing',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      '"${PHASE7_INSTALL_MARKER_NAME}" "file" 0 phase7CommittedMarkerHandle R5',
+      '"${PHASE7_INSTALL_MARKER_NAME}" "file" 3 phase7CommittedMarkerHandle R5',
+      'committed stable marker permits sharing'
+    ),
+    /identity-bound marker-last committed cleanup ordering lacks/u
+  ],
+  [
+    'committed disposition falls back to pathname delete',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      'System::Call \'KERNEL32::SetFileInformationByHandle('
+        + 'p $${HANDLE_VARIABLE}, i 4, p R3, i 1) i.R4 ?e\'',
+      'Delete "$phase7TransactionStage\\unsafe-pathname-delete"',
+      'committed disposition falls back to pathname delete'
+    ),
+    /must bind exactly the audited install and committed-uninstall handles/u
+  ],
+  [
+    'committed allowlist deletes a root file by pathname',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      '!insertmacro phase7DeleteCommittedAllowlistedFile'
+        + ' $phase7CommittedRootHandle "${PRODUCT_FILENAME}.exe"',
+      'Delete "$phase7TransactionStage\\${PRODUCT_FILENAME}.exe"',
+      'committed allowlist deletes a root file by pathname'
+    ),
+    /committed handle-relative allowlist lacks|must never mutate or reopen by staging pathname/u
+  ],
+  [
+    'committed root lease closes before allowlist cleanup',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      '      Push ""\n      Call ${PHASE7_COMMITTED_DELETE_FUNCTION}',
+      '      Push ""\n'
+        + '      System::Call \'KERNEL32::CloseHandle('
+        + 'p $phase7CommittedRootHandle)\'\n'
+        + '      Call ${PHASE7_COMMITTED_DELETE_FUNCTION}',
+      'committed root lease closes before allowlist cleanup'
+    ),
+    /root and marker leases must remain pinned/u
+  ],
+  [
+    'rollback skips durable stage identity match',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      '    !insertmacro phase7AssertTransactionRootPathIdentity'
+        + ' "$phase7TransactionStage"',
+      '# durable rollback stage identity match removed',
+      'rollback skips durable stage identity match'
+    ),
+    /rollback durable uninstall-root identity ordering lacks/u
+  ],
+  [
     'registry copy replaced by rename',
     mutateExact(
       auditedInstallerIncludeContent,
@@ -887,7 +987,7 @@ for (const [name, mutatedInclude, expectedError] of [
       'CreateDirectory "$INSTDIR"',
       'atomic directory creation falls back to pathname CreateDirectory'
     ),
-    /lacks ntdll::NtCreateFile|atomic relative-directory creation ordering lacks|must not fall back to pathname/u
+    /lacks (?:ntdll::NtCreateFile|i 0x00200021)|atomic relative-directory creation ordering lacks|must not fall back to pathname/u
   ],
   [
     'atomic directory creation opens an existing leaf',
@@ -947,8 +1047,10 @@ for (const [name, mutatedInclude, expectedError] of [
     'marker handle verification accepts hard links',
     mutateExact(
       auditedInstallerIncludeContent,
-      '${OrIf} $R6 != 1',
-      '${OrIf} $R6 != 99',
+      '    ${OrIf} $R6 != 1\n'
+        + '      Goto phase7_marker_handle_verify_done_${PHASE7_MARKER_HANDLE_VERIFY_ID}',
+      '    ${OrIf} $R6 != 99\n'
+        + '      Goto phase7_marker_handle_verify_done_${PHASE7_MARKER_HANDLE_VERIFY_ID}',
       'marker handle verification accepts hard links'
     ),
     /exact marker handle verification ordering lacks/u

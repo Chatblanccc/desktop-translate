@@ -70,6 +70,12 @@ namespace Phase7 {
 
         private const uint FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000;
         private const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+        private const uint OBJ_CASE_INSENSITIVE = 0x00000040;
+        private const uint FILE_OPEN = 1;
+        private const uint FILE_DIRECTORY_FILE = 0x00000001;
+        private const uint FILE_SYNCHRONOUS_IO_NONALERT = 0x00000020;
+        private const uint FILE_NON_DIRECTORY_FILE = 0x00000040;
+        private const uint FILE_OPEN_REPARSE_POINT = 0x00200000;
 
         private const uint MOVEFILE_REPLACE_EXISTING = 0x00000001;
         private const uint SYMBOLIC_LINK_FLAG_FILE = 0x00000000;
@@ -106,6 +112,29 @@ namespace Phase7 {
         private struct FileDispositionInformation {
             [MarshalAs(UnmanagedType.U1)]
             public bool DeleteFile;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct UnicodeString {
+            public ushort Length;
+            public ushort MaximumLength;
+            public IntPtr Buffer;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ObjectAttributes {
+            public uint Length;
+            public IntPtr RootDirectory;
+            public IntPtr ObjectName;
+            public uint Attributes;
+            public IntPtr SecurityDescriptor;
+            public IntPtr SecurityQualityOfService;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct IoStatusBlock {
+            public IntPtr Status;
+            public UIntPtr Information;
         }
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -176,6 +205,24 @@ namespace Phase7 {
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool RemoveDirectoryW(string path);
+
+        [DllImport("ntdll.dll")]
+        private static extern int NtCreateFile(
+            out SafeFileHandle fileHandle,
+            uint desiredAccess,
+            ref ObjectAttributes objectAttributes,
+            out IoStatusBlock ioStatusBlock,
+            IntPtr allocationSize,
+            uint fileAttributes,
+            uint shareAccess,
+            uint createDisposition,
+            uint createOptions,
+            IntPtr eaBuffer,
+            uint eaLength
+        );
+
+        [DllImport("ntdll.dll")]
+        private static extern uint RtlNtStatusToDosError(int status);
 
         private static string ToExtendedLengthPath(string path) {
             if (String.IsNullOrWhiteSpace(path)) {
@@ -292,6 +339,104 @@ namespace Phase7 {
                 FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT,
                 "The exact marker handle could not be opened without sharing."
             );
+        }
+
+        public static SafeFileHandle OpenRelativeEntry(
+            SafeFileHandle parent,
+            string leafName,
+            bool directory,
+            uint shareMode
+        ) {
+            if (parent == null || parent.IsInvalid || parent.IsClosed) {
+                throw new ObjectDisposedException("parent");
+            }
+            if (String.IsNullOrWhiteSpace(leafName) ||
+                leafName == "." ||
+                leafName == ".." ||
+                leafName.IndexOf('\\') >= 0 ||
+                leafName.IndexOf('/') >= 0) {
+                throw new ArgumentException(
+                    "Relative entry must be exactly one non-special path segment.",
+                    "leafName"
+                );
+            }
+            if ((shareMode & ~(
+                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+            )) != 0) {
+                throw new ArgumentOutOfRangeException("shareMode");
+            }
+
+            var leafBuffer = Marshal.StringToHGlobalUni(leafName);
+            var unicodeStringPointer = IntPtr.Zero;
+            var addedReference = false;
+            SafeFileHandle opened = null;
+            try {
+                var unicodeString = new UnicodeString {
+                    Length = checked((ushort)(leafName.Length * 2)),
+                    MaximumLength = checked((ushort)((leafName.Length + 1) * 2)),
+                    Buffer = leafBuffer
+                };
+                unicodeStringPointer = Marshal.AllocHGlobal(
+                    Marshal.SizeOf(typeof(UnicodeString))
+                );
+                Marshal.StructureToPtr(unicodeString, unicodeStringPointer, false);
+
+                parent.DangerousAddRef(ref addedReference);
+                var objectAttributes = new ObjectAttributes {
+                    Length = (uint)Marshal.SizeOf(typeof(ObjectAttributes)),
+                    RootDirectory = parent.DangerousGetHandle(),
+                    ObjectName = unicodeStringPointer,
+                    Attributes = OBJ_CASE_INSENSITIVE,
+                    SecurityDescriptor = IntPtr.Zero,
+                    SecurityQualityOfService = IntPtr.Zero
+                };
+                IoStatusBlock ioStatusBlock;
+                var options = FILE_SYNCHRONOUS_IO_NONALERT |
+                    FILE_OPEN_REPARSE_POINT |
+                    (directory ? FILE_DIRECTORY_FILE : FILE_NON_DIRECTORY_FILE);
+                var status = NtCreateFile(
+                    out opened,
+                    DELETE | FILE_READ_ATTRIBUTES | SYNCHRONIZE | 0x00000001,
+                    ref objectAttributes,
+                    out ioStatusBlock,
+                    IntPtr.Zero,
+                    0,
+                    shareMode,
+                    FILE_OPEN,
+                    options,
+                    IntPtr.Zero,
+                    0
+                );
+                if (status != 0 || opened == null || opened.IsInvalid) {
+                    var error = unchecked((int)RtlNtStatusToDosError(status));
+                    if (opened != null) {
+                        opened.Dispose();
+                    }
+                    throw new Win32Exception(
+                        error,
+                        "NtCreateFile could not open the immediate child relative to its pinned parent."
+                    );
+                }
+
+                var identity = ReadIdentityCore(opened);
+                var isDirectory = (identity.Attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+                if ((identity.Attributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0 ||
+                    isDirectory != directory) {
+                    opened.Dispose();
+                    throw new InvalidOperationException(
+                        "The relative child has an unsafe reparse/type identity."
+                    );
+                }
+                return opened;
+            } finally {
+                if (addedReference) {
+                    parent.DangerousRelease();
+                }
+                if (unicodeStringPointer != IntPtr.Zero) {
+                    Marshal.FreeHGlobal(unicodeStringPointer);
+                }
+                Marshal.FreeHGlobal(leafBuffer);
+            }
         }
 
         public static NativeFileIdentity ReadIdentity(SafeFileHandle handle) {
@@ -930,6 +1075,242 @@ try {
             'The exact replacement identity changed during owned-marker deletion.'
 
         "rename/replace denied with Win32 $($renameWhileOwned.ErrorCode)/$($replaceWhileOwned.ErrorCode); disposition removed only the owned marker name"
+    }
+
+    Invoke-Phase7TestCase -Name 'durable-stage-identity-rejects-path-replacement' -Body {
+        $caseRoot = New-Phase7CaseDirectory 'durable-stage-identity'
+        $stage = Join-Path $caseRoot 'stage'
+        $displaced = Join-Path $caseRoot 'displaced'
+        $replacement = Join-Path $caseRoot 'replacement'
+        [void][IO.Directory]::CreateDirectory($stage)
+        [void][IO.Directory]::CreateDirectory($replacement)
+        Write-Phase7TestFile (Join-Path $stage 'owned.txt') 'durable-owned-stage'
+        Write-Phase7TestFile (Join-Path $replacement 'replacement.txt') 'durable-replacement'
+
+        $durableIdentity = [Phase7.InstallerIdentitySelfTestNative]::ReadPathIdentity(
+            $stage,
+            $true,
+            $true
+        )
+        $rename = [Phase7.InstallerIdentitySelfTestNative]::TryMove(
+            $stage,
+            $displaced,
+            $false
+        )
+        Assert-Phase7True $rename.Success `
+            "The durable-identity replacement setup could not displace staging (Win32 $($rename.ErrorCode))."
+        $replace = [Phase7.InstallerIdentitySelfTestNative]::TryMove(
+            $replacement,
+            $stage,
+            $false
+        )
+        Assert-Phase7True $replace.Success `
+            "The durable-identity replacement setup could not install a replacement (Win32 $($replace.ErrorCode))."
+
+        $replacementIdentity = [Phase7.InstallerIdentitySelfTestNative]::ReadPathIdentity(
+            $stage,
+            $true,
+            $true
+        )
+        Assert-Phase7True (
+            $durableIdentity.VolumeSerialNumber -ne $replacementIdentity.VolumeSerialNumber -or
+            $durableIdentity.FileId -ne $replacementIdentity.FileId
+        ) 'A replacement stage pathname incorrectly matched the durable transaction directory identity.'
+        $displacedIdentity = [Phase7.InstallerIdentitySelfTestNative]::ReadPathIdentity(
+            $displaced,
+            $true,
+            $true
+        )
+        Assert-Phase7IdentityEqual $durableIdentity $displacedIdentity `
+            'The durable transaction identity did not follow the exact displaced directory object.'
+        Assert-Phase7True (
+            [IO.File]::ReadAllText(
+                (Join-Path $displaced 'owned.txt'),
+                $script:Utf8NoBom
+            ) -eq 'durable-owned-stage'
+        ) 'The displaced durable stage content changed during pathname replacement.'
+        Assert-Phase7True (
+            [IO.File]::ReadAllText(
+                (Join-Path $stage 'replacement.txt'),
+                $script:Utf8NoBom
+            ) -eq 'durable-replacement'
+        ) 'The replacement stage control content was not preserved.'
+
+        "durable volume/file-id rejected a replaced stage pathname; original identity followed the displaced object"
+    }
+
+    Invoke-Phase7TestCase -Name 'committed-relative-allowlist-preserves-unknown-entry' -Body {
+        $caseRoot = New-Phase7CaseDirectory 'committed-relative-allowlist'
+        $stage = Join-Path $caseRoot 'stage'
+        $renamed = Join-Path $caseRoot 'renamed'
+        $replacement = Join-Path $caseRoot 'replacement'
+        $resources = Join-Path $stage 'resources'
+        $manifest = Join-Path $resources 'manifest'
+        $known = Join-Path $manifest 'product-manifest.json'
+        $marker = Join-Path $stage '.desktop-translate-install.json'
+        $unknown = Join-Path $stage 'user-unknown.txt'
+        [void][IO.Directory]::CreateDirectory($manifest)
+        [void][IO.Directory]::CreateDirectory($replacement)
+        Write-Phase7TestFile $known '{"owned":true}'
+        Write-Phase7TestFile $marker '{"schema":1,"product":"desktop-translate"}'
+        Write-Phase7TestFile $unknown 'must-survive-unknown'
+        Write-Phase7TestFile (Join-Path $replacement 'replacement.txt') 'must-survive-replacement'
+
+        $stageIdentity = [Phase7.InstallerIdentitySelfTestNative]::ReadPathIdentity(
+            $stage,
+            $true,
+            $true
+        )
+        $knownIdentity = [Phase7.InstallerIdentitySelfTestNative]::ReadPathIdentity(
+            $known,
+            $false,
+            $true
+        )
+        $rootHandle = $null
+        $markerHandle = $null
+        $resourcesHandle = $null
+        $manifestHandle = $null
+        $knownHandle = $null
+        try {
+            $rootHandle = [Phase7.InstallerIdentitySelfTestNative]::OpenDirectoryIdentityLease(
+                $stage
+            )
+            Assert-Phase7IdentityEqual $stageIdentity (
+                [Phase7.InstallerIdentitySelfTestNative]::ReadIdentity($rootHandle)
+            ) 'The committed cleanup root lease did not bind the durable stage identity.'
+
+            $renameWhileLeased = [Phase7.InstallerIdentitySelfTestNative]::TryMove(
+                $stage,
+                $renamed,
+                $false
+            )
+            Assert-Phase7SharingBlock $renameWhileLeased `
+                'The committed cleanup root lease allowed staging rename-away.'
+            $replaceWhileLeased = [Phase7.InstallerIdentitySelfTestNative]::TryMove(
+                $replacement,
+                $stage,
+                $true
+            )
+            Assert-Phase7SharingBlock $replaceWhileLeased `
+                'The committed cleanup root lease allowed staging replacement.'
+
+            $markerHandle = [Phase7.InstallerIdentitySelfTestNative]::OpenRelativeEntry(
+                $rootHandle,
+                '.desktop-translate-install.json',
+                $false,
+                0
+            )
+            $markerIdentity = [Phase7.InstallerIdentitySelfTestNative]::ReadIdentity(
+                $markerHandle
+            )
+            Assert-Phase7True ($markerIdentity.NumberOfLinks -eq 1) `
+                'The committed stable marker was not a single-link exact identity.'
+
+            $resourcesHandle = [Phase7.InstallerIdentitySelfTestNative]::OpenRelativeEntry(
+                $rootHandle,
+                'resources',
+                $true,
+                3
+            )
+            $manifestHandle = [Phase7.InstallerIdentitySelfTestNative]::OpenRelativeEntry(
+                $resourcesHandle,
+                'manifest',
+                $true,
+                3
+            )
+            $knownHandle = [Phase7.InstallerIdentitySelfTestNative]::OpenRelativeEntry(
+                $manifestHandle,
+                'product-manifest.json',
+                $false,
+                3
+            )
+            Assert-Phase7IdentityEqual $knownIdentity (
+                [Phase7.InstallerIdentitySelfTestNative]::ReadIdentity($knownHandle)
+            ) 'Parent-relative NtCreateFile did not bind the expected allowlisted leaf identity.'
+
+            $deleteKnown = [Phase7.InstallerIdentitySelfTestNative]::SetDeleteDisposition(
+                $knownHandle,
+                $true
+            )
+            Assert-Phase7True $deleteKnown.Success `
+                "The relative allowlisted file could not be disposed (Win32 $($deleteKnown.ErrorCode))."
+            $knownHandle.Dispose()
+            $knownHandle = $null
+            Assert-Phase7True (-not [IO.File]::Exists($known)) `
+                'The parent-relative allowlisted file remained after exact-handle disposition.'
+
+            $deleteManifest = [Phase7.InstallerIdentitySelfTestNative]::SetDeleteDisposition(
+                $manifestHandle,
+                $true
+            )
+            Assert-Phase7True $deleteManifest.Success `
+                "The emptied manifest directory could not be disposed (Win32 $($deleteManifest.ErrorCode))."
+            $manifestHandle.Dispose()
+            $manifestHandle = $null
+            $deleteResources = [Phase7.InstallerIdentitySelfTestNative]::SetDeleteDisposition(
+                $resourcesHandle,
+                $true
+            )
+            Assert-Phase7True $deleteResources.Success `
+                "The emptied resources directory could not be disposed (Win32 $($deleteResources.ErrorCode))."
+            $resourcesHandle.Dispose()
+            $resourcesHandle = $null
+            Assert-Phase7True (-not [IO.Directory]::Exists($resources)) `
+                'The exact nested allowlist directories remained after handle disposition.'
+
+            $rootWithMarkerAndUnknown = [Phase7.InstallerIdentitySelfTestNative]::SetDeleteDisposition(
+                $rootHandle,
+                $true
+            )
+            Assert-Phase7True (
+                -not $rootWithMarkerAndUnknown.Success -and
+                $rootWithMarkerAndUnknown.ErrorCode -eq 145
+            ) "The nonempty committed root did not fail with ERROR_DIR_NOT_EMPTY (Win32 $($rootWithMarkerAndUnknown.ErrorCode))."
+
+            $deleteMarker = [Phase7.InstallerIdentitySelfTestNative]::SetDeleteDisposition(
+                $markerHandle,
+                $true
+            )
+            Assert-Phase7True $deleteMarker.Success `
+                "The pinned stable marker could not be disposed last (Win32 $($deleteMarker.ErrorCode))."
+            $markerHandle.Dispose()
+            $markerHandle = $null
+            Assert-Phase7True (-not [IO.File]::Exists($marker)) `
+                'The pinned stable marker remained after exact-handle disposition.'
+
+            $rootWithUnknown = [Phase7.InstallerIdentitySelfTestNative]::SetDeleteDisposition(
+                $rootHandle,
+                $true
+            )
+            Assert-Phase7True (
+                -not $rootWithUnknown.Success -and
+                $rootWithUnknown.ErrorCode -eq 145
+            ) "An unknown entry did not keep committed root deletion fail-closed (Win32 $($rootWithUnknown.ErrorCode))."
+            Assert-Phase7True (
+                [IO.File]::ReadAllText($unknown, $script:Utf8NoBom) -eq
+                    'must-survive-unknown'
+            ) 'Committed allowlist cleanup deleted or changed an unknown entry.'
+            Assert-Phase7True (
+                [IO.File]::ReadAllText(
+                    (Join-Path $replacement 'replacement.txt'),
+                    $script:Utf8NoBom
+                ) -eq 'must-survive-replacement'
+            ) 'Committed cleanup changed the blocked replacement root.'
+        } finally {
+            foreach ($handle in @(
+                $knownHandle,
+                $manifestHandle,
+                $resourcesHandle,
+                $markerHandle,
+                $rootHandle
+            )) {
+                if ($null -ne $handle) {
+                    $handle.Dispose()
+                }
+            }
+        }
+
+        "nested NtCreateFile allowlist deleted only exact owned handles; marker stayed pinned until last and unknown residue blocked root deletion"
     }
 
     Invoke-Phase7TestCase -Name 'hardlink-exact-name-disposition' -Body {

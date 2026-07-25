@@ -40,14 +40,16 @@ const sourceContents = {
   coldPwsNative: 'phase7-cold-pws-native-source-fixture',
   electronMain: 'phase7-electron-main-source-fixture',
   electronLibrary: 'phase7-electron-library-source-fixture',
-  electronRenderer: 'phase7-electron-renderer-source-fixture'
+  electronRenderer: 'phase7-electron-renderer-source-fixture',
+  candidateBindings: 'phase7-candidate-bindings-source-fixture'
 };
 const harnessDefinitions = [
   ['runner', 'coldPwsRunner', 'runnerSha256'],
   ['native', 'coldPwsNative', 'nativeSha256'],
   ['main', 'electronMain', 'electronMainSha256'],
   ['library', 'electronLibrary', 'electronLibrarySha256'],
-  ['renderer', 'electronRenderer', 'electronRendererSha256']
+  ['renderer', 'electronRenderer', 'electronRendererSha256'],
+  ['bindings', 'candidateBindings', 'candidateBindingsSha256']
 ];
 const harnessIdentity = {
   fileCount: harnessDefinitions.length,
@@ -211,7 +213,14 @@ const candidateGenerationBindings = candidateGenerationDocuments.map(
     generationRunId: document.identity.generationRunId,
     generationArtifactSha256:
       candidateGenerationArtifacts[index].sha256,
-    generationIdentitySha256: document.identitySha256
+    generationIdentitySha256: document.identitySha256,
+    sourceSetIdentitySha256:
+      document.identity.sourceSet.identitySha256,
+    sourceSetRecordCount: document.identity.sourceSet.recordCount,
+    candidateOutputArtifactSha256:
+      document.candidateOutput.artifactSha256,
+    candidateOutputItemIdentitySetSha256:
+      document.candidateOutput.itemIdentitySetSha256
   })
 ).sort((left, right) => left.direction.localeCompare(right.direction));
 const candidateGenerationBindingSetSha256 = shaCanonical(
@@ -548,13 +557,19 @@ const coldDocument = {
     exitAccountingLagRecovery:
       'STABLE_DOUBLE_ACCOUNTING_AND_BOUND_ACTIVE_IDENTITY_ENUMERATION',
     logicalSampleMembership:
-      'PRE_POST_COMPLETE_OR_BOUNDED_VERIFIED_MEMBERSHIP_TRANSITION_GAP',
+      'PRE_POST_COMPLETE_OR_BOUNDED_VERIFIED_TRANSITION_WITH_TERMINAL_ZERO',
     membershipTransitionPolicy:
-      'BOUNDED_COMPLETE_HISTORY_OR_ACCOUNTING_EXIT_LAG',
+      'COMPLETE_BOUND_OR_STRICT_EXIT_ONLY_MARKER_BOUND_TERMINAL_ZERO',
     qwsJobMembershipValidation:
       'SAME_HANDLE_PRE_AND_POST_IS_PROCESS_IN_JOB',
     warmCompletionBoundary:
       'CREATE_NEW_MARKER_BOUND_TO_FINAL_CHILD_REPORT',
+    terminalBoundary:
+      'MARKER_VALIDATED_EXIT_ZERO_EXACT_HISTORY_THREE_ZERO_POLLS',
+    jobProcessQueryRetryPolicy:
+      'ONE_IMMEDIATE_RETRY_PRE_AND_POST_FAIL_CLOSED',
+    postExitJobQueryFailurePolicy:
+      'NO_RETRY_FAIL_FAST_TO_CLEANUP',
     treeAggregation: 'ONE_JOB_MEMBERSHIP_SNAPSHOT_PER_LOGICAL_SAMPLE',
     processQueriesAtomic: false,
     processIdentityBinding: 'PID_AND_CREATION_TIME_INTERNAL_ONLY',
@@ -663,6 +678,11 @@ const blindDocument = {
     privateAnswerKeySha256: hex('6'),
     rawScoresSha256: hex('7'),
     candidateGenerationBindingSetSha256,
+    candidateOutputItemIdentitySetSha256ByDirection:
+      Object.fromEntries(candidateGenerationBindings.map((binding) => [
+        binding.direction,
+        binding.candidateOutputItemIdentitySetSha256
+      ])),
     randomizedMappingVerified: true,
     candidateIdentityWithheldFromReviewBatch: true
   },
@@ -1345,6 +1365,20 @@ assert.ok(wrongBlindIdentityResult.unmetConditions.includes(
   'HUMAN_BLIND_RAW_SCORE_GENERATION_BINDING_MISMATCH:en-zh'
 ));
 
+const wrongBlindItemSet = structuredClone(blindDocument);
+wrongBlindItemSet.audit
+  .candidateOutputItemIdentitySetSha256ByDirection['en-zh'] = hex('0');
+const wrongBlindItemSetResult = evaluateGateAInputCompleteness({
+  ...rawEvidence,
+  artifacts: {
+    ...rawEvidence.artifacts,
+    blindEvaluation: artifact(wrongBlindItemSet)
+  }
+});
+assert.ok(wrongBlindItemSetResult.unmetConditions.includes(
+  'HUMAN_BLIND_REVIEWED_ITEM_SET_CANDIDATE_OUTPUT_MISMATCH:en-zh'
+));
+
 for (const [artifactName, expectedCode] of [
   ['legalReview', 'LEGAL_REVIEW_RAW_ARTIFACT_MISSING_OR_UNBOUND'],
   [
@@ -1411,6 +1445,6 @@ process.stdout.write(`${JSON.stringify({
   verifiedTransitionPositiveFixture: true,
   stableExitAccountingLagRecoveryPositiveFixture: true,
   verifiedTransitionNegativeFixtures: 14,
-  crossBindingNegativeFixtures: 15,
+  crossBindingNegativeFixtures: 16,
   syntheticBooleansIgnored: true
 }, null, 2)}\n`);

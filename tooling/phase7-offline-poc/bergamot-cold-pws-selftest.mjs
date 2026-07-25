@@ -10,6 +10,27 @@ const nativeUrl = new URL('./bergamot-cold-pws-native.cs', import.meta.url);
 const source = await readFile(runnerUrl, 'utf8');
 const nativeSource = await readFile(nativeUrl, 'utf8');
 
+assert.match(source, /phase7-offline-cold-pws-v3/u);
+assert.match(source, /BERGAMOT_COLD_PWS_CANDIDATE_GENERATIONS_REQUIRED/u);
+assert.match(source, /BERGAMOT_COLD_PWS_V3_BOTH_DIRECTIONS_REQUIRED/u);
+assert.match(source, /CandidateGenerationEnZhPath/u);
+assert.match(source, /CandidateGenerationZhEnPath/u);
+assert.match(source, /gate-a-candidate-bindings\.mjs/u);
+assert.match(source, /candidateBindingsSha256/u);
+assert.match(source, /candidateGenerationBindingSetSha256/u);
+assert.match(source, /candidateGenerationBindings/u);
+assert.match(
+  source,
+  /candidateBindingsSha256\s*=\s*\$identities\.bindings/u
+);
+assert.match(
+  source,
+  /candidateGenerationBindingSetSha256\s*=\s*\[string\]\$candidateBindingReport\.bindingSetSha256/u
+);
+assert.match(
+  source,
+  /candidateGenerationBindings\s*=\s*@\(\$candidateBindingReport\.bindings\)/u
+);
 assert.match(source, /PID_AND_CREATION_TIME_INTERNAL_ONLY/u);
 assert.match(source, /CREATE_SUSPENDED_ASSIGN_JOB_THEN_RESUME/u);
 assert.match(source, /QUERY_INFORMATION_JOB_OBJECT_MEMBERS/u);
@@ -205,6 +226,7 @@ assert.match(nativeSource, /NumberOfLinks != 1/u);
 assert.match(nativeSource, /FILE_FLAG_OPEN_REPARSE_POINT/u);
 
 let windowsProof = null;
+let candidateGenerationPreflight = 'NOT_RUN';
 if (process.platform === 'win32') {
   const powershell = `${process.env.SystemRoot}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
   const { stdout } = await execFileAsync(
@@ -288,6 +310,35 @@ if (process.platform === 'win32') {
   assert.equal(report.rawTextEmitted, false);
   assert.equal(report.rawPathsEmitted, false);
   assert.equal(report.processIdentifiersEmitted, false);
+
+  await assert.rejects(
+    execFileAsync(
+      powershell,
+      [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        fileURLToPath(runnerUrl),
+        '-PocAuthorizationPath',
+        'unused-selftest-authorization.json'
+      ],
+      {
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024,
+        timeout: 30_000,
+        windowsHide: true
+      }
+    ),
+    (error) => (
+      error?.code !== 0
+      && /BERGAMOT_COLD_PWS_CANDIDATE_GENERATIONS_REQUIRED/u.test(
+        `${error?.stdout ?? ''}\n${error?.stderr ?? ''}`
+      )
+    )
+  );
+  candidateGenerationPreflight = 'PASS';
 }
 
 process.stdout.write(`${JSON.stringify({
@@ -338,6 +389,7 @@ process.stdout.write(`${JSON.stringify({
   createNewHardlinkReparseAndFinalPathRejection:
     windowsProof?.createNewHardlinkReparseAndFinalPathRejection
       ?? 'NOT_RUN',
+  candidateGenerationPreflight,
   rawTextEmitted: false,
   rawPathsEmitted: false,
   processIdentifiersEmitted: false

@@ -104,6 +104,27 @@ node tooling/phase7-offline-poc/blind-eval.mjs summarize `
   --run-id run-0123456789abcdef
 ```
 
+`summarize` intentionally emits the historical development-only v1 report.
+Gate A evidence must use the cross-bound v2 command and supply the same raw
+authorization and two candidate-generation artifacts used by the formal PWS
+run:
+
+```powershell
+node tooling/phase7-offline-poc/blind-eval.mjs summarize-v2 `
+  --run-id run-0123456789abcdef `
+  --authorization artifacts/phase7/offline-poc/authorizations/bergamot.json `
+  --generation-en-zh artifacts/phase7/offline-poc/gate-a/generation-en-zh.json `
+  --generation-zh-en artifacts/phase7/offline-poc/gate-a/generation-zh-en.json
+```
+
+The authorization and generation files must be regular, non-link files below
+the ignored Phase 7 artifact root. Candidate IDs and generation run IDs in
+every counted score must match the direction-bound generation records;
+missing, stale, duplicate or remapped identities fail closed. The v2
+summarizer also recomputes each direction's canonical
+`{direction,itemId,sourceSha256}` item-identity set from the verified private
+answer key and requires it to match the candidate-output binding.
+
 Before counting a score, the summarizer verifies the batch, template, private
 key, randomization seed commitment, evaluation mapping, and raw-score record
 set. An unknown evaluation, duplicate evaluation, candidate/item double

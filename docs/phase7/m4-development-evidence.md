@@ -1,6 +1,6 @@
 # Phase 7 M4 development evidence
 
-- Evidence date: 2026-07-24
+- Evidence date: 2026-07-25
 - Status: `DEVELOPMENT PARTIAL / FORMAL EVIDENCE BLOCKED / GATE A INPUT INCOMPLETE`
 - Product integration: `NOT AUTHORIZED / NOT IMPLEMENTED`
 - Formal 20-by-2 cold run:
@@ -91,8 +91,12 @@ query error, and explicit retry/pending/post-exit counters. Scoped self-tests
 pass. An independent source/evidence review found no lost-peak path, threshold
 relaxation, or hidden failure in those changes.
 
-No formal run has been repeated with this latest producer. Therefore the
-producer hardening is development evidence only; it does not repair or
+No formal run has been repeated with this latest producer. The current runner
+now emits `phase7-offline-cold-pws-v3` and refuses to start without both
+directional candidate-generation artifact paths. After the trials it binds
+their raw hashes, candidate/run identities, authorization, manifest,
+model/runtime trees and exact cold workload identity into the report. Therefore
+the producer hardening is development evidence only; it does not repair or
 supersede r1/r2/r3 and does not produce a formal Gate A result.
 
 Current development self-tests:
@@ -104,11 +108,40 @@ SELF_TEST_PASS
 node tooling/phase7-offline-poc/gate-a-completeness-selftest.mjs
 STATIC_COMPLETENESS_SELF_TEST_PASS
 14 transition/recovery negative fixtures
-15 cross-binding negative fixtures
+16 cross-binding negative fixtures
+
+node tooling/phase7-offline-poc/gate-a-candidate-bindings-selftest.mjs
+CANDIDATE_BINDING_SELF_TEST_PASS
 
 node tooling/phase7-offline-poc/selftest.mjs
 STATIC_SCHEMA_SELF_TEST_PASS
 ```
+
+## Current base-installer development observation
+
+The dirty-worktree unsigned development snapshot was rebuilt after the M3
+uninstall and M4 cross-binding code changes and before this evidence paragraph
+was appended:
+
+- source identity:
+  `HEAD+WORKTREE:aaa93f5523b30713cfb65f66a6486276b0dd22cd4730743c2915de6046b215d7`;
+- installer bytes: `130,711,602` / `124.656 MiB`;
+- installer SHA-256:
+  `d4f0e882a34fc49e3e11039d60dc9f9dd276b0b87f645d820d4b38795a2a7b35`;
+- installed bytes: `337,876,713` / `322.224 MiB`;
+- evidence root:
+  `artifacts/phase5/8636fc0e542841e4689103c37a0588edfc6411f8/local-20260725T1250477361444Z-8903ae0b2bdb4e01ac819bea8686c7b6`;
+- compile-chain, package allowlist/ASAR/resources/hash/size, startup smoke,
+  SBOM and evidence-traceability gates: `PASS`;
+- model-like file scan in `win-unpacked`: `0`;
+- package/product residual process count: `0`;
+- Authenticode: application, Native Host and installer all `NotSigned`.
+
+This proves the present base package stays below the 150-MiB threshold and
+does not contain an offline model. It is not the cross-bound Gate A package
+sizing record: the worktree is dirty, the candidate is unsigned, no matching
+candidate-generation set exists, and independent attestation/clean-download
+verification has not run.
 
 ## Argos/CTranslate2 comparison track
 
@@ -180,9 +213,16 @@ The local harness enforces:
 - duplicate, tamper, candidate-remap and privacy fail-closed checks;
 - no source, reference or translated text in the summary report.
 
-Only the current v1 harness and synthetic self-test are complete. No eligible
-200-item dataset, `phase7-gate-a-candidate-generation-v1` raw generation
-artifact, v2 blind report, or human review has been accepted as M4 evidence.
+The v1 development summarizer remains available for old evidence. A new
+`summarize-v2` path now derives the required v2 report only after it binds all
+counted candidate/run identities to the same two raw
+`phase7-gate-a-candidate-generation-v1` artifacts and M0 authorization used
+by the cold runner. The binding also includes source-set identity/count and
+private candidate-output/item-set hashes; v2 recomputes the reviewed item set
+from the verified private answer key. Synthetic positive, candidate-remapping
+and substituted-item-set negative tests pass. No eligible 200-item dataset,
+real generation artifact, v2 report, or human review has been accepted as M4
+evidence.
 
 ## Gate A cross-evidence binding
 
@@ -204,10 +244,10 @@ duplicate, remapped, old-schema, legal, network, and sizing failures.
 
 Current evidence is deliberately rejected by that contract:
 
-- the direct Bergamot runner emits `phase7-bergamot-cold-pws-v2`, while Gate A
-  requires `phase7-offline-cold-pws-v3`;
-- the current blind report emits `phase7-blind-eval-report-v1`, while Gate A
-  requires `phase7-blind-eval-report-v2`;
+- preserved Bergamot runs emit `phase7-bergamot-cold-pws-v2`; the hardened
+  producer can emit v3 but no real v3 formal run exists;
+- preserved blind reports emit `phase7-blind-eval-report-v1`; the hardened
+  summarizer can emit v2 but no real v2 report exists;
 - no matching `phase7-gate-a-candidate-generation-v1` raw artifact exists;
 - no successful cross-bound `20×2` cold/PWS distribution or `200×2` blind
   evaluation exists;
@@ -233,3 +273,10 @@ been crossed, and M5+ product integration remains unauthorized.
    execution.
 6. Submit the complete cross-bound evidence to the user; only the user can
    confirm Gate A.
+
+The repository-wide privacy scan currently also rejects preserved development
+artifacts containing absolute local user paths. The hits are in old
+electron-builder diagnostics, package logs and isolated Chromium user-data
+diagnostics, not production source. Those artifacts remain evidence and were
+not deleted; a Gate A evidence bundle must be freshly scoped and pass its own
+zero-path/zero-content scan.

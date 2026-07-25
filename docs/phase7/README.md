@@ -1,10 +1,11 @@
 # Phase 7 开发计划：First Signed Limited Beta
 
 - 文档状态：`FROZEN TO USER-APPROVED SEQUENCE`
-- 当前执行位置：M3 第三版真实 custom-root fresh install、第五版 fresh-directory/marker
-  identity-bound exact unsigned package gates，以及当前候选默认 CurrentUser interactive + Quiet
-  uninstall 已通过；registered 升级、committed-stage pathname
-  identity、物理输入与 clean VM 待补 / M4 POC 证据工具加固（formal 尚未通过）
+- 当前执行位置：M3 第三版真实 custom-root fresh install、第五版 fresh-directory/marker 与第六版
+  committed-stage handle-relative identity gates，以及当前候选默认 CurrentUser registered rerun +
+  interactive/Quiet uninstall 已通过；fault/crash replay、跨版本升级、正常 installed-app 退出、物理输入
+  与 clean VM 待补 / M4 PWS v3、blind v2 与 candidate-generation 交叉绑定工具已加固
+  （真实 candidate generation、formal run 与人工盲评尚未通过）
 - 当前验收状态：`NOT YET ACCEPTED`
 - 最终交付上限：Windows x64 signed limited beta
 - 明确禁止的口径：public V1、GA、production-ready
