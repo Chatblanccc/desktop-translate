@@ -22,7 +22,7 @@ export const auditedFluentIconsPatchSha256 =
 export const auditedFluentIconsPnpmPatchHash =
   '8d7df040fe72d3d557bd823b5f87ee8080e23bdc97d645cad856df2c744d259a';
 export const auditedInstallerIncludeSha256 =
-  '472fc63c30de98d09710cc7867bc0cdfaf2c725571dfb1bc1c2d6f6e009c91bf';
+  '2b0ed685a6d8f5e335ed50f5e2e8b5decc1edf40a6becec957b7acb65b9a5fd3';
 export const auditedPatchedAssistedInstallerTemplateSha256 =
   '253c35920ee98cb18cff1241d4feba7abc806324ed7699e82bccc7bf6c380467';
 export const auditedPatchedInstallerTemplateSha256 =
@@ -368,6 +368,7 @@ export function assertPhase7InstallerIncludeSemantics(installerIncludeContent) {
     '!macro phase7AssertKnownRootEntries ROOT_PATH',
     '!macro phase7SetVerifiedLinkVars',
     '!macro phase7AssertRequiredNonEmptyFile RELATIVE_PATH',
+    '!macro phase7ProbeExistingRegistryKeyLifecycleAccess REGISTRY_KEY',
     '!macro phase7ProbeRegistryWritable',
     '!macro phase7AcquireUninstallMutex',
     '!macro phase7AssertNoConcurrentUninstallBoundary',
@@ -406,6 +407,8 @@ export function assertPhase7InstallerIncludeSemantics(installerIncludeContent) {
     'KERNEL32::FindFirstFileW(w "${GLOB}", p $${BUFFER}) p.${HANDLE} ?e',
     'KERNEL32::FindNextFileW(p $${HANDLE}, p $${BUFFER}) i.${RESULT} ?e',
     'ADVAPI32::RegCopyTreeW',
+    'ADVAPI32::RegOpenKeyExW(p 0x80000001, w "${REGISTRY_KEY}", i 0, i R4, *p .R5) i.R6',
+    'The CurrentUser product registry ACL does not permit the complete Phase 7 lifecycle.',
     'PHASE7_REGISTRY_BACKUP_CONTAINER "Software\\DesktopTranslatePhase7RegistryBackups"',
     'Rename "$phase7TransactionSource" "$phase7TransactionStage"',
     'registry-backups-ready',
@@ -1120,12 +1123,28 @@ export function assertPhase7InstallerIncludeSemantics(installerIncludeContent) {
     'customUnInit',
     'Phase 7 installer include'
   );
-  if (customUnInit !== [
+  assertOrderedTokens(customUnInit, [
     '!macro customUnInit',
-    '    !insertmacro phase7VerifyUninstallRoot',
-    '  !macroend'
-  ].join('\n')) {
-    throw new Error('Phase 7 customUnInit must perform only the exact uninstall-root verification');
+    '!insertmacro phase7VerifyUninstallRoot',
+    '!insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${INSTALL_REGISTRY_KEY}"',
+    '!insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${UNINSTALL_REGISTRY_KEY}"',
+    '!macroend'
+  ], 'Phase 7 pre-CHECK_APP_RUNNING uninstall identity and registry ACL validation');
+  if (countExactOccurrences(
+    customUnInit,
+    '!insertmacro phase7VerifyUninstallRoot'
+  ) !== 1
+      || countExactOccurrences(
+        customUnInit,
+        '!insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${INSTALL_REGISTRY_KEY}"'
+      ) !== 1
+      || countExactOccurrences(
+        customUnInit,
+        '!insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${UNINSTALL_REGISTRY_KEY}"'
+      ) !== 1) {
+    throw new Error(
+      'Phase 7 customUnInit must contain exactly one root and canonical registry ACL validation'
+    );
   }
   const stagedRoot = extractNsisMacro(
     normalized,
@@ -1187,12 +1206,53 @@ export function assertPhase7InstallerIncludeSemantics(installerIncludeContent) {
   }
   for (const required of [
     '!define PHASE7_INSTALL_REGISTRY_PROBE_KEY "${INSTALL_REGISTRY_KEY}.Phase7WriteProbe"',
-    '!define PHASE7_UNINSTALL_REGISTRY_PROBE_KEY "${UNINSTALL_REGISTRY_KEY}.Phase7WriteProbe"',
-    '!insertmacro phase7ProbeRegistryKeyWritable "${PHASE7_INSTALL_REGISTRY_PROBE_KEY}"',
-    '!insertmacro phase7ProbeRegistryKeyWritable "${PHASE7_UNINSTALL_REGISTRY_PROBE_KEY}"'
+    '!define PHASE7_UNINSTALL_REGISTRY_PROBE_KEY "${UNINSTALL_REGISTRY_KEY}.Phase7WriteProbe"'
   ]) {
     if (!normalized.includes(required)) {
       throw new Error(`Phase 7 registry writability probe lacks owned sibling scratch binding: ${required}`);
+    }
+  }
+  for (const required of [
+    '!insertmacro phase7ProbeRegistryKeyWritable "${PHASE7_INSTALL_REGISTRY_PROBE_KEY}"',
+    '!insertmacro phase7ProbeRegistryKeyWritable "${PHASE7_UNINSTALL_REGISTRY_PROBE_KEY}"',
+    '!insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${INSTALL_REGISTRY_KEY}"',
+    '!insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${UNINSTALL_REGISTRY_KEY}"'
+  ]) {
+    if (!registryWritableProbe.includes(required)) {
+      throw new Error(`Phase 7 registry writability probe lacks owned sibling scratch binding: ${required}`);
+    }
+  }
+
+  const registryLifecycleProbe = extractNsisMacro(
+    normalized,
+    'phase7ProbeExistingRegistryKeyLifecycleAccess',
+    'Phase 7 installer include'
+  );
+  for (const required of [
+    '!insertmacro phase7ReadRegistryKeyState "${REGISTRY_KEY}" R3',
+    'StrCpy $R4 0xF023F',
+    'StrCpy $R4 0xF013F',
+    'ADVAPI32::RegOpenKeyExW(p 0x80000001, w "${REGISTRY_KEY}", i 0, i R4, *p .R5) i.R6',
+    'ADVAPI32::RegCloseKey(p R5) i.R6',
+    'The CurrentUser product registry ACL does not permit the complete Phase 7 lifecycle.'
+  ]) {
+    if (!registryLifecycleProbe.includes(required)) {
+      throw new Error(
+        `Phase 7 canonical registry lifecycle access preflight lacks ${required}`
+      );
+    }
+  }
+  for (const forbidden of [
+    'WriteReg',
+    'DeleteReg',
+    'RegSet',
+    'RegDelete',
+    'RegCopyTree'
+  ]) {
+    if (registryLifecycleProbe.includes(forbidden)) {
+      throw new Error(
+        `Phase 7 canonical registry lifecycle access preflight must not mutate registry state with ${forbidden}`
+      );
     }
   }
 

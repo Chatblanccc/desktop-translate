@@ -82,8 +82,19 @@ git SHA、binary/model hash、设备/环境、命令或操作步骤、退出码/
   `NtCreateFile` 打开并按 exact handle disposition，marker-last 与 empty-root cleanup 不再使用
   pathname delete/RMDir。9/9 runtime、x86 NSIS probes、九类负向 policy mutations、完整 package、
   已登记重跑、未知 file/empty-directory fail-closed、busy-file pre-commit failure、正常 Quiet
-  uninstall 与 stage-file delete-share post-commit failure/recovery 通过。逐 checkpoint process-kill
-  crash 仍由故障矩阵保持开放。
+  uninstall 与 stage-file delete-share post-commit failure/recovery 通过。
+- [x] `prepared`、`staged-uncommitted`、`registry-backups-ready`、`registry-delete-started`、
+  `committed-cleanup`、`committed-postcleanup`、`rollback-pending`、`rollback-backups-ready`、
+  `rollback-rebuild-ready`、`rollback-registry-restored` 10 个 durable state 均由外部 watcher
+  精确终止真实 uninstaller/installer-recovery PID，并由同一候选恢复到 registry/hash/userData 一致、
+  transaction/backup/stage/进程为零；production installer 无 fault hook。证据见
+  [durable checkpoint crash matrix](evidence/m3-durable-checkpoint-crash-matrix-20260725.json)。
+- [x] canonical product key 注入 current-user `Deny Delete` 后，exact inner uninstaller 在
+  app-stop/transaction/backup/stage/file mutation 前 exit `1`；registry、installed files 与 userData
+  snapshot 不变，全部残留为零。恢复 ACL 后 normal inner uninstall exit `0` 并收净。证据见
+  [registry ACL fail-closed](evidence/m3-registry-acl-fail-closed-20260725.json)。
+- [ ] 同一 durable state 内的 partial registry copy/delete、其余 registry/marker/shortcut ACL 故障
+  及路径/进程竞态完整矩阵通过。
 - [ ] `committed-postcleanup` 可重放 shortcut、AppUserModelId、shell notify 与用户选择的 exact AppData
   cleanup；默认 retain-userData 路线已通过 `committed-cleanup → recovery → fresh install` 真实重放，
   普通 product registry 已删除且 transaction 只在 root/postcleanup 完成后清除；用户选择

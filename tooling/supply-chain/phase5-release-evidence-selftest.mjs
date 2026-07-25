@@ -595,6 +595,46 @@ for (const [name, mutatedInclude, expectedError] of [
     /registry writability probe must not mutate canonical identity keys/u
   ],
   [
+    'canonical registry lifecycle access preflight removed',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      '!insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${INSTALL_REGISTRY_KEY}"',
+      '# removed canonical install-key lifecycle access preflight',
+      'canonical registry lifecycle access preflight removed'
+    ),
+    /registry writability probe lacks owned sibling scratch binding/u
+  ],
+  [
+    'canonical registry lifecycle access drops complete access',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      '    StrCpy $R4 0xF023F',
+      '    StrCpy $R4 0x20219',
+      'canonical registry lifecycle access drops complete access'
+    ),
+    /canonical registry lifecycle access preflight lacks/u
+  ],
+  [
+    'pre-CHECK_APP_RUNNING canonical registry ACL validation removed',
+    mutateExact(
+      auditedInstallerIncludeContent,
+      [
+        '    # un.onInit expands this macro before its first un.checkAppRunning call.',
+        '    # Reject a tampered canonical ACL before stopping the application or',
+        '    # performing any filesystem/registry mutation.',
+        '    !insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${INSTALL_REGISTRY_KEY}"'
+      ].join('\n'),
+      [
+        '    # un.onInit expands this macro before its first un.checkAppRunning call.',
+        '    # Reject a tampered canonical ACL before stopping the application or',
+        '    # performing any filesystem/registry mutation.',
+        '    # removed canonical install-key ACL validation'
+      ].join('\n'),
+      'pre-CHECK_APP_RUNNING canonical registry ACL validation removed'
+    ),
+    /pre-CHECK_APP_RUNNING uninstall identity and registry ACL validation ordering lacks/u
+  ],
+  [
     'fresh-target validation uses fixed NSIS labels',
     mutateExact(
       auditedInstallerIncludeContent,

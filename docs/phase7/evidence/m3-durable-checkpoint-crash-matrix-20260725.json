@@ -1,0 +1,201 @@
+{
+  "schema": "phase7-installer-crash-matrix-summary-v1",
+  "recordedAt": "2026-07-25T22:27:29.0156578+08:00",
+  "status": "DURABLE CHECKPOINT CRASH MATRIX DEVELOPMENT PASS; M3 AND RELEASE REMAIN BLOCKED",
+  "source": {
+    "branch": "codex/phase7-first-beta",
+    "headSha": "9870bbdf1f509e5270bdc72d10a13e658f9d9358",
+    "sourceIdentity": "HEAD+WORKTREE:1f7ce62b7d0e9c53a4c15e8321400737798afde1f3ddb1bc7a8773a8f4ea567e",
+    "harness": "tooling/packaging/phase7-installer-crash-matrix.ps1",
+    "harnessSha256BeforeEvidenceDocumentation": "e221782f4352bec6e4509218172ebf26913fcb2f79714b3f0c4edf737bf10298",
+    "formalPackageEvidence": "<REPOSITORY>\\artifacts\\phase5\\9870bbdf1f509e5270bdc72d10a13e658f9d9358\\local-20260725T1411226132501Z-90df4218af3a4d0da613d9cb3f8bd855",
+    "productionInstallerInstrumentation": "none",
+    "worktreeWasDirtyForNewHarnessAndEvidence": true
+  },
+  "candidate": {
+    "path": "<REPOSITORY>\\artifacts\\phase5\\package\\dist\\Desktop-Translate-0.5.0-phase5-x64-setup.exe",
+    "sizeBytes": 130711786,
+    "sha256": "ed7b27731fbaa0f823dd82b3c351b8a6e24e604ec3cfd35f5e1bdb73b19107c8",
+    "authenticodeStatus": "NotSigned",
+    "releaseStatus": "RELEASE BLOCKED"
+  },
+  "method": {
+    "watchdog": "external 64-bit HKCU registry state watcher",
+    "termination": "exact launched process PID only",
+    "uninstaller": "exact installed uninstaller copied to an owned TEMP directory and run with _?=<INSTALL_ROOT>",
+    "recovery": "same exact installer /S /currentuser",
+    "productionFaultHookPresent": false,
+    "durableCheckpointCount": 10,
+    "staticSelftest": "PASS",
+    "maxAttemptsPerCheckpoint": 4,
+    "maxAttemptsObserved": 2
+  },
+  "baseline": {
+    "registryFieldCount": 7,
+    "stableMarkerSha256": "e310533fbf802e73f5c5ce24f0687a5ff7969daf591f9e1280b9d14bcd402b6d",
+    "applicationSha256": "fc6b79965cb611b376b70b737e86163423f2085f14ee56abf53fccc01c04401f",
+    "installedUninstallerSha256": "44ed76d2e0e912e906f1f43a865c6384eecd249c215c87c6ba750ed5d7e72abb",
+    "userDataDatabaseSha256": "8238256649c22cc231d60860c61d52fc5651a2cfd27c535d33c202d5decd8ee2"
+  },
+  "matrix": [
+    {
+      "checkpoint": "prepared",
+      "launchKind": "uninstaller",
+      "attempts": 1,
+      "exactPidKilled": true,
+      "processExitCode": -1,
+      "sourceRootPresent": true,
+      "productRegistryPresent": true,
+      "uninstallRegistryPresent": true,
+      "backupRootPresent": false,
+      "stageCount": 0,
+      "sameCandidateRecoveryStable": true
+    },
+    {
+      "checkpoint": "staged-uncommitted",
+      "launchKind": "uninstaller",
+      "attempts": 1,
+      "exactPidKilled": true,
+      "processExitCode": -1,
+      "sourceRootPresent": false,
+      "productRegistryPresent": true,
+      "uninstallRegistryPresent": true,
+      "backupRootPresent": false,
+      "stageCount": 1,
+      "sameCandidateRecoveryStable": true
+    },
+    {
+      "checkpoint": "registry-backups-ready",
+      "launchKind": "uninstaller",
+      "attempts": 1,
+      "exactPidKilled": true,
+      "processExitCode": -1,
+      "sourceRootPresent": false,
+      "productRegistryPresent": true,
+      "uninstallRegistryPresent": true,
+      "backupRootPresent": true,
+      "stageCount": 1,
+      "sameCandidateRecoveryStable": true
+    },
+    {
+      "checkpoint": "registry-delete-started",
+      "launchKind": "uninstaller",
+      "attempts": 1,
+      "exactPidKilled": true,
+      "processExitCode": -1,
+      "sourceRootPresent": false,
+      "productRegistryPresent": true,
+      "uninstallRegistryPresent": true,
+      "backupRootPresent": true,
+      "stageCount": 1,
+      "sameCandidateRecoveryStable": true
+    },
+    {
+      "checkpoint": "committed-cleanup",
+      "launchKind": "uninstaller",
+      "attempts": 2,
+      "exactPidKilled": true,
+      "processExitCode": -1,
+      "sourceRootPresent": false,
+      "productRegistryPresent": false,
+      "uninstallRegistryPresent": false,
+      "backupRootPresent": true,
+      "stageCount": 1,
+      "sameCandidateRecoveryStable": true
+    },
+    {
+      "checkpoint": "committed-postcleanup",
+      "launchKind": "uninstaller",
+      "attempts": 1,
+      "exactPidKilled": true,
+      "processExitCode": -1,
+      "sourceRootPresent": false,
+      "productRegistryPresent": false,
+      "uninstallRegistryPresent": false,
+      "backupRootPresent": false,
+      "stageCount": 0,
+      "sameCandidateRecoveryStable": true
+    },
+    {
+      "checkpoint": "rollback-pending",
+      "launchKind": "installer-recovery",
+      "attempts": 1,
+      "exactPidKilled": true,
+      "processExitCode": -1,
+      "sourceRootPresent": true,
+      "productRegistryPresent": true,
+      "uninstallRegistryPresent": true,
+      "backupRootPresent": false,
+      "stageCount": 0,
+      "sameCandidateRecoveryStable": true
+    },
+    {
+      "checkpoint": "rollback-backups-ready",
+      "launchKind": "installer-recovery",
+      "attempts": 1,
+      "exactPidKilled": true,
+      "processExitCode": -1,
+      "sourceRootPresent": false,
+      "productRegistryPresent": true,
+      "uninstallRegistryPresent": true,
+      "backupRootPresent": true,
+      "stageCount": 1,
+      "sameCandidateRecoveryStable": true
+    },
+    {
+      "checkpoint": "rollback-rebuild-ready",
+      "launchKind": "installer-recovery",
+      "attempts": 1,
+      "exactPidKilled": true,
+      "processExitCode": -1,
+      "sourceRootPresent": false,
+      "productRegistryPresent": true,
+      "uninstallRegistryPresent": true,
+      "backupRootPresent": true,
+      "stageCount": 1,
+      "sameCandidateRecoveryStable": true
+    },
+    {
+      "checkpoint": "rollback-registry-restored",
+      "launchKind": "installer-recovery",
+      "attempts": 1,
+      "exactPidKilled": true,
+      "processExitCode": -1,
+      "sourceRootPresent": true,
+      "productRegistryPresent": true,
+      "uninstallRegistryPresent": true,
+      "backupRootPresent": true,
+      "stageCount": 0,
+      "sameCandidateRecoveryStable": true
+    }
+  ],
+  "recoveryInvariant": {
+    "allTenCheckpointsCaught": true,
+    "allTenRecoveredWithSameCandidate": true,
+    "registrySnapshotEqualAfterEveryRecovery": true,
+    "installedFileHashesEqualAfterEveryRecovery": true,
+    "userDataHashEqualAfterEveryRecovery": true,
+    "transactionAbsentAfterEveryRecovery": true,
+    "backupAbsentAfterEveryRecovery": true,
+    "stageCountAfterEveryRecovery": 0,
+    "relatedProcessCountAfterEveryRecovery": 0
+  },
+  "finalState": {
+    "action": "normal exact inner uninstaller",
+    "installRootPresent": false,
+    "productRegistryPresent": false,
+    "uninstallRegistryPresent": false,
+    "transactionPresent": false,
+    "backupPresent": false,
+    "stageCount": 0,
+    "relatedProcessCount": 0,
+    "userDataDatabaseSha256": "8238256649c22cc231d60860c61d52fc5651a2cfd27c535d33c202d5decd8ee2"
+  },
+  "boundaries": [
+    "unsigned development candidate only",
+    "process termination evidence is not power-loss evidence",
+    "same-machine CurrentUser default fixed NTFS path only",
+    "canonical product-key DELETE-deny preflight is covered separately; other ACL and partial-registry fault windows remain open",
+    "clean VM, signed candidate, volume, reparse, physical input, delete-AppData, and cross-version upgrade remain separate gates"
+  ]
+}

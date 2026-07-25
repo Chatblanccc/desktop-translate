@@ -790,12 +790,46 @@ Var phase7PostCleanupResult
   ClearErrors
 !macroend
 
+!macro phase7ProbeExistingRegistryKeyLifecycleAccess REGISTRY_KEY
+  !define PHASE7_REGISTRY_LIFECYCLE_ACCESS_ID ${__LINE__}
+  !insertmacro phase7ReadRegistryKeyState "${REGISTRY_KEY}" R3
+  ${If} $R3 == "error"
+    !insertmacro phase7Fail "The CurrentUser product registry lifecycle state could not be inspected."
+  ${ElseIf} $R3 == "present"
+    # Open the canonical key with the same complete lifecycle access that the
+    # transaction requires later. This is read-only as an operation: no value,
+    # ACL, or key is mutated. In particular, a tampered DELETE deny must fail
+    # before CHECK_APP_RUNNING, whole-root staging, or registry backup copying;
+    # otherwise the backup would preserve the hostile ACL and make rollback
+    # cleanup non-convergent.
+    StrCpy $R4 0xF023F
+    !ifdef APP_64
+      StrCpy $R4 0xF013F
+    !endif
+    !ifdef APP_ARM64
+      StrCpy $R4 0xF013F
+    !endif
+    System::Call 'ADVAPI32::RegOpenKeyExW(p 0x80000001, w "${REGISTRY_KEY}", i 0, i R4, *p .R5) i.R6'
+    ${If} $R6 != 0
+      !insertmacro phase7Fail "The CurrentUser product registry ACL does not permit the complete Phase 7 lifecycle."
+    ${EndIf}
+    System::Call 'ADVAPI32::RegCloseKey(p R5) i.R6'
+    ${If} $R6 != 0
+      !insertmacro phase7Fail "The CurrentUser product registry lifecycle handle could not be closed safely."
+    ${EndIf}
+  ${EndIf}
+  ClearErrors
+  !undef PHASE7_REGISTRY_LIFECYCLE_ACCESS_ID
+!macroend
+
 !macro phase7ProbeRegistryWritable
   System::Call 'KERNEL32::GetCurrentProcessId() i.R0'
   System::Call 'KERNEL32::GetTickCount() i.R1'
   StrCpy $R2 "${PHASE7_REGISTRY_PROBE_PREFIX}-$R0-$R1"
   !insertmacro phase7ProbeRegistryKeyWritable "${PHASE7_INSTALL_REGISTRY_PROBE_KEY}"
   !insertmacro phase7ProbeRegistryKeyWritable "${PHASE7_UNINSTALL_REGISTRY_PROBE_KEY}"
+  !insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${INSTALL_REGISTRY_KEY}"
+  !insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${UNINSTALL_REGISTRY_KEY}"
 !macroend
 
 !ifdef BUILD_UNINSTALLER
@@ -4190,6 +4224,11 @@ FunctionEnd
 
   !macro customUnInit
     !insertmacro phase7VerifyUninstallRoot
+    # un.onInit expands this macro before its first un.checkAppRunning call.
+    # Reject a tampered canonical ACL before stopping the application or
+    # performing any filesystem/registry mutation.
+    !insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${INSTALL_REGISTRY_KEY}"
+    !insertmacro phase7ProbeExistingRegistryKeyLifecycleAccess "${UNINSTALL_REGISTRY_KEY}"
   !macroend
 
   !macro phase7AssertUninstallerOutsideRoot

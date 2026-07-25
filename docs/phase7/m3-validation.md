@@ -631,9 +631,93 @@ exit `0`，正确前缀 stage count 为零。
 产生的逐步 count，并以源码常量重做最终 audit 与 post-commit replay；不得引用旧 pattern 的零计数。
 
 该结果关闭 committed-stage pathname identity 定向实现项，并补齐默认目录已登记同版本重跑及一条真实
-post-commit deletion-failure replay；仍不解除 `P7-R-020`：逐 checkpoint 的 process-kill crash、
-ACL/marker/shortcut/volume/reparse 完整矩阵、clean VM、签名落地 uninstaller、正常 installed-app
-交互退出和物理输入仍开放。
+post-commit deletion-failure replay；当时仍未覆盖逐 checkpoint 的 process-kill crash。下一节已补齐
+10 个 durable state 的真实进程终止/重放；下一节后的 canonical product-key `Deny Delete` 也已在
+mutation 前 fail closed。`P7-R-020` 仍不解除，因为其余 ACL、mid-operation partial registry、
+marker/shortcut、volume/reparse 完整矩阵、clean VM、签名落地 uninstaller、正常
+installed-app 交互退出和物理输入仍开放。
+
+### 2.8 Durable checkpoint process-kill crash matrix
+
+新增
+`tooling/packaging/phase7-installer-crash-matrix.ps1`，用外部 64-bit HKCU registry watcher 观察真实
+transaction state；watchdog 只终止本轮明确启动的 exact PID，不修改 installer/uninstaller 源码，
+production include 中也没有 fault hook。每轮从安装根复制 exact landed uninstaller 到自有 TEMP 目录，
+以 `_?=<INSTALL_ROOT>` 运行，捕获状态后强制终止；随后由同一 exact installer
+`/S /currentuser` 恢复并复验七项 registry snapshot、stable marker/app/uninstaller hash、userData
+SQLite hash、transaction、backup、stage 与残留进程。
+
+静态门禁与真实矩阵：
+
+```text
+pnpm phase7:installer-crash-matrix:selftest
+PASS: 10 unique durable checkpoints; production fault hook absent
+
+phase7-installer-crash-matrix.ps1 -MaxAttemptsPerCheckpoint 4 -RemoveFinalInstall
+PASS: 10/10; committed-cleanup caught on attempt 2; all others on attempt 1
+```
+
+最终同源候选：`130,711,786` bytes，SHA-256
+`ED7B27731FBAA0F823DD82B3C351B8A6E24E604EC3CFD35F5E1BDB73B19107C8`，Authenticode
+`NotSigned`；formal package evidence 为
+`artifacts/phase5/9870bbdf1f509e5270bdc72d10a13e658f9d9358/`
+`local-20260725T1411226132501Z-90df4218af3a4d0da613d9cb3f8bd855`。
+
+真实终止状态：
+
+| checkpoint | 被终止进程 | crash 后权威布局 | 同候选恢复 |
+|---|---|---|---|
+| `prepared` | uninstaller | source + 两个 product registry；无 backup/stage | PASS |
+| `staged-uncommitted` | uninstaller | stage + 两个 product registry；source absent | PASS |
+| `registry-backups-ready` | uninstaller | stage + originals + complete backups | PASS |
+| `registry-delete-started` | uninstaller | stage + complete backups；originals 可仍存在 | PASS |
+| `committed-cleanup` | uninstaller | stage + backups；source/product registry absent | PASS |
+| `committed-postcleanup` | uninstaller | root/registry/backups/stage absent；transaction final artifact | PASS |
+| `rollback-pending` | installer recovery | source + product registry；无 backup/stage | PASS |
+| `rollback-backups-ready` | installer recovery | stage + originals + backups | PASS |
+| `rollback-rebuild-ready` | installer recovery | stage + rebuilt originals + backups | PASS |
+| `rollback-registry-restored` | installer recovery | source + restored originals + backups | PASS |
+
+每次恢复后 registry 与三项 installed-file hash 逐字一致，userData SQLite SHA-256 始终为
+`8238256649C22CC231D60860C61D52FC5651A2CFD27C535D33C202D5DECD8EE2`，transaction/backup/stage/
+相关进程均为零。矩阵结束后使用 exact inner uninstaller 正常收净；安装根和 product registry 不存在，
+userData hash 不变。结构化摘要见
+[durable checkpoint crash matrix](evidence/m3-durable-checkpoint-crash-matrix-20260725.json)。
+
+这关闭的是 10 个已定义 durable state 的进程崩溃重放，不是掉电一致性，也不代替同一状态内部的
+partial registry copy/delete、其余 ACL、marker/shortcut、volume/reparse、clean VM 和最终签名候选矩阵。
+
+### 2.9 Canonical registry ACL fail-closed
+
+真实 `Deny Delete` 故障最初暴露出一个可收敛性缺陷：旧实现先由 `RegCopyTreeW` 备份 canonical
+product registry，受限 ACL 会随树复制到 backup；卸载回滚恢复该树后，backup cleanup 可能停在
+`rollback-registry-restored`。现场未发生数据丢失，恢复原 ACL 后同一 installer 已收敛；随后将拒绝点
+前移到任何 app-stop、transaction、backup、stage 或文件写入之前。
+
+`phase7ProbeExistingRegistryKeyLifecycleAccess` 现在对两个既有 canonical key 以 `RegOpenKeyExW` 探测
+完整生命周期权限：default build 使用 `0xF023F`，APP_64/ARM64 使用 `0xF013F`，随后立即
+`RegCloseKey`，宏内禁止 mutation。`customUnInit` 的固定顺序为 root identity → product key ACL →
+uninstall key ACL → `un.checkAppRunning`；policy 与 release-evidence negative selftest 同时锁定宏内容、
+权限常量、无 mutation 和 pre-check-app-running 调用顺序。
+
+最终同源 unsigned candidate
+`ED7B27731FBAA0F823DD82B3C351B8A6E24E604EC3CFD35F5E1BDB73B19107C8` 的标准用户真机结果：
+
+```text
+install exact candidate: PASS
+inject current-user Deny Delete on canonical product key: PASS
+exact landed inner uninstaller exit: 1
+registry snapshot equal: true
+installed files + userData snapshot equal: true
+transaction / backup / stage / related process: 0 / 0 / 0 / 0
+restore original ACL + normal exact inner uninstall exit: 0
+final install root / product registry / uninstall registry: absent / absent / absent
+```
+
+结构化摘要见
+[registry ACL fail-closed](evidence/m3-registry-acl-fail-closed-20260725.json)。此结果只关闭 canonical
+product key 的 current-user `Deny Delete` 排列；uninstall key、backup key、partial copy/delete、
+marker/shortcut ACL、clean VM 与 signed candidate 仍开放。
 
 ## 3. Ball automated gates
 
@@ -731,5 +815,7 @@ pnpm --filter @desktop-translate/desktop phase2:smoke
 代码、契约、持久化、开发态 Electron 自动化拖动、重启恢复、第三版真实宿主 custom-root fresh install、
 第五版 fresh-directory/marker identity-bound gates、第六版 committed-stage handle-relative protocol，
 以及当前候选默认 CurrentUser install、已登记同版本重跑、普通/Quiet uninstall 达到
-`DEVELOPMENT PASS`。M3 的最终退出条件尚未满足：逐 durable checkpoint 的 process-kill crash、完整
-目录/ACL/进程竞态矩阵、clean VM、正常 installed-app 交互退出、物理鼠标和物理触控板证据仍然开放。
+`DEVELOPMENT PASS`。10 个 durable checkpoint 的 process-kill crash/recovery 与 canonical
+product-key `Deny Delete` 的 pre-mutation fail-closed 已完成；M3 的最终退出条件尚未满足：同一
+checkpoint 内的 partial registry/其余 ACL 故障、完整目录/volume/reparse/进程竞态矩阵、
+delete-AppData、跨版本升级、clean VM、正常 installed-app 交互退出、物理鼠标和物理触控板证据仍然开放。

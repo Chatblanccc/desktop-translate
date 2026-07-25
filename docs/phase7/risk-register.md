@@ -65,8 +65,18 @@ Quiet uninstall 均通过。NSIS 原始 launcher 的外层退出码只表示 Tem
 Temp copy + `_?=<INSTALL_ROOT>` 取得；负测 inner exit 为 `1` 且现场完整保留。
 真实 post-commit delete-share 注入也已取得 `committed-cleanup` + partial stage + durable backup，
 释放 handle 后由 exact installer 重放清理并 fresh install，最终 transaction/backup/stage 为零。
-`P7-R-020` 仍保持 `CONTROLLED DEVELOPMENT`：逐 checkpoint process-kill crash、ACL/marker/shortcut/
-volume/reparse 矩阵、跨版本升级、clean VM、签名候选和正常 installed-app 退出仍未完成。
+2026-07-25 第七版更新：外部 watchdog 已在真实 unsigned candidate 上逐一捕获并终止 10 个 durable
+state 的 exact uninstaller/installer-recovery PID；每个状态均由同一 installer 恢复到七项 registry、
+三项 installed-file hash 与 userData hash 一致，transaction/backup/stage/相关进程为零，production
+include 不含 fault hook。`P7-R-020` 仍保持 `CONTROLLED DEVELOPMENT`：同一状态内部的 partial registry
+copy/delete 与 ACL/marker/shortcut 故障、volume/reparse、进程竞态、delete-AppData、跨版本升级、
+clean VM、签名候选和正常 installed-app 退出仍未完成。
+2026-07-25 ACL 更新：真实 canonical product key current-user `Deny Delete` 曾证明旧 `RegCopyTreeW`
+会把受限 ACL 复制进 backup，导致 rollback 后 cleanup 不自动收敛；现场未丢数据，恢复原 ACL 后由同一
+installer 收净。修复后两个 canonical key 都在 `un.checkAppRunning` 及任何 mutation 前探测完整
+lifecycle access（`0xF023F`/`0xF013F`）。最终同源候选的故障卸载 exit `1`，registry/files/userData
+逐字不变且 transaction/backup/stage/进程为零，恢复 ACL 后正常卸载 exit `0`。仅此排列关闭；其余
+registry/marker/shortcut ACL 与 partial copy/delete 矩阵仍开放，故风险状态不变。
 
 2026-07-25 M4 交叉绑定更新：formal cold/PWS producer 升级到 v3，blind summarizer 增加 v2；
 两者必须绑定同一两方向 authorization、generation raw hash、candidate/run、manifest、model/runtime、

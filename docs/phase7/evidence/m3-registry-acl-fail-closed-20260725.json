@@ -1,0 +1,67 @@
+{
+  "schema": "phase7-installer-registry-acl-summary-v1",
+  "recordedAt": "2026-07-25T22:23:59.9702170+08:00",
+  "status": "CANONICAL PRODUCT-KEY DELETE-DENY DEVELOPMENT PASS; M3 AND RELEASE REMAIN BLOCKED",
+  "source": {
+    "branch": "codex/phase7-first-beta",
+    "headSha": "9870bbdf1f509e5270bdc72d10a13e658f9d9358",
+    "sourceIdentity": "HEAD+WORKTREE:1f7ce62b7d0e9c53a4c15e8321400737798afde1f3ddb1bc7a8773a8f4ea567e",
+    "installerInclude": "apps/desktop/build/installer.nsh",
+    "installerIncludeSha256BeforeEvidenceDocumentation": "2b0ed685a6d8f5e335ed50f5e2e8b5decc1edf40a6becec957b7acb65b9a5fd3",
+    "harness": "tooling/packaging/phase7-installer-registry-acl-selftest.ps1",
+    "harnessSha256BeforeEvidenceDocumentation": "fdaf2a718f834292072578fcf64eda9f2b97f822ac0458d2c9d91847fe48ffa7",
+    "formalPackageEvidence": "<REPOSITORY>\\artifacts\\phase5\\9870bbdf1f509e5270bdc72d10a13e658f9d9358\\local-20260725T1411226132501Z-90df4218af3a4d0da613d9cb3f8bd855"
+  },
+  "candidate": {
+    "path": "<REPOSITORY>\\artifacts\\phase5\\package\\dist\\Desktop-Translate-0.5.0-phase5-x64-setup.exe",
+    "sizeBytes": 130711786,
+    "sha256": "ed7b27731fbaa0f823dd82b3c351b8a6e24e604ec3cfd35f5e1bdb73b19107c8",
+    "authenticodeStatus": "NotSigned",
+    "releaseStatus": "RELEASE BLOCKED"
+  },
+  "control": {
+    "macro": "phase7ProbeExistingRegistryKeyLifecycleAccess",
+    "probe": "RegOpenKeyExW followed by RegCloseKey",
+    "lifecycleAccessDefault": "0xF023F",
+    "lifecycleAccessApp64OrArm64": "0xF013F",
+    "productAndUninstallKeysChecked": true,
+    "customUnInitOrder": "root identity, product key ACL, uninstall key ACL, un.checkAppRunning",
+    "mutationBeforeProbe": false,
+    "staticSelftest": "PASS",
+    "policyAndNegativeMutationSelftests": "PASS"
+  },
+  "fault": {
+    "target": "canonical HKCU product key",
+    "injectedAccessControlType": "Deny",
+    "injectedRight": "Delete",
+    "currentUserSid": "<CURRENT_USER_SID>",
+    "innerUninstallerExitCode": 1,
+    "registrySnapshotEqual": true,
+    "installedFilesAndUserDataSnapshotEqual": true,
+    "installRootPresent": true,
+    "productRegistryPresent": true,
+    "uninstallRegistryPresent": true,
+    "transactionPresent": false,
+    "backupPresent": false,
+    "stageCount": 0,
+    "relatedProcessCount": 0
+  },
+  "finalState": {
+    "aclRestored": true,
+    "normalInnerUninstallerExitCode": 0,
+    "installRootPresent": false,
+    "productRegistryPresent": false,
+    "uninstallRegistryPresent": false,
+    "transactionPresent": false,
+    "backupPresent": false,
+    "stageCount": 0,
+    "relatedProcessCount": 0,
+    "userDataDatabaseSha256": "8238256649c22cc231d60860c61d52fc5651a2cfd27c535d33c202d5decd8ee2"
+  },
+  "boundaries": [
+    "standard-user CurrentUser fixed-NTFS development host only",
+    "unsigned candidate only",
+    "this proves canonical product-key DELETE-deny refusal before mutation, not every registry key or ACL permutation",
+    "partial registry copy/delete, marker/shortcut ACL, clean VM, and signed-candidate ACL tests remain open"
+  ]
+}
