@@ -38,6 +38,27 @@ Example shape (one line, not a complete 200-item dataset):
 
 ## 1. Prepare a randomized, candidate-anonymous batch
 
+For Bergamot generation artifacts, first join the two frozen datasets with
+their two private candidate outputs and two public generation bindings:
+
+```powershell
+node tooling/phase7-offline-poc/assemble-blind-eval-input.mjs `
+  --dataset-en-zh artifacts/phase7/offline-poc/gate-a/source-en-zh.json `
+  --dataset-zh-en artifacts/phase7/offline-poc/gate-a/source-zh-en.json `
+  --candidate-output-en-zh artifacts/phase7/offline-poc/gate-a/private/bergamot-en-zh.json `
+  --candidate-output-zh-en artifacts/phase7/offline-poc/gate-a/private/bergamot-zh-en.json `
+  --generation-en-zh artifacts/phase7/offline-poc/gate-a/generation-en-zh.json `
+  --generation-zh-en artifacts/phase7/offline-poc/gate-a/generation-zh-en.json `
+  --output artifacts/phase7/offline-poc/blind-eval-input/m4-bergamot.jsonl
+```
+
+This command fails closed on any stale/tampered candidate output, source hash,
+source-set identity, item-set identity, candidate ID or generation-run ID. It
+also runs the normal blind-input schema, privacy, provenance, uniqueness,
+minimum-count and phenomenon-coverage checks. The JSONL output contains
+source, reference and candidate text and therefore remains private and
+ignored; stdout contains only aggregate counts, IDs and hashes.
+
 ```powershell
 node tooling/phase7-offline-poc/blind-eval.mjs prepare `
   --input artifacts/phase7/offline-poc/blind-eval-input/m4-quality.jsonl

@@ -1,7 +1,7 @@
 import { BrowserWindow, app, session } from 'electron';
 import { createHash, randomBytes } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { lstat } from 'node:fs/promises';
+import { lstat, readFile } from 'node:fs/promises';
 import { arch, platform, release } from 'node:os';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,6 +30,10 @@ import {
   validateElectronRendererResult
 } from './bergamot-electron-poc-lib.mjs';
 import {
+  buildBergamotGenerationArtifacts,
+  loadBergamotGenerationDataset
+} from './bergamot-generation-lib.mjs';
+import {
   PocError,
   loadJson,
   resolveArtifactOutput,
@@ -48,6 +52,16 @@ BrowserWindow and serves only verified local artifacts from 127.0.0.1:
     --poc-authorization artifacts/phase7/offline-poc/authorizations/bergamot.json \\
     --direction en-zh \\
     --output artifacts/phase7/offline-poc/measurements/bergamot-electron-poc.json
+
+Generate one private, direction-bound Gate A candidate artifact:
+
+  pnpm exec electron tooling/phase7-offline-poc/bergamot-electron-poc.mjs \\
+    --poc-authorization artifacts/phase7/offline-poc/authorizations/bergamot.json \\
+    --direction en-zh \\
+    --generation-input artifacts/phase7/offline-poc/gate-a/source-en-zh.json \\
+    --generation-run-id bergamot-en-zh-001 \\
+    --candidate-output artifacts/phase7/offline-poc/gate-a/private/bergamot-en-zh-001.json \\
+    --generation-evidence artifacts/phase7/offline-poc/gate-a/generation-en-zh.json
 
 Omit --direction only for the bidirectional compatibility run. A direction
 run loads exactly one route and is intended for an external fresh-process
@@ -90,9 +104,12 @@ if (options.help) {
 
 async function runMain() {
   let report;
+  let generationArtifacts = null;
   let finalExitCode = 1;
   try {
-    report = await runElectronPoc(options);
+    const result = await runElectronPoc(options);
+    report = result.report;
+    generationArtifacts = result.generationArtifacts;
     if (options.completionMarkerPath) {
       const marker = createWarmCompletionMarker(report);
       report.completionMarker = {
@@ -126,6 +143,27 @@ async function runMain() {
 
   try {
     assertElectronPocPrivacy(report);
+    if (generationArtifacts) {
+      const candidateOutputPath = resolveArtifactOutput(
+        options.candidateOutputPath
+      );
+      await writeJsonArtifact(
+        candidateOutputPath,
+        generationArtifacts.candidateOutput
+      );
+      const candidateOutputRaw = await readFile(candidateOutputPath);
+      if (createHash('sha256').update(candidateOutputRaw).digest('hex')
+          !== generationArtifacts.evidence.candidateOutput.artifactSha256) {
+        throw new PocError(
+          'BERGAMOT_GENERATION_CANDIDATE_OUTPUT_WRITE_IDENTITY_MISMATCH'
+        );
+      }
+      await writeJsonArtifact(
+        resolveArtifactOutput(options.generationEvidencePath),
+        generationArtifacts.evidence
+      );
+      report.candidateGeneration.artifactWriteStatus = 'COMPLETE';
+    }
     if (options.outputPath) {
       await writeJsonArtifact(resolveArtifactOutput(options.outputPath), report);
     }
@@ -173,6 +211,15 @@ async function runElectronPoc(config) {
     throw new PocError('BERGAMOT_ELECTRON_DIRECTION_CANDIDATE_MISSING');
   }
   diagnosticStatus('POC_PHASE_AUTHORIZATION_VERIFIED');
+  const generationDataset = config.generationInputPath
+    ? await loadBergamotGenerationDataset(
+      config.generationInputPath,
+      config.direction
+    )
+    : null;
+  if (generationDataset) {
+    diagnosticStatus('POC_PHASE_GENERATION_DATASET_VERIFIED');
+  }
   const supply = await verifyBergamotSupply(manifest, candidates, {
     includeModels: true,
     supplyRoot: config.supplyRoot
@@ -197,7 +244,15 @@ async function runElectronPoc(config) {
     manifest,
     candidates,
     loopback.origin,
-    staticResources.entryPath.split('/')[1]
+    staticResources.entryPath.split('/')[1],
+    {
+      generation: generationDataset
+        ? {
+          generationRunId: config.generationRunId,
+          records: generationDataset.rendererRecords
+        }
+        : null
+    }
   );
 
   pocSession = session.fromPartition(
@@ -279,6 +334,31 @@ async function runElectronPoc(config) {
     rendererResult,
     { expectedDirections }
   );
+  const generationRun = Boolean(generationDataset);
+  let generationArtifacts = null;
+  if (generationRun) {
+    const route = verifiedRendererResult.routes[0];
+    const authorizationRaw = await readFile(resolve(config.pocAuthorizationPath));
+    generationArtifacts = buildBergamotGenerationArtifacts({
+      authorization,
+      authorizationRaw,
+      candidateId: candidates[0].id,
+      direction: config.direction,
+      generationRunId: config.generationRunId,
+      manifestSha256: bergamotManifestSha256(manifest),
+      materializedRuntimeTreeSha256: materialized.treeSha256,
+      modelTreeSha256: supply.treeSha256,
+      rendererGeneration: rendererResult.routes?.[0]?.generation,
+      servedRuntimeTreeSha256: staticResources.servedRuntimeTreeSha256,
+      sourceSet: generationDataset.sourceSet,
+      workloadIdentity: {
+        sourceChars: route.sourceChars,
+        sourceSha256: route.sourceSha256,
+        sampleIdentitySha256: route.sampleIdentitySha256,
+        workloadConfigSha256: verifiedRendererResult.workloadConfigSha256
+      }
+    });
+  }
   const electronMemoryDiagnostics = collectElectronMemoryDiagnostics();
   const electronExecutable = await identifyElectronExecutable();
   if (networkMetrics.allowedRequests !== loopback.metrics.allowedRequests
@@ -294,11 +374,15 @@ async function runElectronPoc(config) {
   );
   const report = {
     schemaVersion: ELECTRON_POC_SCHEMA_VERSION,
-    status: directionRun
+    status: generationRun
+      ? 'PARTIAL_M4_FORMAL_CANDIDATE_GENERATION'
+      : directionRun
       ? 'PARTIAL_M4_DIRECTION_COLD_TRIAL'
       : 'PARTIAL_M4_COMPATIBILITY_SINGLE_RUN',
     blockerCode: null,
-    runMode: directionRun
+    runMode: generationRun
+      ? 'FORMAL_BLIND_CANDIDATE_GENERATION'
+      : directionRun
       ? 'DIRECTION_COLD_TRIAL'
       : 'BIDIRECTIONAL_COMPATIBILITY',
     requestedDirection: config.direction,
@@ -337,6 +421,14 @@ async function runElectronPoc(config) {
     workloadConfigSha256: verifiedRendererResult.workloadConfigSha256,
     compatibilityRunStatus: verifiedRendererResult.status,
     routes: verifiedRendererResult.routes,
+    ...(generationArtifacts
+      ? {
+        candidateGeneration: {
+          ...generationArtifacts.summary,
+          artifactWriteStatus: 'PENDING'
+        }
+      }
+      : {}),
     rawTextEmitted: false,
     rawPathsEmitted: false,
     packageMutated: materialized.packageMutated,
@@ -345,10 +437,14 @@ async function runElectronPoc(config) {
       status: 'INCOMPLETE',
       eligible: false,
       reasonCodes: [
-        directionRun
+        generationRun
+          ? 'FORMAL_COLD_PWS_REQUIRES_SEPARATE_TWENTY_BY_TWO_RUN'
+          : directionRun
           ? 'ONE_FRESH_PROCESS_DIRECTION_TRIAL_REQUIRES_AGGREGATION'
           : 'SINGLE_RUN_NOT_TWENTY_FRESH_PROCESS_COLD_TRIALS',
-        directionRun
+        generationRun
+          ? 'CANDIDATE_OUTPUT_REQUIRES_HUMAN_BLIND_REVIEW'
+          : directionRun
           ? 'PRIVATE_WORKING_SET_REQUIRES_EXTERNAL_QUERYWORKINGSET_RUNNER'
           : 'NOT_QUERY_WORKING_SET_PRIVATE_PAGES',
         'NO_HUMAN_BLIND_EVALUATION',
@@ -361,7 +457,7 @@ async function runElectronPoc(config) {
     outputArtifactStatus: config.outputPath ? 'REQUESTED' : 'NOT_REQUESTED'
   };
   assertElectronPocPrivacy(report);
-  return report;
+  return { report, generationArtifacts };
 }
 
 function diagnosticStatus(code) {
@@ -627,6 +723,10 @@ function parseArguments(args) {
     runtimeRoot: DEFAULT_BERGAMOT_RUNTIME_ROOT,
     supplyRoot: DEFAULT_BERGAMOT_SUPPLY_ROOT,
     direction: null,
+    generationInputPath: null,
+    generationRunId: null,
+    candidateOutputPath: null,
+    generationEvidencePath: null,
     timeoutMs: DEFAULT_TIMEOUT_MS
   };
   for (let index = 0; index < args.length; index += 1) {
@@ -643,6 +743,14 @@ function parseArguments(args) {
       parsed.pocAuthorizationPath = requireValue(args, ++index, argument);
     } else if (argument === '--direction') {
       parsed.direction = requireValue(args, ++index, argument);
+    } else if (argument === '--generation-input') {
+      parsed.generationInputPath = requireValue(args, ++index, argument);
+    } else if (argument === '--generation-run-id') {
+      parsed.generationRunId = requireValue(args, ++index, argument);
+    } else if (argument === '--candidate-output') {
+      parsed.candidateOutputPath = requireValue(args, ++index, argument);
+    } else if (argument === '--generation-evidence') {
+      parsed.generationEvidencePath = requireValue(args, ++index, argument);
     } else if (argument === '--runtime-root') {
       parsed.runtimeRoot = requireValue(args, ++index, argument);
     } else if (argument === '--supply-root') {
@@ -661,6 +769,22 @@ function parseArguments(args) {
   if (parsed.direction !== null
       && !['en-zh', 'zh-en'].includes(parsed.direction)) {
     throw new PocError('BERGAMOT_ELECTRON_POC_DIRECTION_INVALID');
+  }
+  const generationValues = [
+    parsed.generationInputPath,
+    parsed.generationRunId,
+    parsed.candidateOutputPath,
+    parsed.generationEvidencePath
+  ];
+  const generationRequested = generationValues.some((value) => value !== null);
+  if (generationRequested
+      && (generationValues.some((value) => value === null)
+        || parsed.direction === null
+        || parsed.completionMarkerPath !== null
+        || !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/u.test(
+          parsed.generationRunId ?? ''
+        ))) {
+    throw new PocError('BERGAMOT_ELECTRON_GENERATION_ARGUMENTS_INVALID');
   }
   return parsed;
 }
@@ -719,7 +843,8 @@ function roundMs(value) {
 function isSuccessfulPartialStatus(status) {
   return [
     'PARTIAL_M4_COMPATIBILITY_SINGLE_RUN',
-    'PARTIAL_M4_DIRECTION_COLD_TRIAL'
+    'PARTIAL_M4_DIRECTION_COLD_TRIAL',
+    'PARTIAL_M4_FORMAL_CANDIDATE_GENERATION'
   ].includes(status);
 }
 

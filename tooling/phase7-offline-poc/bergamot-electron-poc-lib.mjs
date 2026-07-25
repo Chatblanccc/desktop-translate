@@ -32,7 +32,8 @@ export function buildElectronRendererConfiguration(
   manifest,
   candidates,
   origin,
-  pathToken
+  pathToken,
+  { generation = null } = {}
 ) {
   const originUrl = new URL(origin);
   if (originUrl.protocol !== 'http:'
@@ -58,6 +59,7 @@ export function buildElectronRendererConfiguration(
       throw new PocError('BERGAMOT_ELECTRON_ROUTE_INVALID');
     }
     return {
+      candidateId: candidate.id,
       direction,
       source: candidate.route.source,
       target: candidate.route.target,
@@ -74,9 +76,31 @@ export function buildElectronRendererConfiguration(
     };
   }).sort((left, right) => left.direction.localeCompare(right.direction));
 
+  if (generation !== null
+      && (routes.length !== 1
+        || !isRecord(generation)
+        || !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/u.test(
+          generation.generationRunId ?? ''
+        )
+        || !Array.isArray(generation.records)
+        || generation.records.length < 200
+        || generation.records.some((record) => (
+          !isRecord(record)
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/u.test(
+            record.itemId ?? ''
+          )
+          || record.direction !== routes[0].direction
+          || typeof record.source !== 'string'
+          || record.source.trim().length < 1
+          || record.source.length > 12_000
+        )))) {
+    throw new PocError('BERGAMOT_ELECTRON_GENERATION_CONFIG_INVALID');
+  }
   return {
     schemaVersion: 'phase7-bergamot-electron-renderer-config-v2',
-    runMode: routes.length === 1
+    runMode: generation
+      ? 'FORMAL_BLIND_CANDIDATE_GENERATION'
+      : routes.length === 1
       ? 'DIRECTION_COLD_TRIAL'
       : 'BIDIRECTIONAL_COMPATIBILITY',
     origin: originUrl.origin,
@@ -88,7 +112,8 @@ export function buildElectronRendererConfiguration(
       pivotLanguage: null,
       useNativeIntGemm: false,
       warmIterations: manifest.policy.benchmarkWarmIterations
-    }
+    },
+    ...(generation ? { generation } : {})
   };
 }
 

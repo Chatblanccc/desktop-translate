@@ -21,11 +21,19 @@ window.__phase7RunBergamotElectronPoc = async (configuration) => {
     const startedAt = performance.now();
     const routes = [];
     for (const route of configuration.routes) {
-      routes.push(await executeFirstTranslation(route, configuration.options));
+      routes.push(await executeFirstTranslation(
+        route,
+        configuration.options,
+        configuration.generation ?? null
+      ));
     }
     const workloadConfigSha256 = await sha256(JSON.stringify({
       schemaVersion: 'phase7-bergamot-fixed-workload-v1',
-      runMode: configuration.runMode,
+      // Candidate generation runs only after this fixed cold/warm workload.
+      // Keep its identity bound to the workload itself, not to the later task.
+      runMode: routes.length === 1
+        ? 'DIRECTION_COLD_TRIAL'
+        : 'BIDIRECTIONAL_COMPATIBILITY',
       warmIterations: configuration.options.warmIterations,
       routes: routes.map((route) => ({
         direction: route.direction,
@@ -63,7 +71,7 @@ window.__phase7BergamotCleanupHandshake = async () => {
   };
 };
 
-async function executeFirstTranslation(route, options) {
+async function executeFirstTranslation(route, options, generation) {
   const sourceText = ROUTE_SAMPLES[route.direction];
     const sourceSha256 = await sha256(sourceText);
     const sampleIdentitySha256 = await sha256(
@@ -182,6 +190,9 @@ async function executeFirstTranslation(route, options) {
         warm.failures += 1;
       }
     }
+    const generated = generation
+      ? await executeCandidateGeneration(translator, route, generation)
+      : null;
     completedResult = {
       direction: route.direction,
       status: 'FIRST_TRANSLATION_COMPLETE',
@@ -194,7 +205,8 @@ async function executeFirstTranslation(route, options) {
       firstTranslationMs,
       coldRouteTotalMs,
       totalMs: performance.now() - startedAt,
-      warm
+      warm,
+      ...(generated ? { generation: generated } : {})
     };
   } catch (error) {
     operationError = error;
@@ -220,6 +232,39 @@ async function executeFirstTranslation(route, options) {
   return {
     ...completedResult,
     translatorCleanupStatus: cleanupStatus
+  };
+}
+
+async function executeCandidateGeneration(translator, route, generation) {
+  const records = [];
+  for (const record of generation.records) {
+    let response;
+    try {
+      response = await translator.translate({
+        from: route.source,
+        to: route.target,
+        text: record.source,
+        html: false,
+        qualityScores: false
+      });
+    } catch {
+      throw new Error('BERGAMOT_ELECTRON_GENERATION_TRANSLATION_FAILED');
+    }
+    const translation = response?.target?.text;
+    if (typeof translation !== 'string' || translation.trim().length < 1) {
+      throw new Error('BERGAMOT_ELECTRON_GENERATION_TRANSLATION_EMPTY');
+    }
+    records.push({
+      itemId: record.itemId,
+      direction: record.direction,
+      sourceSha256: await sha256(record.source),
+      translation
+    });
+  }
+  return {
+    schemaVersion: 'phase7-bergamot-renderer-generation-v1',
+    generationRunId: generation.generationRunId,
+    records
   };
 }
 
@@ -278,11 +323,14 @@ function validateConfiguration(configuration) {
         !== runtimeModuleUrl.href
       || !Array.isArray(configuration.routes)
       || ![1, 2].includes(configuration.routes.length)
-      || configuration.runMode !== (
+      || ![
         configuration.routes.length === 1
           ? 'DIRECTION_COLD_TRIAL'
-          : 'BIDIRECTIONAL_COMPATIBILITY'
-      )
+          : 'BIDIRECTIONAL_COMPATIBILITY',
+        ...(configuration.routes.length === 1
+          ? ['FORMAL_BLIND_CANDIDATE_GENERATION']
+          : [])
+      ].includes(configuration.runMode)
       || !configuration.options
       || configuration.options.cacheSize !== 0
       || configuration.options.downloadTimeout !== 0
@@ -327,6 +375,34 @@ function validateConfiguration(configuration) {
         (direction) => directions.has(direction)
       )) {
     throw new Error('BERGAMOT_ELECTRON_RENDERER_DIRECTIONS_INCOMPLETE');
+  }
+  if (configuration.runMode === 'FORMAL_BLIND_CANDIDATE_GENERATION') {
+    const generation = configuration.generation;
+    if (!generation
+        || !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/u.test(
+          generation.generationRunId ?? ''
+        )
+        || !Array.isArray(generation.records)
+        || generation.records.length < 200) {
+      throw new Error('BERGAMOT_ELECTRON_GENERATION_CONFIG_INVALID');
+    }
+    const itemIds = new Set();
+    for (const record of generation.records) {
+      if (!record
+          || !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$/u.test(
+            record.itemId ?? ''
+          )
+          || itemIds.has(record.itemId)
+          || record.direction !== configuration.routes[0].direction
+          || typeof record.source !== 'string'
+          || record.source.trim().length < 1
+          || record.source.length > 12_000) {
+        throw new Error('BERGAMOT_ELECTRON_GENERATION_RECORD_INVALID');
+      }
+      itemIds.add(record.itemId);
+    }
+  } else if (Object.hasOwn(configuration, 'generation')) {
+    throw new Error('BERGAMOT_ELECTRON_GENERATION_MODE_MISMATCH');
   }
 }
 

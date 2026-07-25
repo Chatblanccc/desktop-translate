@@ -3382,25 +3382,17 @@ function Invoke-SelfTest {
             -OutputType WindowsApplication
         $jobStdout = Join-Path $sandbox 'job.stdout'
         $jobStderr = Join-Path $sandbox 'job.stderr'
-        $launch = [Phase7BergamotNative]::CreateSuspendedJobProcess(
-            $cmdPath,
-            '',
-            $sandbox,
-            $jobStdout,
-            $jobStderr
-        )
+        $launch = $null
         try {
-            $null =
-                [Phase7BergamotNative]::RecoverKnownIgnoringHeaderForSelfTest(
-                    $launch,
-                    0
-                )
-            throw 'BERGAMOT_COLD_PWS_SELFTEST_EMPTY_KNOWN_SET_ACCEPTED'
-        } catch {
-            if ($_.Exception.Message -eq
-                'BERGAMOT_COLD_PWS_SELFTEST_EMPTY_KNOWN_SET_ACCEPTED') {
-                throw
-            }
+            $launch = [Phase7BergamotNative]::CreateSuspendedJobProcess(
+                $cmdPath,
+                '',
+                $sandbox,
+                $jobStdout,
+                $jobStderr
+            )
+        if ([int]$launch.KnownProcessIdentities.Count -ne 1) {
+            throw 'BERGAMOT_COLD_PWS_SELFTEST_SUSPENDED_ROOT_NOTIFICATION_MISSING'
         }
         $suspendedMembers = @(
             [Phase7BergamotNative]::QueryJobProcesses($launch)
@@ -3476,7 +3468,97 @@ function Invoke-SelfTest {
                 [int]$launch.LastTotalProcesses) {
             throw 'BERGAMOT_COLD_PWS_SELFTEST_FINAL_HISTORY_FAILED'
         }
-        [Phase7BergamotNative]::CloseJobLaunch($launch, $true)
+            [Phase7BergamotNative]::CloseJobLaunch($launch, $true)
+            $launch = $null
+        } finally {
+            if ($null -ne $launch) {
+                try {
+                    $null = [Phase7BergamotNative]::TerminateJob(
+                        $launch,
+                        (Get-NativeExitCode -Hex 'E0000016')
+                    )
+                } catch {}
+                try {
+                    [Phase7BergamotNative]::CloseJobLaunch(
+                        $launch,
+                        $false
+                    )
+                } catch {}
+            }
+        }
+
+        $notificationRootPath =
+            Join-Path $sandbox 'job-notification-root-selftest.exe'
+        Add-Type `
+            -TypeDefinition (
+                'using System.Diagnostics;' +
+                'public static class Phase7BergamotNotificationRoot {' +
+                '[System.STAThread] public static void Main(string[] args) {' +
+                'var child = Process.Start(args[0]); child.WaitForExit();' +
+                '}}'
+            ) `
+            -Language CSharp `
+            -OutputAssembly $notificationRootPath `
+            -OutputType WindowsApplication
+        $notificationLaunch = $null
+        try {
+            $notificationLaunch =
+                [Phase7BergamotNative]::CreateSuspendedJobProcess(
+                    $notificationRootPath,
+                    (Convert-ToSafeArgument -Value $cmdPath),
+                    $sandbox,
+                    (Join-Path $sandbox 'notification.stdout'),
+                    (Join-Path $sandbox 'notification.stderr')
+                )
+            [Phase7BergamotNative]::ResumeJobRoot($notificationLaunch)
+            if ([Phase7BergamotNative]::WaitForRoot(
+                $notificationLaunch,
+                5000
+            ) -ne 'EXITED' -or
+                [Phase7BergamotNative]::GetRootExitCode(
+                    $notificationLaunch
+                ) -ne 0) {
+                throw 'BERGAMOT_COLD_PWS_SELFTEST_NOTIFICATION_ROOT_FAILED'
+            }
+            $notificationZero = Get-JobZeroEvidence `
+                -Launch $notificationLaunch `
+                -TimeoutSeconds 3
+            $notificationFinal = @(
+                [Phase7BergamotNative]::QueryJobProcesses(
+                    $notificationLaunch
+                )
+            )
+            if (-not $notificationZero.Verified -or
+                $notificationZero.QueryFailures -ne 0 -or
+                $notificationFinal.Count -ne 0 -or
+                [int]$notificationLaunch.LastTotalProcesses -lt 2 -or
+                [int]$notificationLaunch.KnownProcessIdentities.Count -ne
+                    [int]$notificationLaunch.LastTotalProcesses -or
+                [int]$notificationLaunch.NotificationNewProcessMessages -lt
+                    2) {
+                throw 'BERGAMOT_COLD_PWS_SELFTEST_NOTIFICATION_HISTORY_FAILED'
+            }
+            [Phase7BergamotNative]::CloseJobLaunch(
+                $notificationLaunch,
+                $true
+            )
+            $notificationLaunch = $null
+        } finally {
+            if ($null -ne $notificationLaunch) {
+                try {
+                    $null = [Phase7BergamotNative]::TerminateJob(
+                        $notificationLaunch,
+                        (Get-NativeExitCode -Hex 'E0000017')
+                    )
+                } catch {}
+                try {
+                    [Phase7BergamotNative]::CloseJobLaunch(
+                        $notificationLaunch,
+                        $false
+                    )
+                } catch {}
+            }
+        }
 
         $powershellPath = Join-Path $PSHOME 'powershell.exe'
         $boundLaunch = $null
@@ -3603,6 +3685,7 @@ function Invoke-SelfTest {
         postExitQueryFailFastClassification = 'PASS'
         transitionReserveBudgetClassification = 'PASS'
         finalKnownEqualsTotalHistory = 'PASS'
+        completionPortShortLivedProcessHistory = 'PASS'
         jobBoundQwsMembershipValidation = 'PASS'
         completionMarkerCreateNewAndReportBinding = 'PASS'
         jobTerminationAndThreeZeroPollCleanup = 'PASS'

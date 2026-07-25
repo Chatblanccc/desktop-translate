@@ -359,6 +359,44 @@ milliseconds, character counts, and SHA-256 values; they do not contain source
 or translated text. Omitting `--direction` retains the two-route compatibility
 mode and is not a cold-trial substitute.
 
+For the fixed self-authored Gate A source set, create both direction files
+under the ignored artifact root:
+
+```powershell
+node tooling/phase7-offline-poc/create-gate-a-dataset.mjs `
+  --snapshot-id phase7-self-authored-20260725-v2 `
+  --en-zh-output artifacts/phase7/offline-poc/gate-a/source-en-zh.json `
+  --zh-en-output artifacts/phase7/offline-poc/gate-a/source-zh-en.json
+```
+
+The dataset contains exactly 200 unique items per direction and real
+`proper-noun` and `long-sentence` coverage. Run each direction with all four
+generation arguments to create a private candidate-output artifact plus a
+text-free `phase7-gate-a-candidate-generation-v1` binding. Candidate
+generation uses the same loaded model only after the fixed cold and five-warm
+workload; the generation task mode is deliberately excluded from that fixed
+workload identity.
+
+After both directions exist, create the human-review input without copying
+text to stdout:
+
+```powershell
+node tooling/phase7-offline-poc/assemble-blind-eval-input.mjs `
+  --dataset-en-zh artifacts/phase7/offline-poc/gate-a/source-en-zh.json `
+  --dataset-zh-en artifacts/phase7/offline-poc/gate-a/source-zh-en.json `
+  --candidate-output-en-zh artifacts/phase7/offline-poc/gate-a/private/bergamot-en-zh.json `
+  --candidate-output-zh-en artifacts/phase7/offline-poc/gate-a/private/bergamot-zh-en.json `
+  --generation-en-zh artifacts/phase7/offline-poc/gate-a/generation-en-zh.json `
+  --generation-zh-en artifacts/phase7/offline-poc/gate-a/generation-zh-en.json `
+  --output artifacts/phase7/offline-poc/blind-eval-input/m4-bergamot.jsonl
+```
+
+The assembler recomputes raw artifact, source-set, item-set, candidate,
+generation-run and per-item source hashes, then invokes the blind harness's
+full 200-per-direction, provenance, phenomenon-coverage and privacy
+validation. Its output remains private and ignored. Its summary contains only
+counts, IDs and hashes and always records `humanReviewStatus=NOT_STARTED`.
+
 The Windows fresh-process runner defaults to 20 independent Electron processes
 per direction and writes only under the ignored Phase 7 artifact root:
 
@@ -384,6 +422,16 @@ primary thread. This removes the launch-before-observation window. Every Job
 member must resolve to a file in the pre-hashed Electron `dist` tree. Its PID
 and creation time remain internal; the report retains only an anonymous
 process ordinal and executable SHA-256.
+
+Before assignment, the runner also associates a private Windows I/O completion
+port with the Job and starts a bounded notification watcher. Every
+`JOB_OBJECT_MSG_NEW_PROCESS` is opened immediately, creation-time/path/Job
+membership bound, and added to a concurrent lifetime identity set. This
+preserves the identity of a process that starts and exits entirely between two
+100 ms PWS samples. A watcher, completion-key, process-open, identity, path or
+Job-binding failure remains fail-closed. Polling snapshots still define each
+PWS sample; completion notifications only close the lifetime-history gap and
+cannot substitute for per-sample `QueryWorkingSet`.
 
 Each approximately 100 ms logical sample freezes current Job membership and
 queries each member sequentially with Windows `QueryWorkingSet`. The same

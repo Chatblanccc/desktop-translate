@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 public sealed class Phase7BergamotProcessRecord {
     public int ProcessId { get; set; }
@@ -31,7 +33,7 @@ public sealed class Phase7BergamotTransitionProbe {
 public sealed class Phase7BergamotJobLaunch {
     public Phase7BergamotJobLaunch() {
         KnownProcessIdentities =
-            new Dictionary<string, Phase7BergamotProcessRecord>();
+            new ConcurrentDictionary<string, Phase7BergamotProcessRecord>();
         LastProcessDiscoveryStatus = "NOT_QUERIED";
     }
 
@@ -42,8 +44,13 @@ public sealed class Phase7BergamotJobLaunch {
     public long CreationTicks { get; set; }
     public bool Resumed { get; set; }
     public bool Closed { get; set; }
-    public Dictionary<string, Phase7BergamotProcessRecord>
+    public ConcurrentDictionary<string, Phase7BergamotProcessRecord>
         KnownProcessIdentities { get; private set; }
+    public IntPtr CompletionPortHandle { get; set; }
+    public Thread NotificationThread { get; set; }
+    public volatile bool NotificationStopRequested;
+    public string NotificationFailureCode;
+    public int NotificationNewProcessMessages;
     public string LastProcessDiscoveryStatus { get; set; }
     public uint LastTotalProcesses { get; set; }
     public uint LastActiveProcesses { get; set; }
@@ -76,11 +83,15 @@ public static class Phase7BergamotNative {
     private const int ERROR_INVALID_PARAMETER = 87;
     private const int ERROR_INSUFFICIENT_BUFFER = 122;
     private const int ERROR_MORE_DATA = 234;
+    private const int ERROR_TIMEOUT = 258;
     private const int JobObjectBasicAccountingInformation = 1;
     private const int JobObjectBasicProcessIdList = 3;
+    private const int JobObjectAssociateCompletionPortInformation = 7;
     private const int JobObjectExtendedLimitInformation = 9;
+    private const uint JOB_OBJECT_MSG_NEW_PROCESS = 6;
     private const int MaximumJobProcessListBytes = 4 * 1024 * 1024;
     private const int MaximumJobProcessListAttempts = 12;
+    private const int NotificationHistoryWaitMilliseconds = 100;
     private static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
 
     [StructLayout(LayoutKind.Sequential)]
@@ -170,6 +181,12 @@ public static class Phase7BergamotNative {
         public uint TotalProcesses;
         public uint ActiveProcesses;
         public uint TotalTerminatedProcesses;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct JOBOBJECT_ASSOCIATE_COMPLETION_PORT {
+        public IntPtr CompletionKey;
+        public IntPtr CompletionPort;
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -264,6 +281,31 @@ public static class Phase7BergamotNative {
     );
 
     [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr CreateIoCompletionPort(
+        IntPtr fileHandle,
+        IntPtr existingCompletionPort,
+        UIntPtr completionKey,
+        uint numberOfConcurrentThreads
+    );
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetQueuedCompletionStatus(
+        IntPtr completionPort,
+        out uint numberOfBytesTransferred,
+        out UIntPtr completionKey,
+        out IntPtr overlapped,
+        uint milliseconds
+    );
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool PostQueuedCompletionStatus(
+        IntPtr completionPort,
+        uint numberOfBytesTransferred,
+        UIntPtr completionKey,
+        IntPtr overlapped
+    );
+
+    [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool IsProcessInJob(
         IntPtr process,
         IntPtr job,
@@ -346,11 +388,29 @@ public static class Phase7BergamotNative {
         IntPtr stderr = INVALID_HANDLE_VALUE;
         IntPtr stdin = INVALID_HANDLE_VALUE;
         PROCESS_INFORMATION processInformation = new PROCESS_INFORMATION();
+        Phase7BergamotJobLaunch launch = null;
         bool processCreated = false;
         try {
             job = CreateJobObject(IntPtr.Zero, null);
             ThrowIfInvalidHandle(job, "BERGAMOT_JOB_CREATE_FAILED");
             ConfigureJob(job);
+            IntPtr completionPort = CreateIoCompletionPort(
+                INVALID_HANDLE_VALUE,
+                IntPtr.Zero,
+                UIntPtr.Zero,
+                1
+            );
+            ThrowIfInvalidHandle(
+                completionPort,
+                "BERGAMOT_JOB_COMPLETION_PORT_CREATE_FAILED"
+            );
+            launch = new Phase7BergamotJobLaunch {
+                JobHandle = job,
+                CompletionPortHandle = completionPort,
+                Resumed = false,
+                Closed = false
+            };
+            ConfigureJobNotifications(launch);
 
             SECURITY_ATTRIBUTES inheritable = new SECURITY_ATTRIBUTES {
                 nLength = Marshal.SizeOf(typeof(SECURITY_ATTRIBUTES)),
@@ -415,6 +475,10 @@ public static class Phase7BergamotNative {
                 throw NativeFailure("BERGAMOT_CREATE_PROCESS_SUSPENDED_FAILED");
             }
             processCreated = true;
+            launch.ProcessHandle = processInformation.hProcess;
+            launch.ThreadHandle = processInformation.hThread;
+            launch.ProcessId =
+                unchecked((int)processInformation.dwProcessId);
             if (!AssignProcessToJobObject(job, processInformation.hProcess)) {
                 throw NativeFailure("BERGAMOT_ASSIGN_PROCESS_TO_JOB_FAILED");
             }
@@ -424,21 +488,30 @@ public static class Phase7BergamotNative {
             if (!TryGetActiveCreationTicks(processInformation.hProcess, out creationTicks)) {
                 throw NativeFailure("BERGAMOT_SUSPENDED_ROOT_IDENTITY_FAILED");
             }
-            return new Phase7BergamotJobLaunch {
-                JobHandle = job,
-                ProcessHandle = processInformation.hProcess,
-                ThreadHandle = processInformation.hThread,
-                ProcessId = unchecked((int)processInformation.dwProcessId),
+            launch.CreationTicks = creationTicks;
+            launch.KnownProcessIdentities[
+                ProcessIdentityKey(launch.ProcessId, creationTicks)
+            ] = new Phase7BergamotProcessRecord {
+                ProcessId = launch.ProcessId,
                 CreationTicks = creationTicks,
-                Resumed = false,
-                Closed = false
+                ExecutablePath = executablePath
             };
+            EnsureJobNotificationHealthy(launch);
+            return launch;
         } catch {
             if (processCreated && processInformation.hProcess != IntPtr.Zero) {
                 TerminateProcess(processInformation.hProcess, 0xE0000001);
             }
+            if (launch != null) {
+                StopJobNotificationWatcher(launch, false);
+            }
             if (processInformation.hThread != IntPtr.Zero) CloseHandle(processInformation.hThread);
             if (processInformation.hProcess != IntPtr.Zero) CloseHandle(processInformation.hProcess);
+            if (launch != null
+                && launch.CompletionPortHandle != IntPtr.Zero) {
+                CloseHandle(launch.CompletionPortHandle);
+                launch.CompletionPortHandle = IntPtr.Zero;
+            }
             if (job != IntPtr.Zero) CloseHandle(job);
             throw;
         } finally {
@@ -510,6 +583,7 @@ public static class Phase7BergamotNative {
         bool enforceCompleteHistory
     ) {
         AssertOpenLaunch(launch);
+        EnsureJobNotificationHealthy(launch);
         int size = 4096;
         int attempts = 0;
         uint lastAssigned = 0;
@@ -736,6 +810,12 @@ public static class Phase7BergamotNative {
         foreach (Phase7BergamotProcessRecord record in records) {
             launch.KnownProcessIdentities[ProcessIdentityKey(record)] = record;
         }
+        if (enforceCompleteHistory) {
+            WaitForNotificationHistory(
+                launch,
+                accountingAfter.TotalProcesses
+            );
+        }
         if (enforceCompleteHistory
             && (uint)launch.KnownProcessIdentities.Count
                 < accountingAfter.TotalProcesses) {
@@ -765,6 +845,10 @@ public static class Phase7BergamotNative {
     ) {
         JOBOBJECT_BASIC_ACCOUNTING_INFORMATION accountingBefore =
             QueryJobAccounting(launch);
+        WaitForNotificationHistory(
+            launch,
+            accountingBefore.TotalProcesses
+        );
         bool headerConsistent =
             accountingBefore.ActiveProcesses == headerAssigned;
         if ((requireHeaderConsistency && !headerConsistent)
@@ -1076,7 +1160,17 @@ public static class Phase7BergamotNative {
     private static string ProcessIdentityKey(
         Phase7BergamotProcessRecord record
     ) {
-        return record.ProcessId + ":" + record.CreationTicks;
+        return ProcessIdentityKey(
+            record.ProcessId,
+            record.CreationTicks
+        );
+    }
+
+    private static string ProcessIdentityKey(
+        int processId,
+        long creationTicks
+    ) {
+        return processId + ":" + creationTicks;
     }
 
     public static Phase7BergamotPwsResult PrivateWorkingSetBytes(
@@ -1244,6 +1338,7 @@ public static class Phase7BergamotNative {
             && QueryJobProcessesForCleanup(launch).Length != 0) {
             throw new InvalidOperationException("BERGAMOT_JOB_NOT_EMPTY_AT_CLOSE");
         }
+        StopJobNotificationWatcher(launch, requireEmpty);
         if (launch.ThreadHandle != IntPtr.Zero) {
             CloseHandle(launch.ThreadHandle);
             launch.ThreadHandle = IntPtr.Zero;
@@ -1255,6 +1350,10 @@ public static class Phase7BergamotNative {
         if (launch.JobHandle != IntPtr.Zero) {
             CloseHandle(launch.JobHandle);
             launch.JobHandle = IntPtr.Zero;
+        }
+        if (launch.CompletionPortHandle != IntPtr.Zero) {
+            CloseHandle(launch.CompletionPortHandle);
+            launch.CompletionPortHandle = IntPtr.Zero;
         }
         launch.Closed = true;
     }
@@ -1381,6 +1480,225 @@ public static class Phase7BergamotNative {
         }
     }
 
+    private static void ConfigureJobNotifications(
+        Phase7BergamotJobLaunch launch
+    ) {
+        JOBOBJECT_ASSOCIATE_COMPLETION_PORT association =
+            new JOBOBJECT_ASSOCIATE_COMPLETION_PORT {
+                CompletionKey = new IntPtr(1),
+                CompletionPort = launch.CompletionPortHandle
+            };
+        int size = Marshal.SizeOf(
+            typeof(JOBOBJECT_ASSOCIATE_COMPLETION_PORT)
+        );
+        IntPtr buffer = Marshal.AllocHGlobal(size);
+        try {
+            Marshal.StructureToPtr(association, buffer, false);
+            if (!SetInformationJobObject(
+                launch.JobHandle,
+                JobObjectAssociateCompletionPortInformation,
+                buffer,
+                unchecked((uint)size)
+            )) {
+                throw NativeFailure(
+                    "BERGAMOT_JOB_COMPLETION_PORT_ASSOCIATION_FAILED"
+                );
+            }
+        } finally {
+            Marshal.FreeHGlobal(buffer);
+        }
+        launch.NotificationThread = new Thread(
+            () => RunJobNotificationWatcher(launch)
+        );
+        launch.NotificationThread.IsBackground = true;
+        launch.NotificationThread.Name =
+            "Phase7BergamotJobNotificationWatcher";
+        launch.NotificationThread.Start();
+    }
+
+    private static void RunJobNotificationWatcher(
+        Phase7BergamotJobLaunch launch
+    ) {
+        try {
+            while (!launch.NotificationStopRequested) {
+                uint message;
+                UIntPtr completionKey;
+                IntPtr messageValue;
+                bool received = GetQueuedCompletionStatus(
+                    launch.CompletionPortHandle,
+                    out message,
+                    out completionKey,
+                    out messageValue,
+                    100
+                );
+                if (!received) {
+                    int error = Marshal.GetLastWin32Error();
+                    if (error == ERROR_TIMEOUT) continue;
+                    if (launch.NotificationStopRequested) return;
+                    SetNotificationFailure(
+                        launch,
+                        "BERGAMOT_JOB_COMPLETION_PORT_QUERY_FAILED"
+                    );
+                    return;
+                }
+                if (launch.NotificationStopRequested) return;
+                if (completionKey != new UIntPtr(1)) {
+                    SetNotificationFailure(
+                        launch,
+                        "BERGAMOT_JOB_COMPLETION_KEY_INVALID"
+                    );
+                    return;
+                }
+                if (message == JOB_OBJECT_MSG_NEW_PROCESS) {
+                    CaptureNotificationProcessIdentity(
+                        launch,
+                        unchecked((int)messageValue.ToInt64())
+                    );
+                    Interlocked.Increment(
+                        ref launch.NotificationNewProcessMessages
+                    );
+                }
+            }
+        } catch {
+            SetNotificationFailure(
+                launch,
+                "BERGAMOT_JOB_NOTIFICATION_WATCHER_FAILED"
+            );
+        }
+    }
+
+    private static void CaptureNotificationProcessIdentity(
+        Phase7BergamotJobLaunch launch,
+        int processId
+    ) {
+        IntPtr process = OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION,
+            false,
+            processId
+        );
+        if (process == IntPtr.Zero) {
+            throw NativeFailure(
+                "BERGAMOT_JOB_NOTIFICATION_MEMBER_OPEN_FAILED"
+            );
+        }
+        try {
+            long creationTicks;
+            if (!TryGetCreationTicks(process, out creationTicks)) {
+                throw NativeFailure(
+                    "BERGAMOT_JOB_NOTIFICATION_MEMBER_IDENTITY_FAILED"
+                );
+            }
+            int pathCapacity = 32768;
+            var path = new StringBuilder(pathCapacity);
+            if (!QueryFullProcessImageName(
+                process,
+                0,
+                path,
+                ref pathCapacity
+            )) {
+                throw NativeFailure(
+                    "BERGAMOT_JOB_NOTIFICATION_MEMBER_PATH_FAILED"
+                );
+            }
+            bool inJob;
+            if (!IsProcessInJob(
+                process,
+                launch.JobHandle,
+                out inJob
+            ) || !inJob) {
+                throw NativeFailure(
+                    "BERGAMOT_JOB_NOTIFICATION_MEMBER_BINDING_FAILED"
+                );
+            }
+            var record = new Phase7BergamotProcessRecord {
+                ProcessId = processId,
+                CreationTicks = creationTicks,
+                ExecutablePath = path.ToString()
+            };
+            launch.KnownProcessIdentities[
+                ProcessIdentityKey(record)
+            ] = record;
+        } finally {
+            CloseHandle(process);
+        }
+    }
+
+    private static void SetNotificationFailure(
+        Phase7BergamotJobLaunch launch,
+        string code
+    ) {
+        Interlocked.CompareExchange(
+            ref launch.NotificationFailureCode,
+            code,
+            null
+        );
+    }
+
+    private static void EnsureJobNotificationHealthy(
+        Phase7BergamotJobLaunch launch
+    ) {
+        string failure = Volatile.Read(
+            ref launch.NotificationFailureCode
+        );
+        if (!String.IsNullOrEmpty(failure)) {
+            throw new InvalidOperationException(failure);
+        }
+        if (launch.NotificationThread == null
+            || !launch.NotificationThread.IsAlive
+            || launch.CompletionPortHandle == IntPtr.Zero) {
+            throw new InvalidOperationException(
+                "BERGAMOT_JOB_NOTIFICATION_WATCHER_NOT_ACTIVE"
+            );
+        }
+    }
+
+    private static void WaitForNotificationHistory(
+        Phase7BergamotJobLaunch launch,
+        uint expectedTotalProcesses
+    ) {
+        EnsureJobNotificationHealthy(launch);
+        DateTime deadline = DateTime.UtcNow.AddMilliseconds(
+            NotificationHistoryWaitMilliseconds
+        );
+        while ((uint)launch.KnownProcessIdentities.Count
+                < expectedTotalProcesses
+            && DateTime.UtcNow < deadline) {
+            EnsureJobNotificationHealthy(launch);
+            Thread.Sleep(1);
+        }
+        EnsureJobNotificationHealthy(launch);
+    }
+
+    private static void StopJobNotificationWatcher(
+        Phase7BergamotJobLaunch launch,
+        bool requireHealthy
+    ) {
+        if (launch == null || launch.NotificationThread == null) return;
+        string failureBeforeStop = Volatile.Read(
+            ref launch.NotificationFailureCode
+        );
+        launch.NotificationStopRequested = true;
+        if (launch.CompletionPortHandle != IntPtr.Zero) {
+            PostQueuedCompletionStatus(
+                launch.CompletionPortHandle,
+                0,
+                new UIntPtr(1),
+                IntPtr.Zero
+            );
+        }
+        if (!launch.NotificationThread.Join(5000)) {
+            if (requireHealthy) {
+                throw new InvalidOperationException(
+                    "BERGAMOT_JOB_NOTIFICATION_WATCHER_STOP_TIMEOUT"
+                );
+            }
+        }
+        launch.NotificationThread = null;
+        if (requireHealthy && !String.IsNullOrEmpty(failureBeforeStop)) {
+            throw new InvalidOperationException(failureBeforeStop);
+        }
+    }
+
     private static Phase7BergamotPwsResult PwsFailure(
         string status,
         int error
@@ -1396,22 +1714,31 @@ public static class Phase7BergamotNative {
         IntPtr process,
         out long creationTicks
     ) {
+        uint exitCode;
+        if (!TryGetCreationTicks(process, out creationTicks)
+            || !GetExitCodeProcess(process, out exitCode)
+            || exitCode != STILL_ACTIVE) {
+            return false;
+        }
+        return true;
+    }
+
+    private static bool TryGetCreationTicks(
+        IntPtr process,
+        out long creationTicks
+    ) {
         creationTicks = 0;
         FILETIME creation;
         FILETIME exit;
         FILETIME kernel;
         FILETIME user;
-        uint exitCode;
         if (!GetProcessTimes(
             process,
             out creation,
             out exit,
             out kernel,
             out user
-        ) || !GetExitCodeProcess(process, out exitCode)
-            || exitCode != STILL_ACTIVE) {
-            return false;
-        }
+        )) return false;
         long fileTime = (unchecked((long)creation.dwHighDateTime) << 32)
             | creation.dwLowDateTime;
         creationTicks = DateTime.FromFileTimeUtc(fileTime).Ticks;

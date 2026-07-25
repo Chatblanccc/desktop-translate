@@ -118,14 +118,14 @@ git SHA、binary/model hash、设备/环境、命令或操作步骤、退出码/
 POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 
 - [x] formal PWS v3 与 blind report v2 已通过同一组两方向 candidate-generation raw hash、
-  authorization、manifest、model/runtime、workload 和 candidate/run identity 交叉绑定；静态正负测通过，
-  但真实生成 artifact、formal run 与人工评审仍未执行。
-- [ ] 至少一个候选记录 model/runtime ID、上游 revision、许可证和再分发条件。
-- [ ] base installer 不含模型且 `≤150 MiB`。
+  authorization、manifest、model/runtime、workload 和 candidate/run identity 交叉绑定；真实生成 artifact
+  与 formal cold/PWS `40/40` 已完成，人工评审仍为 `NOT_STARTED`。
+- [x] Bergamot 候选已记录 model/runtime ID、上游 revision、许可证和再分发条件；最终法律审批仍未完成。
+- [x] base installer 不含模型且 `≤150 MiB`。
 - [ ] core pack 目标 `≤300 MiB`，硬上限 `≤400 MiB`，同时记录 archive/解包体积。
-- [ ] cold translation p95 `≤3.0 s`，报告 N/p50/p95/max/failure。
-- [ ] warm translation p95 `≤1.5 s`，报告 N/p50/p95/max/failure。
-- [ ] POC runtime process PWS `≤1.1 GiB`，记录测量工具、采样与设备。
+- [x] cold translation p95 `≤3.0 s`，报告 N/p50/p95/max/failure。
+- [x] warm translation p95 `≤1.5 s`，报告 N/p50/p95/max/failure。
+- [x] POC runtime process PWS `≤1.1 GiB`，记录测量工具、采样与设备。
 - [ ] 每个拟支持方向完成至少 200 条 blind evaluation。
 - [ ] 报告实际质量、严重错译、未译、乱码、专名/长句问题，不预填虚假 PASS。
 - [ ] benchmark 只使用公开/合成语料，artifact privacy scan 零正文泄露。
@@ -135,12 +135,12 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 
 | 指标 | 门槛 | 实际值 | 状态/证据 |
 |---|---:|---:|---|
-| Base installer | `≤150 MiB` | `130,711,602` bytes / `124.656 MiB` | `DEVELOPMENT OBSERVATION`; unsigned dirty-worktree package gates PASS, Gate A cross-binding not complete |
+| Base installer | `≤150 MiB` | `130,711,786` bytes / `124.656 MiB` | `PASS`; unsigned M3 candidate `ED7B2773…07C8`, no model payload |
 | Core pack | target `≤300 MiB`; hard `≤400 MiB` | `NOT RUN` | `NOT RUN` |
-| Cold p95 | `≤3.0 s` | `NOT RUN` | `NOT RUN` |
-| Warm p95 | `≤1.5 s` | `NOT RUN` | `NOT RUN` |
-| POC runtime process PWS | `≤1.1 GiB` | `NOT RUN` | `NOT RUN` |
-| Blind quality | `≥200`/direction | `NOT RUN` | `NOT RUN` |
+| Cold p95 | `≤3.0 s` | en→zh `1.212 s`; zh→en `1.401 s` (`N=20` each) | `PASS`; candidate-bound formal r8, `40/40`, zero failed trials |
+| Warm p95 | `≤1.5 s` | en→zh `0.050 s`; zh→en `0.055 s` (`N=100` each) | `PASS`; same loaded model, five warm translations per cold trial |
+| POC runtime process PWS | `≤1.1 GiB` | worst-direction p95 `1,013,321,728` bytes; max `1,013,395,456` bytes | `PASS`; Windows Job + `QueryWorkingSet`, completion-port lifetime identity |
+| Blind quality | `≥200`/direction | `200` prepared/direction; `400` total | `NOT_STARTED`; private randomized input is ready, no human scores fabricated |
 
 ## Gate A：用户模型路线决策
 

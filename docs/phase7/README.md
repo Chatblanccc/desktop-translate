@@ -6,8 +6,9 @@
   interactive/Quiet uninstall、10-state durable checkpoint crash/recovery、canonical product-key
   `Deny Delete` pre-mutation fail-closed 已通过；partial registry/其余 ACL/path/process fault、
   跨版本升级、正常 installed-app 退出、物理输入与 clean VM 待补 /
-  M4 PWS v3、blind v2 与 candidate-generation 交叉绑定工具已加固
-  （真实 candidate generation、formal run 与人工盲评尚未通过）
+  M4 双向 200 条 `r3` candidate generation 已绑定，PWS v3 正式 20×2 已 40/40
+  通过，400 条匿名盲评批次已准备；人工盲评、法务、OS 级网络观察和最终 core/model
+  pack 尺寸仍待补，Gate A 尚未提交用户确认
 - 当前验收状态：`NOT YET ACCEPTED`
 - 最终交付上限：Windows x64 signed limited beta
 - 明确禁止的口径：public V1、GA、production-ready
