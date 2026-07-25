@@ -80,10 +80,11 @@ registry/marker/shortcut ACL 与 partial copy/delete 矩阵仍开放，故风险
 
 2026-07-25 M4 交叉绑定更新：formal cold/PWS producer 升级到 v3，blind summarizer 增加 v2；
 两者必须绑定同一两方向 authorization、generation raw hash、candidate/run、manifest、model/runtime、
-cold workload、source-set、private candidate-output 和 canonical item-identity set。缺失 generation
-artifact 的 Windows preflight、candidate remap、authorization candidate-set mismatch 与 reviewed-item-set
-substitution 均 fail-closed。真实 200×2 generation/review、20×2 formal run、legal、OS network capture
-和 cross-bound package sizing 尚未完成，P7-R-001/002/003/004/005 保持 OPEN。
+cold workload、source-set、private candidate-output 和 canonical item-identity set。真实 200×2
+generation 与 20×2 formal run 已完成；确定性 data-only core pack 两次重建得到同一 SHA-256，
+archive `75,969,829` bytes，installed `76,059,631` bytes，低于 300 MiB 目标。真实人工 review、
+legal、OS network capture 和 human-report primary hash 生成后的最终 cross-bound package sizing
+尚未完成，P7-R-001/002/003/004/005 保持 OPEN。
 
 ## Gate 相关停止条件
 

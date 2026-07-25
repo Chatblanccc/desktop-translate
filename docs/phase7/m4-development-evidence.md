@@ -6,6 +6,8 @@
 - Formal 20-by-2 cold run:
   `R8 COMPLETE / 40 OF 40 SUCCESSFUL / CANDIDATE-BOUND V3`
 - Human blind evaluation: `400-EVALUATION BATCH PREPARED / HUMAN REVIEW NOT STARTED`
+- Core pack sizing:
+  `PREPARED / 72.450 MiB ARCHIVE / 72.536 MiB INSTALLED / PRIMARY BINDING PENDING`
 - OS-level external-network observation: `NOT RUN`
 
 This note records reproducible development observations only. It cannot select
@@ -106,9 +108,12 @@ child starts and exits before the first history query. A 5×2 real smoke then
 completed 10/10 with zero retry failures before r8 was started. No model run or
 self-test overlapped the r8 formal window.
 
-This completes only the M4 cold/warm/PWS component. `gateA.status` remains
-`INCOMPLETE` because OS-level network observation, human review, legal
-approval and final core/model-pack sizing are absent.
+This completes only the M4 cold/warm/PWS component. At r8 creation time,
+`gateA.status` remained `INCOMPLETE` because OS-level network observation,
+human review, legal approval and core/model-pack sizing were absent. The
+separate sizing preparation below now closes the raw size measurement, but
+cannot create the final cross-bound sizing document until the human report
+makes the primary evidence-set SHA-256 available.
 
 The ignored no-regression smoke is:
 
@@ -190,6 +195,9 @@ SELF_TEST_PASS
 node tooling/phase7-offline-poc/assemble-blind-eval-input-selftest.mjs
 SELF_TEST_PASS / 400 RECORDS / TAMPER REJECTED
 
+node tooling/phase7-offline-poc/bergamot-core-pack-selftest.mjs
+SELF_TEST_PASS / DETERMINISTIC DATA-ONLY ARCHIVE / MODEL PAYLOAD REJECTED
+
 powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass
   -File tooling/phase7-offline-poc/bergamot-cold-pws-runner.ps1 -SelfTest
 SELF_TEST_PASS / COMPLETION-PORT SHORT-LIVED HISTORY PASS
@@ -218,10 +226,40 @@ uninstall/crash/ACL hardening:
 - Authenticode: application, Native Host and installer all `NotSigned`.
 
 This proves the present base package stays below the 150-MiB threshold and
-does not contain an offline model. It is not the cross-bound Gate A package
-sizing record: the candidate is unsigned, it predates the `r3` generation
-identity, no core model pack has been staged beside it, and independent
+does not contain an offline model. It is not a signed release candidate: it
+predates the `r3` generation identity and independent
 attestation/clean-download verification has not run.
+
+## Candidate-bound core-pack sizing preparation
+
+The isolated pack builder re-hashed the base installer and every file in its
+exact `win-unpacked` manifest, rejected model-like paths and all pinned model
+hashes, then staged the two r3 directions as one deterministic ustar+gzip
+archive. The archive contains only a canonical research manifest, model
+weights/vocabularies/shortlists/metadata and the observed repository-license
+evidence. It contains no runtime, executable, DLL, script or plugin.
+
+- candidate-binding-set SHA-256:
+  `c349854382823f1782d3b455af62b515cda86d493bb189efbd38071c9a4741f6`;
+- pack SHA-256:
+  `9a75c1afa12bd49fdbc942cbcc923a85f3b8df8df9797b8b41941ea71df629d8`;
+- archive bytes: `75,969,829` / `72.450 MiB`;
+- installed bytes: `76,059,631` / `72.536 MiB`;
+- installed tree SHA-256:
+  `79c3faa1f1873ab11f601b7696d4f66b95a3f02eda39b0f45b8b4db228e6f8d3`;
+- entry count: `11`, all mode `0444`, timestamp `0`, uid/gid `0`, and all
+  `11` entries independently re-read and hash-verified after archive creation;
+- sizing receipt SHA-256:
+  `7f8627fb79de76e18df94728277127b9d492fa8cd1a3128dd0fab33c190731e6`.
+
+An independent second build produced the same pack SHA-256 and byte count.
+The 72.450-MiB archive passes both the 300-MiB target and 400-MiB hard limit,
+so pack size alone does not require an M5 custom model path. The receipt
+deliberately remains
+`PACKAGE_SIZING_PREPARED_AWAITING_PRIMARY_EVIDENCE_SET`: a final
+`phase7-gate-a-package-sizing-v1` cannot be emitted until human review creates
+the blind-report hash used by the primary evidence set. This preparation does
+not complete legal review or authorize integration/distribution.
 
 ## Argos/CTranslate2 comparison track
 
@@ -345,8 +383,10 @@ Current evidence is deliberately rejected by that contract:
   summarizer can emit v2 but no real v2 report exists;
 - matching `phase7-gate-a-candidate-generation-v1` artifacts and a prepared
   200×2 review batch exist, but zero human scores have been recorded;
-- legal approval, OS-level external-network observation, and final exact
-  installer/model sizing remain absent.
+- legal approval and OS-level external-network observation remain absent;
+- exact base/core sizes and a generation-bound preparation receipt now exist,
+  but the final package-sizing document still awaits the human-report-derived
+  primary evidence-set SHA-256.
 
 Consequently M4 remains incomplete, Gate A input is not ready, Gate A has not
 been crossed, and M5+ product integration remains unauthorized.
@@ -359,8 +399,9 @@ been crossed, and M5+ product integration remains unauthorized.
 2. Complete at least 200 independent human blind reviews per proposed
    direction in the prepared batch and emit the required cross-bound v2
    report.
-3. Measure final base-installer and exact packaged core-model sizes against the
-   same candidate identity.
+3. After the human report creates the primary evidence-set SHA-256, finalize
+   the existing exact base/core sizing receipt into the cross-bound Gate A
+   package-sizing document.
 4. Record OS-level firewall or packet-capture evidence for that offline
    execution.
 5. Submit the complete cross-bound evidence to the user; only the user can

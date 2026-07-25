@@ -229,16 +229,14 @@ returns `GATE_A_INPUT_READY` only as
 `integrationOrDistributionAuthorized: false`. It never records the user's
 Gate A choice and never authorizes M5, packaging or redistribution.
 
-All currently recorded development artifacts remain ineligible: the preserved
-cold/PWS artifacts are v2, the preserved blind report is v1, and no formal
-20-by-2 candidate-matched run or 200-by-2 human report exists. The current
-runner emits v3 only after validating two exact candidate-generation
-artifacts; `summarize-v2` similarly binds the human score report to those same
-artifacts. Neither bridge creates the missing candidate generations, human
-reviews, legal approval, OS-level network capture, or final package-size
-evidence. The positive completeness self-test uses only in-memory, explicitly
-synthetic fixtures; it writes no authorization, measurement, legal, network
-or size evidence.
+The current candidate-bound v3 cold/PWS report and both 200-item candidate
+generations exist, and a deterministic data-only core pack has real sizing
+preparation. No 200-by-2 human report, legal approval or OS-level network
+capture exists. `summarize-v2` binds a future human score report to the same
+generation artifacts. The sizing preparation cannot become
+`phase7-gate-a-package-sizing-v1` until that report supplies the primary
+evidence-set identity. The positive completeness self-test remains entirely
+synthetic and never creates authorization, human, legal or network evidence.
 
 Do not add downloaded wheels, weights, converted models, authorization records,
 or measurements to Git. Their default locations are already ignored under
@@ -397,6 +395,31 @@ full 200-per-direction, provenance, phenomenon-coverage and privacy
 validation. Its output remains private and ignored. Its summary contains only
 counts, IDs and hashes and always records `humanReviewStatus=NOT_STARTED`.
 
+Stage and measure the exact two-direction data-only core pack:
+
+```powershell
+node tooling/phase7-offline-poc/bergamot-core-pack.mjs `
+  --authorization artifacts/phase7/offline-poc/authorizations/bergamot.json `
+  --generation-en-zh artifacts/phase7/offline-poc/gate-a/generation-en-zh.json `
+  --generation-zh-en artifacts/phase7/offline-poc/gate-a/generation-zh-en.json `
+  --base-installer artifacts/phase5/package/dist/Desktop-Translate-0.5.0-phase5-x64-setup.exe `
+  --base-unpacked artifacts/phase5/package/dist/win-unpacked `
+  --base-evidence-root artifacts/phase5/<source>/<run> `
+  --pack-output artifacts/phase7/offline-poc/gate-a/packages/bergamot-core-pack.tar.gz `
+  --receipt-output artifacts/phase7/offline-poc/gate-a/package-sizing-preparation.json
+```
+
+The builder verifies both candidate-generation identities, M0 authorization,
+manifest and per-direction supply trees. It independently re-hashes the base
+installer and its complete unpacked file manifest, rejects model payloads,
+then writes a create-new deterministic ustar+gzip archive with fixed `0444`
+mode, zero timestamp and uid/gid. Only model data, metadata, a canonical
+research manifest and observed license evidence are allowed; executable,
+script, traversal, duplicate, hardlink and reparse inputs fail closed. The
+receipt is deliberately a preparation, not final Gate A sizing: the latter
+must bind the primary evidence-set SHA-256 produced only after real human
+review.
+
 The Windows fresh-process runner defaults to 20 independent Electron processes
 per direction and writes only under the ignored Phase 7 artifact root:
 
@@ -552,8 +575,8 @@ residual processes, and a 1,015,906,304-byte PWS peak. The first trial was
 `PASS_WITH_TRANSITION_RESERVE`. This run did not encounter the new
 `EXIT_ACCOUNTING_LAG_BOUND_ACTIVE_IDENTITIES` discovery mode, so it is only a
 no-regression development smoke; the native/static positive and negative
-fixtures remain the evidence for that branch. No 20-by-2 formal run was
-executed.
+  fixtures remain the evidence for that branch. No 20-by-2 formal run had been
+  executed at that checkpoint.
 
 The first successful Windows compatibility run completed one en→zh and one
 zh→en first translation in 4,880.465 ms total. The per-direction first-call
@@ -570,15 +593,17 @@ measurement and 20 fresh-process cold trials per direction. A zero external
 request counter is also not independent firewall or packet-capture evidence,
 and in-process cleanup cannot prove post-exit residual-process count.
 
-Even a clean 20-by-2 runner report remains
-`PARTIAL_M4_COLD_PWS_EVIDENCE_COMPLETE`, with Gate A `INCOMPLETE`: OS-level
-firewall or packet-capture evidence, 200 human blind evaluations per direction,
-legal review, and core/model-pack sizing are separate required inputs.
+The candidate-bound formal r8 report completed 20 trials per direction with
+40/40 success. The exact data-only pack now has a reproducible 75,969,829-byte
+archive and 76,059,631-byte installed size. Gate A remains `INCOMPLETE` because
+OS-level firewall/packet capture, 200 human blind evaluations per direction,
+legal review, and the final primary-evidence-bound package-sizing document are
+still required.
 
 Model-weight license scope, MPL distribution obligations, the runtime tarball's
-missing license file, maintenance of the archived model repository, 200 human
-blind evaluations per direction, formal Windows PWS, and final core-pack sizing
-all remain Gate A blockers. This POC does not authorize product integration,
+missing license file, maintenance of the archived model repository, human
+review, OS-level network evidence and final cross-bound evidence assembly
+remain Gate A blockers. This POC does not authorize product integration,
 packaging, redistribution, or commercial use.
 
 ## Argos direct CTranslate2 comparison track

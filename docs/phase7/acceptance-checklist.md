@@ -122,7 +122,7 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
   与 formal cold/PWS `40/40` 已完成，人工评审仍为 `NOT_STARTED`。
 - [x] Bergamot 候选已记录 model/runtime ID、上游 revision、许可证和再分发条件；最终法律审批仍未完成。
 - [x] base installer 不含模型且 `≤150 MiB`。
-- [ ] core pack 目标 `≤300 MiB`，硬上限 `≤400 MiB`，同时记录 archive/解包体积。
+- [x] core pack 目标 `≤300 MiB`，硬上限 `≤400 MiB`，同时记录 archive/解包体积。
 - [x] cold translation p95 `≤3.0 s`，报告 N/p50/p95/max/failure。
 - [x] warm translation p95 `≤1.5 s`，报告 N/p50/p95/max/failure。
 - [x] POC runtime process PWS `≤1.1 GiB`，记录测量工具、采样与设备。
@@ -136,7 +136,7 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 | 指标 | 门槛 | 实际值 | 状态/证据 |
 |---|---:|---:|---|
 | Base installer | `≤150 MiB` | `130,711,786` bytes / `124.656 MiB` | `PASS`; unsigned M3 candidate `ED7B2773…07C8`, no model payload |
-| Core pack | target `≤300 MiB`; hard `≤400 MiB` | `NOT RUN` | `NOT RUN` |
+| Core pack | target `≤300 MiB`; hard `≤400 MiB` | archive `75,969,829` bytes / `72.450 MiB`; installed `76,059,631` bytes / `72.536 MiB` | `PASS` sizing preparation; deterministic data-only pack `9A75C1AF…29D8`, final primary-evidence binding pending |
 | Cold p95 | `≤3.0 s` | en→zh `1.212 s`; zh→en `1.401 s` (`N=20` each) | `PASS`; candidate-bound formal r8, `40/40`, zero failed trials |
 | Warm p95 | `≤1.5 s` | en→zh `0.050 s`; zh→en `0.055 s` (`N=100` each) | `PASS`; same loaded model, five warm translations per cold trial |
 | POC runtime process PWS | `≤1.1 GiB` | worst-direction p95 `1,013,321,728` bytes; max `1,013,395,456` bytes | `PASS`; Windows Job + `QueryWorkingSet`, completion-port lifetime identity |

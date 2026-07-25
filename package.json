@@ -64,6 +64,8 @@
     "phase7:offline-poc:create-dataset": "node ./tooling/phase7-offline-poc/create-gate-a-dataset.mjs",
     "phase7:offline-poc:assemble-blind-input": "node ./tooling/phase7-offline-poc/assemble-blind-eval-input.mjs",
     "phase7:offline-poc:assemble-blind-input:selftest": "node ./tooling/phase7-offline-poc/assemble-blind-eval-input-selftest.mjs",
+    "phase7:offline-poc:core-pack": "node ./tooling/phase7-offline-poc/bergamot-core-pack.mjs",
+    "phase7:offline-poc:core-pack:selftest": "node ./tooling/phase7-offline-poc/bergamot-core-pack-selftest.mjs",
     "phase7:offline-poc:cold-pws:selftest": "node ./tooling/phase7-offline-poc/bergamot-cold-pws-selftest.mjs",
     "phase7:offline-poc:gate-a:selftest": "node ./tooling/phase7-offline-poc/gate-a-completeness-selftest.mjs",
     "phase5:audit": "node ./tooling/supply-chain/phase5-dependency-audit.mjs --output ./artifacts/phase5/local/dependency-audit.json",
