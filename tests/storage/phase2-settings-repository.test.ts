@@ -96,7 +96,12 @@ test("Phase 2 settings persist across database reopen and anchor reset", async (
     await repository.setBallVisible(false);
     await repository.setEdgeSnap(false);
     await repository.setTheme("dark");
-    await repository.setBallAnchor({ displayId: "primary", edge: "left", verticalRatio: 0 });
+    await repository.setBallAnchor({
+      mode: "free",
+      displayId: "primary",
+      horizontalRatio: 0.375,
+      verticalRatio: 0,
+    });
     database.close();
 
     database = new DatabaseSync(databasePath);
@@ -106,7 +111,12 @@ test("Phase 2 settings persist across database reopen and anchor reset", async (
       ball: {
         visible: false,
         edgeSnap: false,
-        anchor: { displayId: "primary", edge: "left", verticalRatio: 0 },
+        anchor: {
+          mode: "free",
+          displayId: "primary",
+          horizontalRatio: 0.375,
+          verticalRatio: 0,
+        },
       },
       theme: "dark",
     });
@@ -118,6 +128,128 @@ test("Phase 2 settings persist across database reopen and anchor reset", async (
     database.close();
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("Phase 7 dual-writes a rollback-safe legacy anchor and prefers the canonical value", async () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    runStorageMigrations(database);
+    const generic = new SqliteSettingsRepository(database);
+    await generic.set(
+      PHASE2_SETTING_KEYS.ballAnchor,
+      { displayId: "legacy-display", edge: "left", verticalRatio: 0.4 },
+      "2026-07-16T08:00:00.000Z",
+    );
+
+    const repository = new SqlitePhase2SettingsRepository(database, {
+      now: () => "2026-07-16T08:01:00.000Z",
+    });
+    assert.deepEqual((await repository.load()).ball.anchor, {
+      mode: "edge",
+      displayId: "legacy-display",
+      edge: "left",
+      verticalRatio: 0.4,
+    });
+
+    await repository.setBallAnchor({
+      displayId: "legacy-display",
+      edge: "right",
+      verticalRatio: 0.7,
+    });
+    assert.deepEqual(await generic.get(PHASE2_SETTING_KEYS.ballAnchor), {
+      displayId: "legacy-display",
+      edge: "right",
+      verticalRatio: 0.7,
+    });
+    assert.deepEqual(await generic.get(PHASE2_SETTING_KEYS.ballAnchorV2), {
+      mode: "edge",
+      displayId: "legacy-display",
+      edge: "right",
+      verticalRatio: 0.7,
+    });
+  } finally {
+    database.close();
+  }
+});
+
+test("an N-1 legacy rewrite wins even when projection or wall-clock order is ambiguous", async () => {
+  const database = new DatabaseSync(":memory:");
+  try {
+    runStorageMigrations(database);
+    const generic = new SqliteSettingsRepository(database);
+    const repository = new SqlitePhase2SettingsRepository(database, {
+      now: () => "2026-07-16T08:01:00.000Z",
+    });
+    await repository.setBallAnchor({
+      mode: "free",
+      displayId: "primary",
+      horizontalRatio: 0.8,
+      verticalRatio: 0.4,
+    });
+    assert.deepEqual(await generic.get(PHASE2_SETTING_KEYS.ballAnchor), {
+      displayId: "primary",
+      edge: "right",
+      verticalRatio: 0.4,
+    });
+    assert.deepEqual((await repository.load()).ball.anchor, {
+      mode: "free",
+      displayId: "primary",
+      horizontalRatio: 0.8,
+      verticalRatio: 0.4,
+    });
+
+    // A separate N-1 write is authoritative even when it produces the same
+    // legacy projection and carries a timestamp later than the stale v2 row.
+    await generic.set(
+      PHASE2_SETTING_KEYS.ballAnchor,
+      { displayId: "primary", edge: "right", verticalRatio: 0.4 },
+      "2099-01-01T00:00:00.000Z",
+    );
+    assert.deepEqual((await repository.load()).ball.anchor, {
+      mode: "edge",
+      displayId: "primary",
+      edge: "right",
+      verticalRatio: 0.4,
+    });
+
+    // Simulate the exact N-1 writer, which only knows the legacy key. Its
+    // timestamp is deliberately older because clock order is not an authority
+    // boundary for compatibility writes.
+    await generic.set(
+      PHASE2_SETTING_KEYS.ballAnchor,
+      { displayId: "primary", edge: "left", verticalRatio: 0.25 },
+      "2020-01-01T00:00:00.000Z",
+    );
+    assert.deepEqual((await repository.load()).ball.anchor, {
+      mode: "edge",
+      displayId: "primary",
+      edge: "left",
+      verticalRatio: 0.25,
+    });
+
+    const upgraded = new SqlitePhase2SettingsRepository(database, {
+      now: () => "2026-07-16T08:03:00.000Z",
+    });
+    await upgraded.setBallAnchor({
+      mode: "free",
+      displayId: "primary",
+      horizontalRatio: 0.2,
+      verticalRatio: 0.3,
+    });
+    assert.deepEqual((await upgraded.load()).ball.anchor, {
+      mode: "free",
+      displayId: "primary",
+      horizontalRatio: 0.2,
+      verticalRatio: 0.3,
+    });
+    assert.deepEqual(await generic.get(PHASE2_SETTING_KEYS.ballAnchor), {
+      displayId: "primary",
+      edge: "left",
+      verticalRatio: 0.3,
+    });
+  } finally {
+    database.close();
   }
 });
 
@@ -133,8 +265,14 @@ test("missing and damaged Phase 2 values safely fall back without exposing value
     insert.run(PHASE2_SETTING_KEYS.ballEdgeSnap, JSON.stringify(null));
     insert.run(
       PHASE2_SETTING_KEYS.ballAnchor,
-      JSON.stringify({ displayId: "primary", edge: "right", verticalRatio: 1.01 }),
+      JSON.stringify({
+        mode: "free",
+        displayId: "primary",
+        horizontalRatio: 1.01,
+        verticalRatio: 0.5,
+      }),
     );
+    insert.run(PHASE2_SETTING_KEYS.ballAnchorV2, JSON.stringify({ mode: "free" }));
     insert.run(PHASE2_SETTING_KEYS.theme, JSON.stringify("sepia"));
 
     const repository = new SqlitePhase2SettingsRepository(database, {
@@ -171,6 +309,15 @@ test("repository survives syntactically corrupt JSON and validates writes at run
     await assert.rejects(repository.setBallVisible("yes" as unknown as boolean), /visibility/);
     await assert.rejects(
       repository.setBallAnchor({ displayId: "primary", edge: "right", verticalRatio: -0.1 }),
+      /anchor/i,
+    );
+    await assert.rejects(
+      repository.setBallAnchor({
+        mode: "free",
+        displayId: "primary",
+        horizontalRatio: Number.NaN,
+        verticalRatio: 0.5,
+      }),
       /anchor/i,
     );
   } finally {

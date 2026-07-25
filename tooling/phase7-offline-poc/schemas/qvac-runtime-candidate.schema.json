@@ -1,0 +1,686 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-qvac-runtime-candidate-v1.json",
+  "title": "Desktop Translate Phase 7 QVAC controlled runtime candidate",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "metadataSnapshot",
+    "policy",
+    "runtime",
+    "modelContract",
+    "probeEvidence",
+    "gateA"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "phase7-qvac-runtime-candidate-v1"
+    },
+    "metadataSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capturedAt",
+        "networkScope",
+        "candidateRole"
+      ],
+      "properties": {
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "networkScope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidateRole": {
+          "const": "CONTROLLED_BARE_SIDECAR_POC_ALTERNATIVE"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultNetworkAccess",
+        "pocAuthorizationScope",
+        "artifactRoot",
+        "packageInstallScriptsAllowed",
+        "modelFetcherAllowed",
+        "probeRequiresBoundAuthorization",
+        "runtimeExecutionRequiresVerifiedTree",
+        "productIntegrationAllowed",
+        "distributionAllowed"
+      ],
+      "properties": {
+        "defaultNetworkAccess": {
+          "const": false
+        },
+        "pocAuthorizationScope": {
+          "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+        },
+        "artifactRoot": {
+          "const": "artifacts/phase7/offline-poc"
+        },
+        "packageInstallScriptsAllowed": {
+          "const": false
+        },
+        "modelFetcherAllowed": {
+          "const": false
+        },
+        "probeRequiresBoundAuthorization": {
+          "const": true
+        },
+        "runtimeExecutionRequiresVerifiedTree": {
+          "const": true
+        },
+        "productIntegrationAllowed": {
+          "const": false
+        },
+        "distributionAllowed": {
+          "const": false
+        }
+      }
+    },
+    "runtime": {
+      "$ref": "#/$defs/runtime"
+    },
+    "modelContract": {
+      "$ref": "#/$defs/modelContract"
+    },
+    "probeEvidence": {
+      "$ref": "#/$defs/probeEvidence"
+    },
+    "gateA": {
+      "$ref": "#/$defs/gateA"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "sha1": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "httpsUrl": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "pinnedFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "size",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "authenticode": {
+          "enum": [
+            "NOT_SIGNED",
+            "NOT_APPLICABLE"
+          ]
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "packageName",
+        "version",
+        "publishedAt",
+        "sourceRepository",
+        "sourceCommit",
+        "repositoryDirectory",
+        "declaredLicenseExpression",
+        "packageContainsLicenseFile",
+        "packageContainsNoticeFile",
+        "engine",
+        "tarball",
+        "licenseEvidence",
+        "windowsX64Prebuilds",
+        "barePocRuntime",
+        "dependencies"
+      ],
+      "properties": {
+        "id": {
+          "const": "qvac-translation-nmtcpp-bare"
+        },
+        "packageName": {
+          "const": "@qvac/translation-nmtcpp"
+        },
+        "version": {
+          "const": "8.1.0"
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "sourceRepository": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "sourceCommit": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "repositoryDirectory": {
+          "const": "packages/translation-nmtcpp"
+        },
+        "declaredLicenseExpression": {
+          "const": "Apache-2.0"
+        },
+        "packageContainsLicenseFile": {
+          "const": true
+        },
+        "packageContainsNoticeFile": {
+          "const": true
+        },
+        "engine": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "requiredRange",
+            "pocVersion",
+            "nodeDirectCompatibility"
+          ],
+          "properties": {
+            "name": {
+              "const": "bare"
+            },
+            "requiredRange": {
+              "const": ">=1.19.0"
+            },
+            "pocVersion": {
+              "const": "1.30.3"
+            },
+            "nodeDirectCompatibility": {
+              "const": "BLOCKED"
+            }
+          }
+        },
+        "tarball": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "filename",
+            "size",
+            "sha1",
+            "sha256",
+            "integrity",
+            "unpackedSize",
+            "fileCount",
+            "url"
+          ],
+          "properties": {
+            "filename": {
+              "const": "qvac-translation-nmtcpp-8.1.0.tgz"
+            },
+            "size": {
+              "const": 177006150
+            },
+            "sha1": {
+              "$ref": "#/$defs/sha1"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "integrity": {
+              "type": "string",
+              "pattern": "^sha512-"
+            },
+            "unpackedSize": {
+              "const": 546237344
+            },
+            "fileCount": {
+              "const": 155
+            },
+            "url": {
+              "$ref": "#/$defs/httpsUrl"
+            }
+          }
+        },
+        "licenseEvidence": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/pinnedFile"
+          }
+        },
+        "windowsX64Prebuilds": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/pinnedFile"
+          }
+        },
+        "barePocRuntime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "packageName",
+            "version",
+            "packageIntegrity",
+            "source",
+            "declaredLicenseExpression",
+            "licenseEvidence",
+            "packageTarball",
+            "platformPackageName",
+            "platformPackageVersion",
+            "platformPackageIntegrity",
+            "platformSource",
+            "platformLicenseEvidence",
+            "platformPackageTarball",
+            "executablePath",
+            "executableSize",
+            "executableSha256",
+            "executableAuthenticode"
+          ],
+          "properties": {
+            "packageName": {
+              "const": "bare"
+            },
+            "version": {
+              "const": "1.30.3"
+            },
+            "packageIntegrity": {
+              "type": "string",
+              "pattern": "^sha512-"
+            },
+            "source": {
+              "$ref": "#/$defs/unverifiedSource"
+            },
+            "declaredLicenseExpression": {
+              "const": "Apache-2.0"
+            },
+            "licenseEvidence": {
+              "$ref": "#/$defs/unpinnedLocalLicense"
+            },
+            "packageTarball": {
+              "$ref": "#/$defs/unverifiedTarball"
+            },
+            "platformPackageName": {
+              "const": "bare-runtime-win32-x64"
+            },
+            "platformPackageVersion": {
+              "const": "1.30.3"
+            },
+            "platformPackageIntegrity": {
+              "type": "string",
+              "pattern": "^sha512-"
+            },
+            "platformSource": {
+              "$ref": "#/$defs/unverifiedSource"
+            },
+            "platformLicenseEvidence": {
+              "$ref": "#/$defs/unpinnedLocalLicense"
+            },
+            "platformPackageTarball": {
+              "$ref": "#/$defs/unverifiedTarball"
+            },
+            "executablePath": {
+              "const": "bin/bare.exe"
+            },
+            "executableSize": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "executableSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "executableAuthenticode": {
+              "const": "NOT_SIGNED"
+            }
+          }
+        },
+        "dependencies": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "declared",
+            "observedTopLevelResolution",
+            "distributionLockStatus",
+            "executionTreeStatus",
+            "probeExecutionAllowed"
+          ],
+          "properties": {
+            "declared": {
+              "$ref": "#/$defs/dependencyMap"
+            },
+            "observedTopLevelResolution": {
+              "$ref": "#/$defs/dependencyMap"
+            },
+            "distributionLockStatus": {
+              "const": "INCOMPLETE"
+            },
+            "executionTreeStatus": {
+              "const": "UNVERIFIED"
+            },
+            "probeExecutionAllowed": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    "dependencyMap": {
+      "type": "object",
+      "minProperties": 4,
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "unverifiedSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository",
+        "revision"
+      ],
+      "properties": {
+        "repository": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "revision": {
+          "const": "NOT_VERIFIED"
+        }
+      }
+    },
+    "unpinnedLocalLicense": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "status"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "const": "LOCAL_PACKAGE_FILE_PRESENT_NOT_PINNED"
+        }
+      }
+    },
+    "unverifiedTarball": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "integrity",
+        "sha256",
+        "size"
+      ],
+      "properties": {
+        "integrity": {
+          "type": "string",
+          "pattern": "^sha512-"
+        },
+        "sha256": {
+          "const": "NOT_VERIFIED"
+        },
+        "size": {
+          "const": "NOT_VERIFIED"
+        }
+      }
+    },
+    "modelContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceRepository",
+        "sourceRevision",
+        "compressedInputsAccepted",
+        "requiredModelExtension",
+        "requiredVocabularyExtension",
+        "modelFetcherAllowed",
+        "shortlistContract",
+        "routes"
+      ],
+      "properties": {
+        "sourceRepository": {
+          "const": "mozilla/firefox-translations-models"
+        },
+        "sourceRevision": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "compressedInputsAccepted": {
+          "const": false
+        },
+        "requiredModelExtension": {
+          "const": ".bin"
+        },
+        "requiredVocabularyExtension": {
+          "const": ".spm"
+        },
+        "modelFetcherAllowed": {
+          "const": false
+        },
+        "shortlistContract": {
+          "const": "NOT_EXPOSED_BY_PUBLIC_RUNTIME_API"
+        },
+        "routes": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "route",
+              "model",
+              "sourceVocabulary",
+              "targetVocabulary",
+              "helperStatus"
+            ],
+            "properties": {
+              "route": {
+                "enum": [
+                  "en-zh",
+                  "zh-en"
+                ]
+              },
+              "model": {
+                "type": "string",
+                "pattern": "\\.bin$"
+              },
+              "sourceVocabulary": {
+                "type": "string",
+                "pattern": "\\.spm$"
+              },
+              "targetVocabulary": {
+                "type": "string",
+                "pattern": "\\.spm$"
+              },
+              "helperStatus": {
+                "enum": [
+                  "BYPASSED_FOR_PINNED_LOCAL_FILES",
+                  "BYPASSED_DUE_TO_FILENAME_BUG"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "probeEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evidenceStatus",
+        "eligibleForGateA",
+        "host",
+        "node",
+        "bare",
+        "networkAccessedDuringProbe",
+        "modelWeightsDownloadedForProbe",
+        "rawSourceOrOutputTextRecorded"
+      ],
+      "properties": {
+        "evidenceStatus": {
+          "const": "HISTORICAL_UNBOUND_OBSERVATION_ONLY"
+        },
+        "eligibleForGateA": {
+          "const": false
+        },
+        "host": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "platform",
+            "architecture",
+            "nodeVersion",
+            "bareVersion"
+          ],
+          "properties": {
+            "platform": {
+              "const": "win32"
+            },
+            "architecture": {
+              "const": "x64"
+            },
+            "nodeVersion": {
+              "const": "23.11.1"
+            },
+            "bareVersion": {
+              "const": "1.30.3"
+            }
+          }
+        },
+        "node": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "blockerCode",
+            "runtimeImported"
+          ],
+          "properties": {
+            "status": {
+              "const": "HISTORICAL_BLOCKED_OBSERVATION"
+            },
+            "blockerCode": {
+              "const": "BARE_GLOBAL_NOT_DEFINED"
+            },
+            "runtimeImported": {
+              "const": false
+            }
+          }
+        },
+        "bare": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "runtimeImported",
+            "bergamotConstructorCompleted",
+            "modelLoad",
+            "firstTranslation"
+          ],
+          "properties": {
+            "status": {
+              "const": "HISTORICAL_IMPORT_AND_CONSTRUCTOR_OBSERVATION"
+            },
+            "runtimeImported": {
+              "const": true
+            },
+            "bergamotConstructorCompleted": {
+              "const": true
+            },
+            "modelLoad": {
+              "const": "NOT_RUN"
+            },
+            "firstTranslation": {
+              "const": "NOT_RUN"
+            }
+          }
+        },
+        "networkAccessedDuringProbe": {
+          "const": "NOT_VERIFIED"
+        },
+        "modelWeightsDownloadedForProbe": {
+          "const": false
+        },
+        "rawSourceOrOutputTextRecorded": {
+          "const": false
+        }
+      }
+    },
+    "gateA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "candidateOnly",
+        "productIntegrationAllowed",
+        "requiredInput",
+        "blockers"
+      ],
+      "properties": {
+        "status": {
+          "const": "BLOCKED"
+        },
+        "candidateOnly": {
+          "const": true
+        },
+        "productIntegrationAllowed": {
+          "const": false
+        },
+        "requiredInput": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "code",
+              "detail"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "pattern": "^[A-Z0-9_]+$"
+              },
+              "detail": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

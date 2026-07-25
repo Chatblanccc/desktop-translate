@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-blind-eval-input-item-v1.json",
+  "title": "Phase 7 human blind evaluation input item",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "itemId",
+    "direction",
+    "source",
+    "reference",
+    "tags",
+    "provenance",
+    "candidates"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "phase7-blind-eval-input-item-v1"
+    },
+    "itemId": {
+      "$ref": "#/$defs/slug"
+    },
+    "direction": {
+      "$ref": "#/$defs/direction"
+    },
+    "source": {
+      "$ref": "#/$defs/text"
+    },
+    "reference": {
+      "$ref": "#/$defs/text"
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/slug"
+      }
+    },
+    "provenance": {
+      "$ref": "#/$defs/provenance"
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    }
+  },
+  "$defs": {
+    "direction": {
+      "enum": [
+        "en-zh",
+        "zh-en"
+      ]
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 12000
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidateId",
+        "generationRunId",
+        "translation"
+      ],
+      "properties": {
+        "candidateId": {
+          "$ref": "#/$defs/slug"
+        },
+        "generationRunId": {
+          "$ref": "#/$defs/slug"
+        },
+        "translation": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "datasetId",
+        "snapshotId",
+        "licenseExpression",
+        "sourceLocator",
+        "contentDeclaration",
+        "derivedFromUserActivity",
+        "containsPersonalData",
+        "usageAuthorization"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "PUBLIC_DATASET",
+            "SELF_AUTHORED_SYNTHETIC"
+          ]
+        },
+        "datasetId": {
+          "$ref": "#/$defs/slug"
+        },
+        "snapshotId": {
+          "$ref": "#/$defs/slug"
+        },
+        "licenseExpression": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "sourceLocator": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "contentDeclaration": {
+          "const": "NO_USER_HISTORY_NO_CLIPBOARD_NO_PRIVATE_CORPUS"
+        },
+        "derivedFromUserActivity": {
+          "const": false
+        },
+        "containsPersonalData": {
+          "const": false
+        },
+        "usageAuthorization": {
+          "const": "AUTHORIZED_FOR_PHASE7_HUMAN_EVALUATION"
+        }
+      }
+    }
+  }
+}

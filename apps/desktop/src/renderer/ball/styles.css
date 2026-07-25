@@ -12,10 +12,29 @@ body,
 
 .ball-frame {
   position: relative;
-  display: grid;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   width: 56px;
   height: 56px;
-  place-items: center;
+  cursor: grab;
+  app-region: drag;
+  -webkit-app-region: drag;
+}
+
+.ball-drag-handle {
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  width: 30px;
+  height: 8px;
+  pointer-events: none;
+  cursor: grab;
+  background: color-mix(in srgb, var(--color-accent) 72%, var(--color-surface-solid) 28%);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 55%, white 45%);
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  transform: translateX(-50%);
   app-region: drag;
   -webkit-app-region: drag;
 }
@@ -105,6 +124,12 @@ body,
     color: HighlightText;
     background: Highlight;
     border: 2px solid ButtonText;
+    forced-color-adjust: none;
+  }
+
+  .ball-drag-handle {
+    background: CanvasText;
+    border-color: Canvas;
     forced-color-adjust: none;
   }
 

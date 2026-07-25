@@ -1,0 +1,258 @@
+{
+  "$schema": "./schemas/bergamot-candidate-manifest.schema.json",
+  "schemaVersion": "phase7-bergamot-poc-candidates-v1",
+  "metadataSnapshot": {
+    "capturedAt": "2026-07-23T00:00:00.000Z",
+    "networkScope": "Official Mozilla GitHub, Mozilla Google Cloud Storage, and npm registry metadata only.",
+    "modelRepositoryArchived": true
+  },
+  "policy": {
+    "defaultNetworkAccess": false,
+    "largeDownloadsRequirePocAuthorization": true,
+    "pocAuthorizationScope": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION",
+    "artifactRoot": "artifacts/phase7/offline-poc",
+    "packageInstallScriptsAllowed": false,
+    "runtimeExecutionMode": "OFFLINE_LOCAL_WASM",
+    "benchmarkWarmIterations": 5,
+    "benchmarkRouteTimeoutMs": 180000,
+    "measurementSchema": "./schemas/bergamot-measurement.schema.json"
+  },
+  "gateA": {
+    "status": "BLOCKED",
+    "blocksPocResearch": false,
+    "harnessMayDecide": false,
+    "requiredInput": "Completed bidirectional Firefox/Bergamot POC measurement and legal review.",
+    "blockers": [
+      {
+        "code": "MODEL_WEIGHT_LICENSE_SCOPE_REVIEW_REQUIRED",
+        "appliesTo": [
+          "firefox-bergamot-base-memory-en-zh",
+          "firefox-bergamot-base-memory-zh-en"
+        ],
+        "detail": "The pinned repository root is MPL-2.0, but legal review must confirm how that repository-level license applies to model weights and training-data provenance before integration or distribution."
+      },
+      {
+        "code": "MPL_DISTRIBUTION_OBLIGATIONS_REVIEW_REQUIRED",
+        "appliesTo": [
+          "firefox-bergamot-base-memory-en-zh",
+          "firefox-bergamot-base-memory-zh-en",
+          "browsermt-bergamot-translator-wasm"
+        ],
+        "detail": "MPL-2.0 source-form, notice, and executable-form obligations require a release-specific compliance plan."
+      },
+      {
+        "code": "NPM_TARBALL_LICENSE_FILE_MISSING",
+        "appliesTo": [
+          "browsermt-bergamot-translator-wasm"
+        ],
+        "detail": "The official npm tarball declares MPL-2.0 but contains no LICENSE file. The pinned source-repository LICENSE is downloaded separately as POC evidence."
+      },
+      {
+        "code": "NODE_23_RUNTIME_COMPATIBILITY_BLOCKED",
+        "appliesTo": [
+          "browsermt-bergamot-translator-wasm"
+        ],
+        "detail": "The unmodified 0.4.9 package imports on Node 23.11.1 but its worker is treated as ESM and calls require; initialization does not complete. The reproducible spike must remain blocked rather than patching the official package in place."
+      },
+      {
+        "code": "ARCHIVED_MODEL_REPOSITORY_MAINTENANCE_RISK",
+        "appliesTo": [
+          "firefox-bergamot-base-memory-en-zh",
+          "firefox-bergamot-base-memory-zh-en"
+        ],
+        "detail": "mozilla/firefox-translations-models was archived on 2025-12-15. Exact archived artifact bytes are recovered from generation-pinned objects in Mozilla's official successor Google Cloud Storage bucket, but future fixes and security maintenance still need an explicit ownership decision."
+      }
+    ]
+  },
+  "licenseEvidence": [
+    {
+      "id": "firefox-translations-models-root-license",
+      "repository": "mozilla/firefox-translations-models",
+      "revision": "e7957fc407441a5e3e35bbcbf9d60d9b35764618",
+      "expression": "MPL-2.0",
+      "path": "LICENSE",
+      "localPath": "licenses/firefox-translations-models-MPL-2.0.txt",
+      "size": 16725,
+      "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+      "url": "https://raw.githubusercontent.com/mozilla/firefox-translations-models/e7957fc407441a5e3e35bbcbf9d60d9b35764618/LICENSE"
+    },
+    {
+      "id": "bergamot-translator-runtime-root-license",
+      "repository": "browsermt/bergamot-translator",
+      "revision": "8cc5d0495479c9ec56eafafd6bcd7fb5b929ca98",
+      "expression": "MPL-2.0",
+      "path": "LICENSE",
+      "localPath": "licenses/bergamot-translator-MPL-2.0.txt",
+      "size": 16725,
+      "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+      "url": "https://raw.githubusercontent.com/browsermt/bergamot-translator/8cc5d0495479c9ec56eafafd6bcd7fb5b929ca98/LICENSE"
+    }
+  ],
+  "runtime": {
+    "id": "browsermt-bergamot-translator-wasm",
+    "packageName": "@browsermt/bergamot-translator",
+    "version": "0.4.9",
+    "publishedAt": "2022-10-03T00:00:00.000Z",
+    "declaredLicenseExpression": "MPL-2.0",
+    "sourceRepository": "https://github.com/browsermt/bergamot-translator",
+    "sourceCommit": "8cc5d0495479c9ec56eafafd6bcd7fb5b929ca98",
+    "sourceLicenseEvidence": "https://github.com/browsermt/bergamot-translator/blob/8cc5d0495479c9ec56eafafd6bcd7fb5b929ca98/LICENSE",
+    "packageContainsLicenseFile": false,
+    "installScriptsAllowed": false,
+    "node23Compatibility": "BLOCKED",
+    "tarball": {
+      "filename": "browsermt-bergamot-translator-0.4.9.tgz",
+      "localPath": "runtime/browsermt-bergamot-translator-0.4.9.tgz",
+      "size": 1852075,
+      "sha1": "224cd32c6e89c92a0d4945dc0fceb4400dcb2ae4",
+      "sha256": "9011be93222d839d7448ffdf00549d53ce8f541fd782ffc79779d1756397c41f",
+      "integrity": "sha512-bNuuCwM/JnsIYQCKXcYKFT4Qc5vLMoB8Nbvz8ReIgs7xzebK8Sa+R8iEK8mLvNBe/WaZ6zrPaUQilLsRT/ea8Q==",
+      "unpackedSize": 5314609,
+      "fileCount": 7,
+      "url": "https://registry.npmjs.org/@browsermt/bergamot-translator/-/bergamot-translator-0.4.9.tgz"
+    }
+  },
+  "candidateSets": [
+    {
+      "id": "firefox-bergamot-base-memory-en-zh-bidirectional",
+      "candidateIds": [
+        "firefox-bergamot-base-memory-en-zh",
+        "firefox-bergamot-base-memory-zh-en"
+      ],
+      "runtimeId": "browsermt-bergamot-translator-wasm",
+      "compressedBytes": 76038846,
+      "status": "BLOCKED_GATE_A"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "firefox-bergamot-base-memory-en-zh",
+      "repository": "mozilla/firefox-translations-models",
+      "revision": "e7957fc407441a5e3e35bbcbf9d60d9b35764618",
+      "architecture": "BergamotMarianBaseMemoryIntgemm",
+      "route": {
+        "source": "en",
+        "target": "zh"
+      },
+      "license": {
+        "expression": "NOASSERTION",
+        "status": "LEGAL_REVIEW_REQUIRED",
+        "observedRepositoryExpression": "MPL-2.0",
+        "commercialUseConclusion": "NOT_ESTABLISHED",
+        "evidenceId": "firefox-translations-models-root-license"
+      },
+      "reportedMetrics": {
+        "floresBleu": 37.9,
+        "floresComet": 0.8595,
+        "uncompressedModelBytes": 43849787
+      },
+      "sourceFiles": [
+        {
+          "path": "models/base-memory/enzh/model.enzh.intgemm.alphas.bin.gz",
+          "localPath": "models/firefox-bergamot-base-memory-en-zh/model.enzh.intgemm.alphas.bin.gz",
+          "runtimePart": "model",
+          "compression": "gzip",
+          "size": 33375922,
+          "sha256": "7f255403b3bb2502f08ac4d5ca397a8a5a13f899d2f2e987a4934e089d241d16",
+          "url": "https://storage.googleapis.com/moz-fx-translations-data--303e-prod-translations-data/models/en-zh/llmaat_finetune10M_qe8_f2_ByQcSxGXQRqGi-UTxYE43g/exported/model.enzh.intgemm.alphas.bin.gz?generation=1763760383623439"
+        },
+        {
+          "path": "models/base-memory/enzh/lex.50.50.enzh.s2t.bin.gz",
+          "localPath": "models/firefox-bergamot-base-memory-en-zh/lex.50.50.enzh.s2t.bin.gz",
+          "runtimePart": "shortlist",
+          "compression": "gzip",
+          "size": 3537095,
+          "sha256": "c933ff15b544fc36ddaa41d088fca060604da469267fcd2b004a4d270dbe5b68",
+          "url": "https://storage.googleapis.com/moz-fx-translations-data--303e-prod-translations-data/models/en-zh/cjk_retrain_base-memory_Ng023eRlQqePfddGOnN_7g/exported/lex.50.50.enzh.s2t.bin.gz?generation=1764960310405037"
+        },
+        {
+          "path": "models/base-memory/enzh/srcvocab.enzh.spm.gz",
+          "localPath": "models/firefox-bergamot-base-memory-en-zh/srcvocab.enzh.spm.gz",
+          "runtimePart": "source-vocabulary",
+          "compression": "gzip",
+          "size": 407784,
+          "sha256": "7846e3c236388390f4e5d321f8413d67f34c1bab5f066165eeb673bfd07607cc",
+          "url": "https://storage.googleapis.com/moz-fx-translations-data--303e-prod-translations-data/models/en-zh/llmaat_finetune10M_qe8_f2_ByQcSxGXQRqGi-UTxYE43g/exported/srcvocab.enzh.spm.gz?generation=1763760376811260"
+        },
+        {
+          "path": "models/base-memory/enzh/trgvocab.enzh.spm.gz",
+          "localPath": "models/firefox-bergamot-base-memory-en-zh/trgvocab.enzh.spm.gz",
+          "runtimePart": "target-vocabulary",
+          "compression": "gzip",
+          "size": 425748,
+          "sha256": "4d641ce165b1f8478ee2ffb5149d2d46fab3779dc8fa1e9b97f9af1d2206c091",
+          "url": "https://storage.googleapis.com/moz-fx-translations-data--303e-prod-translations-data/models/en-zh/llmaat_finetune10M_qe8_f2_ByQcSxGXQRqGi-UTxYE43g/exported/trgvocab.enzh.spm.gz?generation=1763760376830197"
+        },
+        {
+          "path": "models/base-memory/enzh/metadata.json",
+          "localPath": "models/firefox-bergamot-base-memory-en-zh/metadata.json",
+          "runtimePart": "metadata",
+          "compression": "none",
+          "size": 2233,
+          "sha256": "42d277178bca7f757463067ff659467e1b0d300f8408b6de6c7e891b4c19075b",
+          "url": "https://raw.githubusercontent.com/mozilla/firefox-translations-models/e7957fc407441a5e3e35bbcbf9d60d9b35764618/models/base-memory/enzh/metadata.json"
+        }
+      ]
+    },
+    {
+      "id": "firefox-bergamot-base-memory-zh-en",
+      "repository": "mozilla/firefox-translations-models",
+      "revision": "e7957fc407441a5e3e35bbcbf9d60d9b35764618",
+      "architecture": "BergamotMarianBaseMemoryIntgemm",
+      "route": {
+        "source": "zh",
+        "target": "en"
+      },
+      "license": {
+        "expression": "NOASSERTION",
+        "status": "LEGAL_REVIEW_REQUIRED",
+        "observedRepositoryExpression": "MPL-2.0",
+        "commercialUseConclusion": "NOT_ESTABLISHED",
+        "evidenceId": "firefox-translations-models-root-license"
+      },
+      "reportedMetrics": {
+        "floresBleu": 27.8,
+        "floresComet": 0.8565,
+        "uncompressedModelBytes": 43977787
+      },
+      "sourceFiles": [
+        {
+          "path": "models/base-memory/zhen/model.zhen.intgemm.alphas.bin.gz",
+          "localPath": "models/firefox-bergamot-base-memory-zh-en/model.zhen.intgemm.alphas.bin.gz",
+          "runtimePart": "model",
+          "compression": "gzip",
+          "size": 32726806,
+          "sha256": "c430e24baad44b8e4f725458e2454aec8a760faefbd0a4592c80f114b051f692",
+          "url": "https://storage.googleapis.com/moz-fx-translations-data--303e-prod-translations-data/models/zh-en/cjk_retrain_base-memory_cNY_yaJCStGwnTeXgW8A5w/exported/model.zhen.intgemm.alphas.bin.gz?generation=1763760582212042"
+        },
+        {
+          "path": "models/base-memory/zhen/lex.50.50.zhen.s2t.bin.gz",
+          "localPath": "models/firefox-bergamot-base-memory-zh-en/lex.50.50.zhen.s2t.bin.gz",
+          "runtimePart": "shortlist",
+          "compression": "gzip",
+          "size": 4822158,
+          "sha256": "216b4f87e61c89741114fa36b3cf01fb1e3a32cf0eb97bf1cb2f992951e8691b",
+          "url": "https://storage.googleapis.com/moz-fx-translations-data--303e-prod-translations-data/models/zh-en/cjk_retrain_base-memory_cNY_yaJCStGwnTeXgW8A5w/exported/lex.50.50.zhen.s2t.bin.gz?generation=1763760574915337"
+        },
+        {
+          "path": "models/base-memory/zhen/vocab.zhen.spm.gz",
+          "localPath": "models/firefox-bergamot-base-memory-zh-en/vocab.zhen.spm.gz",
+          "runtimePart": "shared-vocabulary",
+          "compression": "gzip",
+          "size": 738862,
+          "sha256": "244ac04cd4e2126852fc6f697b2aa1e04acad4492c5ec8b37453974f33f88183",
+          "url": "https://storage.googleapis.com/moz-fx-translations-data--303e-prod-translations-data/models/zh-en/cjk_retrain_base-memory_cNY_yaJCStGwnTeXgW8A5w/exported/vocab.zhen.spm.gz?generation=1763760566568862"
+        },
+        {
+          "path": "models/base-memory/zhen/metadata.json",
+          "localPath": "models/firefox-bergamot-base-memory-zh-en/metadata.json",
+          "runtimePart": "metadata",
+          "compression": "none",
+          "size": 2238,
+          "sha256": "40767965cbc4289fccc7a8dc34fa6d4700ccc0ff36ba382a85acc943fb1b0c03",
+          "url": "https://raw.githubusercontent.com/mozilla/firefox-translations-models/e7957fc407441a5e3e35bbcbf9d60d9b35764618/models/base-memory/zhen/metadata.json"
+        }
+      ]
+    }
+  ]
+}

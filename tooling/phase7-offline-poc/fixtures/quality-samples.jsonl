@@ -1,0 +1,12 @@
+{"id":"en-zh-basic-01","direction":"en-zh","source":"The update is ready.","reference":"更新已准备好。","tags":["basic"]}
+{"id":"en-zh-number-01","direction":"en-zh","source":"Version 2.7.1 was released on 2026-07-23.","reference":"版本 2.7.1 于 2026-07-23 发布。","tags":["digits"]}
+{"id":"en-zh-url-01","direction":"en-zh","source":"Open https://example.invalid/docs?id=42 for details.","reference":"打开 https://example.invalid/docs?id=42 查看详情。","tags":["url","digits"]}
+{"id":"en-zh-placeholder-01","direction":"en-zh","source":"Hello, {name}. You have {{count}} new messages.","reference":"你好，{name}。你有 {{count}} 条新消息。","tags":["placeholder"]}
+{"id":"en-zh-percent-01","direction":"en-zh","source":"CPU usage is 18.5% and memory is 512 MB.","reference":"CPU 使用率为 18.5%，内存为 512 MB。","tags":["digits"]}
+{"id":"en-zh-template-01","direction":"en-zh","source":"Save ${file} before pressing Ctrl+S.","reference":"按下 Ctrl+S 前保存 ${file}。","tags":["placeholder","shortcut"]}
+{"id":"zh-en-basic-01","direction":"zh-en","source":"更新已准备好。","reference":"The update is ready.","tags":["basic"]}
+{"id":"zh-en-number-01","direction":"zh-en","source":"版本 2.7.1 于 2026-07-23 发布。","reference":"Version 2.7.1 was released on 2026-07-23.","tags":["digits"]}
+{"id":"zh-en-url-01","direction":"zh-en","source":"打开 https://example.invalid/docs?id=42 查看详情。","reference":"Open https://example.invalid/docs?id=42 for details.","tags":["url","digits"]}
+{"id":"zh-en-placeholder-01","direction":"zh-en","source":"你好，{name}。你有 {{count}} 条新消息。","reference":"Hello, {name}. You have {{count}} new messages.","tags":["placeholder"]}
+{"id":"zh-en-percent-01","direction":"zh-en","source":"CPU 使用率为 18.5%，内存为 512 MB。","reference":"CPU usage is 18.5% and memory is 512 MB.","tags":["digits"]}
+{"id":"zh-en-template-01","direction":"zh-en","source":"按下 Ctrl+S 前保存 ${file}。","reference":"Save ${file} before pressing Ctrl+S.","tags":["placeholder","shortcut"]}

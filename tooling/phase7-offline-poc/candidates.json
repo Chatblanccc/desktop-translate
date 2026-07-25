@@ -1,0 +1,509 @@
+{
+  "$schema": "./schemas/candidate-manifest.schema.json",
+  "schemaVersion": "phase7-offline-poc-candidates-v1",
+  "metadataSnapshot": {
+    "capturedAt": "2026-07-23T08:31:05.907Z",
+    "networkScope": "Official GitHub, PyPI, and Hugging Face metadata APIs only; no model weights downloaded.",
+    "userAgent": "desktop-translate-phase7-poc-metadata-audit"
+  },
+  "policy": {
+    "defaultNetworkAccess": false,
+    "largeDownloadsRequirePocAuthorization": true,
+    "pocAuthorizationScope": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION",
+    "gateARequiredForPocResearch": false,
+    "artifactRoot": "artifacts/phase7/offline-poc",
+    "conversionQuantization": "int8",
+    "conversionTrustRemoteCode": false,
+    "benchmarkDevice": "cpu",
+    "benchmarkInterThreads": 1,
+    "benchmarkIntraThreads": 4,
+    "benchmarkBeamSize": 1,
+    "measurementSchema": "./schemas/measurement.schema.json"
+  },
+  "gateA": {
+    "status": "BLOCKED",
+    "decisionAuthority": "Human product owner after reviewing completed POC evidence",
+    "harnessMayDecide": false,
+    "blocksPocResearch": false,
+    "requiredInput": "Completed Phase 7 offline POC measurement JSON",
+    "blockers": [
+      {
+        "code": "BIDIRECTIONAL_LICENSE_SET_MISMATCH",
+        "appliesTo": [
+          "marian-opus-zh-en-bidirectional"
+        ],
+        "detail": "The preferred two-model route has conflicting observed Hugging Face metadata tags: Apache-2.0 for en-zh and CC-BY-4.0 for zh-en. Neither tag establishes the applicable weight license or commercial authorization. POC measurements may proceed under M0 research authorization, but integration and distribution remain blocked until the later Gate A decision."
+      },
+      {
+        "code": "WEIGHT_LICENSE_SCOPE_UNRESOLVED",
+        "appliesTo": [
+          "opus-mt-en-zh",
+          "opus-mt-zh-en",
+          "m2m100-418m"
+        ],
+        "detail": "The Hugging Face repositories contain no model LICENSE or NOTICE file. Both OPUS cards expose license metadata that conflicts with the fixed Tatoeba-Challenge root CC-BY-NC-SA-4.0 license; the applicable weight license is therefore NOASSERTION. M2M100 exposes MIT metadata, but whether the fairseq root MIT license covers this checkpoint is not established. These metadata tags are not evidence of commercial authorization.",
+        "evidence": [
+          "https://huggingface.co/Helsinki-NLP/opus-mt-en-zh/tree/408d9bc410a388e1d9aef112a2daba955b945255",
+          "https://huggingface.co/Helsinki-NLP/opus-mt-zh-en/tree/cf109095479db38d6df799875e34039d4938aaa6",
+          "https://github.com/Helsinki-NLP/Tatoeba-Challenge/blob/480fcbe0ee1bf4774bcbe6226ad9f58e63f6c535/LICENSE",
+          "https://huggingface.co/facebook/m2m100_418M/tree/55c2e61bbf05dfb8d7abccdc3fae6fc8512fd636",
+          "https://github.com/facebookresearch/fairseq/blob/3d262bb25690e4eb2e7d3c1309b1e9c406ca4b99/LICENSE"
+        ]
+      },
+      {
+        "code": "MODEL_LICENSE_TEXTS_NOT_YET_VENDORED",
+        "appliesTo": [
+          "opus-mt-en-zh",
+          "opus-mt-zh-en",
+          "m2m100-418m"
+        ],
+        "detail": "Model-card license identifiers and pinned evidence are recorded, but release-grade local license texts and notices have not been assembled."
+      },
+      {
+        "code": "PICKLE_SOURCE_WEIGHT_ISOLATION_REVIEW_REQUIRED",
+        "appliesTo": [
+          "opus-mt-en-zh",
+          "opus-mt-zh-en",
+          "m2m100-418m"
+        ],
+        "detail": "Each selected upstream snapshot exposes pytorch_model.bin rather than safetensors. Conversion must remain isolated and must not use trust_remote_code."
+      },
+      {
+        "code": "TRANSITIVE_TOOLCHAIN_SBOM_PENDING",
+        "appliesTo": [
+          "ctranslate2-transformers-toolchain"
+        ],
+        "detail": "Top-level Windows wheels are pinned, but a release-grade transitive dependency lock, local license bundle, and CycloneDX SBOM have not been generated."
+      },
+      {
+        "code": "MODEL_DATA_PROVENANCE_REVIEW_PENDING",
+        "appliesTo": [
+          "opus-mt-en-zh",
+          "opus-mt-zh-en",
+          "m2m100-418m"
+        ],
+        "detail": "Repository license metadata alone is not a substitute for reviewing model-card, training-data, attribution, and redistribution provenance."
+      }
+    ]
+  },
+  "runtime": {
+    "id": "ctranslate2",
+    "version": "4.8.1",
+    "source": "https://github.com/OpenNMT/CTranslate2",
+    "release": "https://github.com/OpenNMT/CTranslate2/releases/tag/v4.8.1",
+    "tag": "v4.8.1",
+    "tagObjectSha": "399239a790ad0da4e4363e0dcbb83495b5abd742",
+    "commit": "0d8bcd362ac75ef860ef161d6f0efad0ae439ff0",
+    "license": {
+      "expression": "MIT",
+      "evidence": "https://github.com/OpenNMT/CTranslate2/blob/0d8bcd362ac75ef860ef161d6f0efad0ae439ff0/LICENSE"
+    },
+    "windowsWheel": {
+      "pythonAbi": "cp313",
+      "platform": "win_amd64",
+      "filename": "ctranslate2-4.8.1-cp313-cp313-win_amd64.whl",
+      "size": 19220784,
+      "sha256": "d52499f05a60a791aeadee28d609efa130142f376d1ea76b2b1c593bb01f8827",
+      "url": "https://files.pythonhosted.org/packages/cb/e7/37da1a7500b57496a5269318c4f57962ea0c26dcac06b85222d7831acf00/ctranslate2-4.8.1-cp313-cp313-win_amd64.whl"
+    }
+  },
+  "toolchain": [
+    {
+      "id": "transformers",
+      "version": "4.57.3",
+      "license": {
+        "expression": "Apache-2.0",
+        "evidence": "https://github.com/huggingface/transformers/blob/v4.57.3/LICENSE"
+      },
+      "wheel": {
+        "filename": "transformers-4.57.3-py3-none-any.whl",
+        "size": 11993463,
+        "sha256": "c77d353a4851b1880191603d36acb313411d3577f6e2897814f333841f7003f4",
+        "url": "https://files.pythonhosted.org/packages/6a/6b/2f416568b3c4c91c96e5a365d164f8a4a4a88030aa8ab4644181fdadce97/transformers-4.57.3-py3-none-any.whl"
+      }
+    },
+    {
+      "id": "torch",
+      "version": "2.9.1",
+      "license": {
+        "expression": "BSD-3-Clause",
+        "evidence": "https://github.com/pytorch/pytorch/blob/v2.9.1/LICENSE"
+      },
+      "wheel": {
+        "filename": "torch-2.9.1-cp313-cp313-win_amd64.whl",
+        "size": 110944162,
+        "sha256": "545844cc16b3f91e08ce3b40e9c2d77012dd33a48d505aed34b7740ed627a1b2",
+        "url": "https://files.pythonhosted.org/packages/a6/47/c7843d69d6de8938c1cbb1eba426b1d48ddf375f101473d3e31a5fc52b74/torch-2.9.1-cp313-cp313-win_amd64.whl"
+      }
+    },
+    {
+      "id": "sentencepiece",
+      "version": "0.2.1",
+      "license": {
+        "expression": "Apache-2.0",
+        "evidence": "https://github.com/google/sentencepiece/blob/v0.2.1/LICENSE"
+      },
+      "wheel": {
+        "filename": "sentencepiece-0.2.1-cp313-cp313-win_amd64.whl",
+        "size": 1054669,
+        "sha256": "10ed3dab2044c47f7a2e7b4969b0c430420cdd45735d78c8f853191fa0e3148b",
+        "url": "https://files.pythonhosted.org/packages/dd/e9/932b9eae6fd7019548321eee1ab8d5e3b3d1294df9d9a0c9ac517c7b636d/sentencepiece-0.2.1-cp313-cp313-win_amd64.whl"
+      }
+    },
+    {
+      "id": "sacrebleu",
+      "version": "2.5.1",
+      "license": {
+        "expression": "Apache-2.0",
+        "evidence": "https://github.com/mjpost/sacrebleu/blob/v2.5.1/LICENSE"
+      },
+      "wheel": {
+        "filename": "sacrebleu-2.5.1-py3-none-any.whl",
+        "size": 104107,
+        "sha256": "7c9f7ee75bec3a5bf19dd87112dfd654952130e403ad30c48298fb7da3212d5d",
+        "url": "https://files.pythonhosted.org/packages/cd/45/7b55a7bd7e5c5b573b40ad58ba43fa09962dc5c8d71b1f573d4aeaa54a7e/sacrebleu-2.5.1-py3-none-any.whl"
+      }
+    }
+  ],
+  "candidateSets": [
+    {
+      "id": "marian-opus-zh-en-bidirectional",
+      "priority": 1,
+      "strategy": "CTranslate2 plus two directional Marian/OPUS models",
+      "candidateIds": [
+        "opus-mt-en-zh",
+        "opus-mt-zh-en"
+      ],
+      "licenseExpressions": [
+        "NOASSERTION"
+      ],
+      "observedMetadataExpressions": [
+        "Apache-2.0",
+        "CC-BY-4.0"
+      ],
+      "licenseConsistency": "UNRESOLVED_CONFLICT",
+      "status": "BLOCKED_GATE_A"
+    },
+    {
+      "id": "m2m100-418m-bidirectional-comparison",
+      "priority": 2,
+      "strategy": "CTranslate2 plus one M2M100 418M model for both directions",
+      "candidateIds": [
+        "m2m100-418m"
+      ],
+      "licenseExpressions": [
+        "NOASSERTION"
+      ],
+      "observedMetadataExpressions": [
+        "MIT"
+      ],
+      "licenseConsistency": "UNRESOLVED_SCOPE",
+      "status": "BLOCKED_GATE_A"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "opus-mt-en-zh",
+      "role": "priority-en-zh",
+      "architecture": "MarianMT",
+      "repository": "Helsinki-NLP/opus-mt-en-zh",
+      "revision": "408d9bc410a388e1d9aef112a2daba955b945255",
+      "lastModified": "2023-08-16T11:31:42.000Z",
+      "gated": false,
+      "routes": [
+        {
+          "source": "en",
+          "target": "zh"
+        }
+      ],
+      "license": {
+        "expression": "NOASSERTION",
+        "status": "UNRESOLVED",
+        "observedMetadataExpression": "Apache-2.0",
+        "observedMetadata": "apache-2.0",
+        "evidence": "https://huggingface.co/Helsinki-NLP/opus-mt-en-zh/blob/408d9bc410a388e1d9aef112a2daba955b945255/README.md",
+        "upstreamLicenseEvidence": "https://github.com/Helsinki-NLP/Tatoeba-Challenge/blob/480fcbe0ee1bf4774bcbe6226ad9f58e63f6c535/LICENSE",
+        "commercialUseConclusion": "NOT_ESTABLISHED",
+        "requiresGateAForIntegration": true
+      },
+      "modelCard": "https://huggingface.co/Helsinki-NLP/opus-mt-en-zh/tree/408d9bc410a388e1d9aef112a2daba955b945255",
+      "sourceFiles": [
+        {
+          "path": "README.md",
+          "size": 2670,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "cc6fb518752007783a71d6c62af0c8d5f6523975",
+          "purpose": "license-evidence"
+        },
+        {
+          "path": "config.json",
+          "size": 1403,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "e2c7882d05248a3e47cfa69f3dc6d5cfd99a3c07",
+          "purpose": "conversion"
+        },
+        {
+          "path": "generation_config.json",
+          "size": 293,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "f07859fcab98712b231d115475990a962eebc851",
+          "purpose": "conversion"
+        },
+        {
+          "path": "metadata.json",
+          "size": 1478,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "b002d347538a28ef68c8f40020351a2ded80add0",
+          "purpose": "provenance"
+        },
+        {
+          "path": "pytorch_model.bin",
+          "size": 312087009,
+          "digestAlgorithm": "sha256",
+          "digest": "69a1d6ec829cee349360b3b677ac0aa99a7d88822d1a6578370029efffdca3f5",
+          "purpose": "conversion-pickle-weight"
+        },
+        {
+          "path": "source.spm",
+          "size": 806435,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "3f695c68a3aeb685ded9a5db0865af02c986bebf",
+          "purpose": "tokenizer"
+        },
+        {
+          "path": "target.spm",
+          "size": 804600,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "e19744e15a0f53b209fa40dbdc9e7fc4e96771cd",
+          "purpose": "tokenizer"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "size": 44,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "af90e7a4c0e5e8f828e146bdb499c22cef85740e",
+          "purpose": "tokenizer"
+        },
+        {
+          "path": "vocab.json",
+          "size": 1617791,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "423d3deb0188828da557bb61494bf73e4b86d275",
+          "purpose": "tokenizer"
+        }
+      ],
+      "conversion": {
+        "converter": "ctranslate2.converters.TransformersConverter",
+        "quantization": "int8",
+        "trustRemoteCode": false,
+        "copyFiles": [
+          "source.spm",
+          "target.spm",
+          "tokenizer_config.json",
+          "vocab.json"
+        ]
+      }
+    },
+    {
+      "id": "opus-mt-zh-en",
+      "role": "priority-zh-en",
+      "architecture": "MarianMT",
+      "repository": "Helsinki-NLP/opus-mt-zh-en",
+      "revision": "cf109095479db38d6df799875e34039d4938aaa6",
+      "lastModified": "2023-08-16T12:09:10.000Z",
+      "gated": false,
+      "routes": [
+        {
+          "source": "zh",
+          "target": "en"
+        }
+      ],
+      "license": {
+        "expression": "NOASSERTION",
+        "status": "UNRESOLVED",
+        "observedMetadataExpression": "CC-BY-4.0",
+        "observedMetadata": "cc-by-4.0",
+        "evidence": "https://huggingface.co/Helsinki-NLP/opus-mt-zh-en/blob/cf109095479db38d6df799875e34039d4938aaa6/README.md",
+        "upstreamLicenseEvidence": "https://github.com/Helsinki-NLP/Tatoeba-Challenge/blob/480fcbe0ee1bf4774bcbe6226ad9f58e63f6c535/LICENSE",
+        "commercialUseConclusion": "NOT_ESTABLISHED",
+        "requiresGateAForIntegration": true
+      },
+      "modelCard": "https://huggingface.co/Helsinki-NLP/opus-mt-zh-en/tree/cf109095479db38d6df799875e34039d4938aaa6",
+      "sourceFiles": [
+        {
+          "path": "README.md",
+          "size": 3174,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "50861444b1f4f181fe7ceccf971333b882c6c6f7",
+          "purpose": "license-evidence"
+        },
+        {
+          "path": "config.json",
+          "size": 1394,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "710dcdf966ec0aa5b3d991a35264c7cb174ccf14",
+          "purpose": "conversion"
+        },
+        {
+          "path": "generation_config.json",
+          "size": 293,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "a43af728d2ddefe1ed73656ce004be6391c02e0a",
+          "purpose": "conversion"
+        },
+        {
+          "path": "metadata.json",
+          "size": 1477,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "0fba11b0f7b582cae4b4d2a6b837d509fa2b8d51",
+          "purpose": "provenance"
+        },
+        {
+          "path": "pytorch_model.bin",
+          "size": 312087009,
+          "digestAlgorithm": "sha256",
+          "digest": "9d8ceb91d103ef89400c9d9d62328b4858743cf8924878aee3b8afc594242ce0",
+          "purpose": "conversion-pickle-weight"
+        },
+        {
+          "path": "source.spm",
+          "size": 804677,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "0ab361451ecc57b6223303c7b52e216ff40dc7e6",
+          "purpose": "tokenizer"
+        },
+        {
+          "path": "target.spm",
+          "size": 806530,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "878ae3c6ca6afea7971e3be0b18debdd0d41e3ea",
+          "purpose": "tokenizer"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "size": 44,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "60000ab989b1eec84f7b0299368f9dd498cdab61",
+          "purpose": "tokenizer"
+        },
+        {
+          "path": "vocab.json",
+          "size": 1617902,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "3be15dddf54535a2257b485f32c8f9226352d5c4",
+          "purpose": "tokenizer"
+        }
+      ],
+      "conversion": {
+        "converter": "ctranslate2.converters.TransformersConverter",
+        "quantization": "int8",
+        "trustRemoteCode": false,
+        "copyFiles": [
+          "source.spm",
+          "target.spm",
+          "tokenizer_config.json",
+          "vocab.json"
+        ]
+      }
+    },
+    {
+      "id": "m2m100-418m",
+      "role": "comparison-bidirectional",
+      "architecture": "M2M100",
+      "repository": "facebook/m2m100_418M",
+      "revision": "55c2e61bbf05dfb8d7abccdc3fae6fc8512fd636",
+      "lastModified": "2024-02-29T09:08:42.000Z",
+      "gated": false,
+      "routes": [
+        {
+          "source": "en",
+          "target": "zh"
+        },
+        {
+          "source": "zh",
+          "target": "en"
+        }
+      ],
+      "license": {
+        "expression": "NOASSERTION",
+        "status": "UNRESOLVED",
+        "observedMetadataExpression": "MIT",
+        "observedMetadata": "mit",
+        "evidence": "https://huggingface.co/facebook/m2m100_418M/blob/55c2e61bbf05dfb8d7abccdc3fae6fc8512fd636/README.md",
+        "upstreamLicenseEvidence": "https://github.com/facebookresearch/fairseq/blob/3d262bb25690e4eb2e7d3c1309b1e9c406ca4b99/LICENSE",
+        "commercialUseConclusion": "NOT_ESTABLISHED",
+        "requiresGateAForIntegration": true
+      },
+      "modelCard": "https://huggingface.co/facebook/m2m100_418M/tree/55c2e61bbf05dfb8d7abccdc3fae6fc8512fd636",
+      "sourceFiles": [
+        {
+          "path": "README.md",
+          "size": 4603,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "98b99edb1de68441bb0c87a9645c8f2e35ea34d0",
+          "purpose": "license-evidence"
+        },
+        {
+          "path": "config.json",
+          "size": 908,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "93359f73052bad5dc918b1d53c1c75e89fd6a257",
+          "purpose": "conversion"
+        },
+        {
+          "path": "generation_config.json",
+          "size": 233,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "ba941101cd3e90b113db16712f4a20372268e767",
+          "purpose": "conversion"
+        },
+        {
+          "path": "pytorch_model.bin",
+          "size": 1935796948,
+          "digestAlgorithm": "sha256",
+          "digest": "d907ea45e4e4b9db163382a6674f6218b3c59566fe06d77f4055c208b4e87ed1",
+          "purpose": "conversion-pickle-weight"
+        },
+        {
+          "path": "sentencepiece.bpe.model",
+          "size": 2423393,
+          "digestAlgorithm": "sha256",
+          "digest": "d8f7c76ed2a5e0822be39f0a4f95a55eb19c78f4593ce609e2edbc2aea4d380a",
+          "purpose": "tokenizer"
+        },
+        {
+          "path": "special_tokens_map.json",
+          "size": 1140,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "c6c3195f9bb7856df9a3fdd0252bcf99ff209f5d",
+          "purpose": "tokenizer"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "size": 298,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "c0acb40bd22d2a992d273bb6a2b1c99c37613e4f",
+          "purpose": "tokenizer"
+        },
+        {
+          "path": "vocab.json",
+          "size": 3708092,
+          "digestAlgorithm": "git-blob-sha1",
+          "digest": "380e263bf4efc45fa72251fb19336a9593307bc4",
+          "purpose": "tokenizer"
+        }
+      ],
+      "conversion": {
+        "converter": "ctranslate2.converters.TransformersConverter",
+        "quantization": "int8",
+        "trustRemoteCode": false,
+        "copyFiles": [
+          "sentencepiece.bpe.model",
+          "special_tokens_map.json",
+          "tokenizer_config.json",
+          "vocab.json"
+        ]
+      }
+    }
+  ]
+}

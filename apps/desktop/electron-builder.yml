@@ -3,6 +3,8 @@ productName: Desktop Translate
 buildVersion: 0.5.0.0
 electronVersion: 43.1.1
 copyright: Copyright (c) Desktop Translate contributors
+extends: null
+afterExtract: tooling/phase5-after-extract.mjs
 
 # Only compiled production entrypoints enter app.asar.  Runtime resources are
 # copied through the explicit extraResources allowlist below.
@@ -50,6 +52,7 @@ extraResources:
       - file-manifest.sha256
 
 directories:
+  buildResources: build
   output: ../../artifacts/phase5/package/dist
 
 electronLanguages:
@@ -73,13 +76,19 @@ nsis:
   oneClick: false
   perMachine: false
   allowElevation: false
-  allowToChangeInstallationDirectory: false
+  packElevateHelper: false
+  include: installer.nsh
+  allowToChangeInstallationDirectory: true
   createDesktopShortcut: false
   createStartMenuShortcut: true
   shortcutName: Desktop Translate
   uninstallDisplayName: Desktop Translate
   deleteAppDataOnUninstall: false
   runAfterFinish: false
+  # The bundled Nsis7z v19 plugin does not surface extraction failures.
+  # Force electron-builder's status-returning nsisunz path instead.
+  differentialPackage: false
+  useZip: true
 
 # Phase 5 RC uses signed manual distribution.  Auto-update remains disabled
 # until a separately reviewed update trust root and rollback design exist.

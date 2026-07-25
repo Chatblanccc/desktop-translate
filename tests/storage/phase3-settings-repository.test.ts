@@ -28,9 +28,24 @@ test("Phase 3 selection settings persist and retain Phase 2 shell settings", asy
     await repository.setTheme("dark");
     await repository.setSelectionEnabled(false);
     await repository.setOcrActivation("alt-drag");
+    await repository.setBallAnchor({
+      mode: "free",
+      displayId: "secondary",
+      horizontalRatio: 0.25,
+      verticalRatio: 0.75,
+    });
 
     assert.deepEqual(await new SqlitePhase3SettingsRepository(database).load(), {
-      ball: { visible: false, edgeSnap: false },
+      ball: {
+        visible: false,
+        edgeSnap: false,
+        anchor: {
+          mode: "free",
+          displayId: "secondary",
+          horizontalRatio: 0.25,
+          verticalRatio: 0.75,
+        },
+      },
       theme: "dark",
       selection: { enabled: false, ocrActivation: "alt-drag" },
     });

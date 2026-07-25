@@ -1,0 +1,538 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-bergamot-poc-candidates-v1.json",
+  "title": "Desktop Translate Phase 7 Firefox/Bergamot POC candidates",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "metadataSnapshot",
+    "policy",
+    "gateA",
+    "licenseEvidence",
+    "runtime",
+    "candidateSets",
+    "candidates"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "phase7-bergamot-poc-candidates-v1"
+    },
+    "metadataSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capturedAt",
+        "networkScope",
+        "modelRepositoryArchived"
+      ],
+      "properties": {
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "networkScope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "modelRepositoryArchived": {
+          "const": true
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultNetworkAccess",
+        "largeDownloadsRequirePocAuthorization",
+        "pocAuthorizationScope",
+        "artifactRoot",
+        "packageInstallScriptsAllowed",
+        "runtimeExecutionMode",
+        "benchmarkWarmIterations",
+        "benchmarkRouteTimeoutMs",
+        "measurementSchema"
+      ],
+      "properties": {
+        "defaultNetworkAccess": {
+          "const": false
+        },
+        "largeDownloadsRequirePocAuthorization": {
+          "const": true
+        },
+        "pocAuthorizationScope": {
+          "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+        },
+        "artifactRoot": {
+          "const": "artifacts/phase7/offline-poc"
+        },
+        "packageInstallScriptsAllowed": {
+          "const": false
+        },
+        "runtimeExecutionMode": {
+          "const": "OFFLINE_LOCAL_WASM"
+        },
+        "benchmarkWarmIterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "benchmarkRouteTimeoutMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000
+        },
+        "measurementSchema": {
+          "const": "./schemas/bergamot-measurement.schema.json"
+        }
+      }
+    },
+    "gateA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "blocksPocResearch",
+        "harnessMayDecide",
+        "requiredInput",
+        "blockers"
+      ],
+      "properties": {
+        "status": {
+          "const": "BLOCKED"
+        },
+        "blocksPocResearch": {
+          "const": false
+        },
+        "harnessMayDecide": {
+          "const": false
+        },
+        "requiredInput": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/blocker"
+          }
+        }
+      }
+    },
+    "licenseEvidence": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "#/$defs/licenseEvidence"
+      }
+    },
+    "runtime": {
+      "$ref": "#/$defs/runtime"
+    },
+    "candidateSets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/candidateSet"
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "httpsUrl": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "safePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "appliesTo",
+        "detail"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "appliesTo": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "licenseEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "repository",
+        "revision",
+        "expression",
+        "path",
+        "localPath",
+        "size",
+        "sha256",
+        "url"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "expression": {
+          "const": "MPL-2.0"
+        },
+        "path": {
+          "$ref": "#/$defs/safePath"
+        },
+        "localPath": {
+          "$ref": "#/$defs/safePath"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "packageName",
+        "version",
+        "publishedAt",
+        "declaredLicenseExpression",
+        "sourceRepository",
+        "sourceCommit",
+        "sourceLicenseEvidence",
+        "packageContainsLicenseFile",
+        "installScriptsAllowed",
+        "node23Compatibility",
+        "tarball"
+      ],
+      "properties": {
+        "id": {
+          "const": "browsermt-bergamot-translator-wasm"
+        },
+        "packageName": {
+          "const": "@browsermt/bergamot-translator"
+        },
+        "version": {
+          "const": "0.4.9"
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "declaredLicenseExpression": {
+          "const": "MPL-2.0"
+        },
+        "sourceRepository": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "sourceCommit": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "sourceLicenseEvidence": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "packageContainsLicenseFile": {
+          "const": false
+        },
+        "installScriptsAllowed": {
+          "const": false
+        },
+        "node23Compatibility": {
+          "const": "BLOCKED"
+        },
+        "tarball": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "filename",
+            "localPath",
+            "size",
+            "sha1",
+            "sha256",
+            "integrity",
+            "unpackedSize",
+            "fileCount",
+            "url"
+          ],
+          "properties": {
+            "filename": {
+              "const": "browsermt-bergamot-translator-0.4.9.tgz"
+            },
+            "localPath": {
+              "$ref": "#/$defs/safePath"
+            },
+            "size": {
+              "const": 1852075
+            },
+            "sha1": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "integrity": {
+              "type": "string",
+              "pattern": "^sha512-"
+            },
+            "unpackedSize": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "fileCount": {
+              "const": 7
+            },
+            "url": {
+              "$ref": "#/$defs/httpsUrl"
+            }
+          }
+        }
+      }
+    },
+    "candidateSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "candidateIds",
+        "runtimeId",
+        "compressedBytes",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidateIds": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "runtimeId": {
+          "const": "browsermt-bergamot-translator-wasm"
+        },
+        "compressedBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "const": "BLOCKED_GATE_A"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "repository",
+        "revision",
+        "architecture",
+        "route",
+        "license",
+        "reportedMetrics",
+        "sourceFiles"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repository": {
+          "const": "mozilla/firefox-translations-models"
+        },
+        "revision": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "architecture": {
+          "const": "BergamotMarianBaseMemoryIntgemm"
+        },
+        "route": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "target"
+          ],
+          "properties": {
+            "source": {
+              "enum": [
+                "en",
+                "zh"
+              ]
+            },
+            "target": {
+              "enum": [
+                "en",
+                "zh"
+              ]
+            }
+          }
+        },
+        "license": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "expression",
+            "status",
+            "observedRepositoryExpression",
+            "commercialUseConclusion",
+            "evidenceId"
+          ],
+          "properties": {
+            "expression": {
+              "const": "NOASSERTION"
+            },
+            "status": {
+              "const": "LEGAL_REVIEW_REQUIRED"
+            },
+            "observedRepositoryExpression": {
+              "const": "MPL-2.0"
+            },
+            "commercialUseConclusion": {
+              "const": "NOT_ESTABLISHED"
+            },
+            "evidenceId": {
+              "const": "firefox-translations-models-root-license"
+            }
+          }
+        },
+        "reportedMetrics": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "floresBleu",
+            "floresComet",
+            "uncompressedModelBytes"
+          ],
+          "properties": {
+            "floresBleu": {
+              "type": "number",
+              "minimum": 0
+            },
+            "floresComet": {
+              "type": "number"
+            },
+            "uncompressedModelBytes": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "sourceFiles": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "$ref": "#/$defs/sourceFile"
+          }
+        }
+      }
+    },
+    "sourceFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "localPath",
+        "runtimePart",
+        "compression",
+        "size",
+        "sha256",
+        "url"
+      ],
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/safePath"
+        },
+        "localPath": {
+          "$ref": "#/$defs/safePath"
+        },
+        "runtimePart": {
+          "enum": [
+            "model",
+            "shortlist",
+            "source-vocabulary",
+            "target-vocabulary",
+            "shared-vocabulary",
+            "metadata"
+          ]
+        },
+        "compression": {
+          "enum": [
+            "gzip",
+            "none"
+          ]
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        }
+      }
+    }
+  }
+}

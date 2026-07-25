@@ -77,16 +77,44 @@ function Import-MsvcEnvironment {
     if (-not (Test-Path -LiteralPath $vsDevCmd -PathType Leaf)) {
         throw "VsDevCmd.bat was not found: $vsDevCmd"
     }
-    $command = '"' + $vsDevCmd + '" -no_logo -arch=x64 -host_arch=x64 && set'
+    $command = 'call "' + $vsDevCmd + '" -no_logo -arch=x64 -host_arch=x64 && set'
     $lines = & $env:ComSpec /d /s /c $command
     if ($LASTEXITCODE -ne 0) { throw 'Unable to initialize the MSVC x64 build environment.' }
+    $msvcPathLine = $lines | Where-Object {
+        $_.StartsWith('PATH=', [StringComparison]::OrdinalIgnoreCase) -and
+        $_.IndexOf('\VC\Tools\MSVC\', [StringComparison]::OrdinalIgnoreCase) -ge 0
+    } | Select-Object -First 1
+    if (-not $msvcPathLine) {
+        throw 'MSVC environment initialization did not return the developer command PATH.'
+    }
+    $msvcPath = $msvcPathLine.Substring($msvcPathLine.IndexOf('=') + 1)
     foreach ($line in $lines) {
         $separator = $line.IndexOf('=')
         if ($separator -le 0) { continue }
         $name = $line.Substring(0, $separator)
+        if ($name.Equals('PATH', [StringComparison]::OrdinalIgnoreCase)) { continue }
         $value = $line.Substring($separator + 1)
         [Environment]::SetEnvironmentVariable($name, $value, [EnvironmentVariableTarget]::Process)
     }
+    # The Codex Windows host can expose both `Path` and `PATH` entries. Child
+    # processes may inherit the stale entry even though PowerShell command
+    # discovery sees the updated one, so collapse the pair before launching
+    # CMake/NMake.
+    [Environment]::SetEnvironmentVariable(
+        'Path',
+        $null,
+        [EnvironmentVariableTarget]::Process
+    )
+    [Environment]::SetEnvironmentVariable(
+        'PATH',
+        $null,
+        [EnvironmentVariableTarget]::Process
+    )
+    [Environment]::SetEnvironmentVariable(
+        'PATH',
+        $msvcPath,
+        [EnvironmentVariableTarget]::Process
+    )
     foreach ($tool in @('cl.exe', 'nmake.exe', 'rc.exe')) {
         if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) {
             throw "MSVC environment initialization did not expose $tool."

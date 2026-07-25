@@ -17,6 +17,7 @@ import {
   isThemeMode,
   isUiShellSettingsWritePayload,
   isUiShellSnapshot,
+  normalizeBallAnchor,
 } from "../../packages/contracts/src/ui-shell.ts";
 
 test("Phase 4 default snapshot is strict, opt-in, safe, and deeply immutable", () => {
@@ -78,17 +79,57 @@ test("Baidu credential summaries expose only App ID and configured state", () =>
   ]) assert.equal(isBaiduCredentialSummary(invalid), false);
 });
 
-test("ball anchors support edge ratios and reject unsafe or extra fields", () => {
+test("ball anchors accept legacy edge, tagged edge, and tagged free positions", () => {
   assert.equal(isBallAnchor({ displayId: "2528732444", edge: "left", verticalRatio: 0 }), true);
-  assert.equal(isBallAnchor({ displayId: "display:primary", edge: "right", verticalRatio: 1 }), true);
+  assert.equal(
+    isBallAnchor({
+      mode: "edge",
+      displayId: "display:primary",
+      edge: "right",
+      verticalRatio: 1,
+    }),
+    true,
+  );
+  assert.equal(
+    isBallAnchor({
+      mode: "free",
+      displayId: "display:primary",
+      horizontalRatio: 0.25,
+      verticalRatio: 0.75,
+    }),
+    true,
+  );
+  assert.deepEqual(
+    normalizeBallAnchor({ displayId: "legacy", edge: "left", verticalRatio: 0.4 }),
+    { mode: "edge", displayId: "legacy", edge: "left", verticalRatio: 0.4 },
+  );
 
   for (const invalid of [
     { displayId: "", edge: "right", verticalRatio: 0.5 },
+    { mode: undefined, displayId: "display", edge: "right", verticalRatio: 0.5 },
+    { mode: "floating", displayId: "display", edge: "right", verticalRatio: 0.5 },
+    { mode: "edge", displayId: "display", verticalRatio: 0.5 },
     { displayId: "display", edge: "top", verticalRatio: 0.5 },
     { displayId: "display", edge: "right", verticalRatio: -0.01 },
     { displayId: "display", edge: "right", verticalRatio: 1.01 },
     { displayId: "display", edge: "right", verticalRatio: Number.NaN },
     { displayId: "display", edge: "right", verticalRatio: Number.POSITIVE_INFINITY },
+    { mode: "free", displayId: "display", verticalRatio: 0.5 },
+    { mode: "free", displayId: "display", horizontalRatio: -0.01, verticalRatio: 0.5 },
+    { mode: "free", displayId: "display", horizontalRatio: 1.01, verticalRatio: 0.5 },
+    {
+      mode: "free",
+      displayId: "display",
+      horizontalRatio: Number.NaN,
+      verticalRatio: 0.5,
+    },
+    {
+      mode: "free",
+      displayId: "display",
+      edge: "right",
+      horizontalRatio: 0.5,
+      verticalRatio: 0.5,
+    },
     { displayId: "display", edge: "right", verticalRatio: 0.5, horizontalRatio: 0.5 },
     { displayId: "display", edge: "right", verticalRatio: 0.5, x: 10 },
   ]) assert.equal(isBallAnchor(invalid), false);
@@ -99,8 +140,13 @@ test("snapshot guard rejects unknown fields, malformed anchors, and duplicate ca
     version: 3,
     ball: {
       visible: false,
-      edgeSnap: true,
-      anchor: { displayId: "primary", edge: "right", verticalRatio: 0.6 },
+      edgeSnap: false,
+      anchor: {
+        mode: "free",
+        displayId: "primary",
+        horizontalRatio: 0.35,
+        verticalRatio: 0.6,
+      },
     },
     theme: "dark",
     native: { status: "degraded", degradedCapabilities: ["ocr"] },

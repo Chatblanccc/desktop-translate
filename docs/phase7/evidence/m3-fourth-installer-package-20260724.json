@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "phase7-m3-unsigned-development-installer-package",
+  "capturedAtUtc": "2026-07-24T11:38:54.9484339Z",
+  "headSha": "d117e4b1b4989157826aad1febc59bf49ee17539",
+  "sourceIdentity": "HEAD+WORKTREE:801529a0ccccd7b9d7176214471013b3b3f0e2b02abfeb486195458a1cb77493",
+  "installer": {
+    "path": "artifacts/phase5/package/dist/Desktop-Translate-0.5.0-phase5-x64-setup.exe",
+    "sizeBytes": 130645193,
+    "sizeMiB": 124.593,
+    "sha256": "b9386b7bcfcffb8bf8e7e007986cd935e4f1ded02a5c5c7993bc8b57edbc04b3",
+    "authenticodeStatus": "NotSigned",
+    "modifiedAtUtc": "2026-07-24T11:38:21.2083707Z"
+  },
+  "formalEvidenceRoot": "artifacts/phase5/d117e4b1b4989157826aad1febc59bf49ee17539/local-20260724T1125328407951Z-221009c1c32c4654a5c5b39c63617f8f",
+  "auditedInputs": {
+    "installerIncludeNormalizedSha256": "77bd978d56c089c155be47b00a4e6787e64ba1edd403aad0d5e27e8cd4591ebf",
+    "appBuilderPatchSha256": "94967619809c29ba46e4738c08bd5e0390e0c5df0dbf86e713d3ff8f319f44f7",
+    "appBuilderPhysicalTreeFileCount": 520,
+    "appBuilderPhysicalTreeSha256": "75deec9892aee18ebea9b60157e39cc530bb1ff9de13d5ba787297b0d722cdb0"
+  },
+  "gates": {
+    "electronBuilderPolicy": "PASS",
+    "releaseEvidenceNegativeSelftest": "PASS",
+    "nsisCompile": "PASS",
+    "packageAllowlistAsarResourcesHashesBudgets": "PASS",
+    "supplyChain": "PASS",
+    "managedSandboxStartupResourceSmoke": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "tests": {
+      "status": "PASS",
+      "passed": 432,
+      "failed": 0,
+      "desktopFilesPassed": 34,
+      "desktopFilesTotal": 34
+    }
+  },
+  "release": {
+    "developmentPackageStatus": "PASS",
+    "status": "RELEASE BLOCKED",
+    "blockers": [
+      "Development package includes uncommitted or untracked inputs and is not HEAD acceptance evidence.",
+      "Application, native host, and installer are not Authenticode signed.",
+      "Independent GitHub attestation and clean-download verification are incomplete."
+    ]
+  },
+  "notRun": [
+    "Real registered same-version upgrade",
+    "Normal or quiet uninstall",
+    "Rename or pathname-delete race fault injection",
+    "Clean VM install",
+    "Normal Chromium sandbox installed-app startup",
+    "Physical mouse and physical touchpad drag"
+  ],
+  "openP2": [
+    "Fresh-directory cleanup validates pathname state but does not bind the created directory file identity through RMDir.",
+    "Stable and recovery marker successful-commit lifecycle still contains pathname operations."
+  ]
+}

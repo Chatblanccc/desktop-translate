@@ -345,7 +345,7 @@ export function SettingsApp({ api }: SettingsAppProps): JSX.Element {
           <div className="setting-row setting-row-action">
             <span className="setting-copy">
               <span className="setting-title">悬浮球位置</span>
-              <span className="setting-description">将悬浮球恢复到主屏幕右侧默认位置。</span>
+              <span className="setting-description">将悬浮球恢复到鼠标所在屏幕右侧默认位置。</span>
             </span>
             <button
               className="secondary-button"

@@ -1,0 +1,541 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-blind-eval-report-v1.json",
+  "title": "Phase 7 human blind evaluation report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "reportId",
+    "runId",
+    "summarizedAt",
+    "scope",
+    "humanOnly",
+    "blindCandidateIdentity",
+    "requirements",
+    "audit",
+    "counts",
+    "directions",
+    "rawScores",
+    "privacy",
+    "gateA"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "phase7-blind-eval-report-v1"
+    },
+    "status": {
+      "enum": [
+        "HUMAN_BLIND_EVALUATION_COMPONENT_COMPLETE",
+        "HUMAN_BLIND_EVALUATION_INCOMPLETE"
+      ]
+    },
+    "reportId": {
+      "$ref": "#/$defs/reportId"
+    },
+    "runId": {
+      "$ref": "#/$defs/runId"
+    },
+    "summarizedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scope": {
+      "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+    },
+    "humanOnly": {
+      "const": true
+    },
+    "blindCandidateIdentity": {
+      "const": true
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "directions",
+        "minimumUniqueItemsPerCandidateDirection",
+        "duplicateEvaluationCountingAllowed"
+      ],
+      "properties": {
+        "directions": {
+          "type": "array",
+          "prefixItems": [
+            {
+              "const": "en-zh"
+            },
+            {
+              "const": "zh-en"
+            }
+          ],
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "minimumUniqueItemsPerCandidateDirection": {
+          "const": 200
+        },
+        "duplicateEvaluationCountingAllowed": {
+          "const": false
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifestSha256",
+        "inputSha256",
+        "reviewBatchSha256",
+        "scoreTemplateSha256",
+        "privateAnswerKeySha256",
+        "rawScoresSha256",
+        "randomizationAlgorithm",
+        "randomizationCommitment",
+        "randomizedMappingVerified",
+        "candidateIdentityWithheldFromReviewBatch"
+      ],
+      "properties": {
+        "manifestSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "inputSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "reviewBatchSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "scoreTemplateSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "privateAnswerKeySha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "rawScoresSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "randomizationAlgorithm": {
+          "const": "HMAC_SHA256_RANK_V1"
+        },
+        "randomizationCommitment": {
+          "$ref": "#/$defs/sha256"
+        },
+        "randomizedMappingVerified": {
+          "const": true
+        },
+        "candidateIdentityWithheldFromReviewBatch": {
+          "const": true
+        }
+      }
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "assignedEvaluationCount",
+        "submittedRecordCount",
+        "validHumanReviewCount",
+        "pendingHumanReviewCount"
+      ],
+      "properties": {
+        "assignedEvaluationCount": {
+          "type": "integer",
+          "minimum": 400
+        },
+        "submittedRecordCount": {
+          "type": "integer",
+          "minimum": 400
+        },
+        "validHumanReviewCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pendingHumanReviewCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "directions": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/$defs/directionReport"
+      }
+    },
+    "rawScores": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rawScore"
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "acceptedSourcePolicy",
+        "userHistoryAccepted",
+        "freeFormSourceAccepted",
+        "rawSourceReferenceOrTranslationTextEmitted",
+        "absolutePathsEmitted",
+        "usernamesEmitted",
+        "freeTextReviewerNotesAccepted"
+      ],
+      "properties": {
+        "acceptedSourcePolicy": {
+          "const": "PUBLIC_DATASET_OR_SELF_AUTHORED_SYNTHETIC_ONLY"
+        },
+        "userHistoryAccepted": {
+          "const": false
+        },
+        "freeFormSourceAccepted": {
+          "const": false
+        },
+        "rawSourceReferenceOrTranslationTextEmitted": {
+          "const": false
+        },
+        "absolutePathsEmitted": {
+          "const": false
+        },
+        "usernamesEmitted": {
+          "const": false
+        },
+        "freeTextReviewerNotesAccepted": {
+          "const": false
+        }
+      }
+    },
+    "gateA": {
+      "type": "object",
+      "required": [
+        "blindEvaluationComponentComplete",
+        "inputStatus",
+        "overallGateAStatus",
+        "limitation"
+      ],
+      "properties": {
+        "blindEvaluationComponentComplete": {
+          "type": "boolean"
+        },
+        "inputStatus": {
+          "const": "GATE_A_INPUT_INCOMPLETE"
+        },
+        "overallGateAStatus": {
+          "enum": [
+            "BLOCKED_PENDING_OTHER_M4_EVIDENCE_AND_USER_GATE_A_DECISION",
+            "BLOCKED_PENDING_HUMAN_REVIEW_AND_OTHER_M4_EVIDENCE"
+          ]
+        },
+        "limitation": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  },
+  "$defs": {
+    "slug": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "runId": {
+      "type": "string",
+      "pattern": "^run-[a-f0-9]{16}$"
+    },
+    "reportId": {
+      "type": "string",
+      "pattern": "^report-[a-f0-9]{16}$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "errorFlags": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severeMistranslation",
+        "untranslated",
+        "garbled",
+        "properNounError",
+        "longSentenceError"
+      ],
+      "properties": {
+        "severeMistranslation": {
+          "type": "boolean"
+        },
+        "untranslated": {
+          "type": "boolean"
+        },
+        "garbled": {
+          "type": "boolean"
+        },
+        "properNounError": {
+          "type": "boolean"
+        },
+        "longSentenceError": {
+          "type": "boolean"
+        }
+      }
+    },
+    "rawScore": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "evaluationId",
+        "itemToken",
+        "direction",
+        "candidateId",
+        "generationRunId",
+        "reviewerToken",
+        "reviewMode",
+        "blindnessAttestation",
+        "humanReviewAttestation",
+        "reviewedAt",
+        "acceptability",
+        "adequacyScore",
+        "fluencyScore",
+        "errors"
+      ],
+      "properties": {
+        "evaluationId": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{32}$"
+        },
+        "itemToken": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{24}$"
+        },
+        "direction": {
+          "enum": [
+            "en-zh",
+            "zh-en"
+          ]
+        },
+        "candidateId": {
+          "$ref": "#/$defs/slug"
+        },
+        "generationRunId": {
+          "$ref": "#/$defs/slug"
+        },
+        "reviewerToken": {
+          "type": "string",
+          "pattern": "^reviewer-[a-f0-9]{24}$"
+        },
+        "reviewMode": {
+          "const": "HUMAN_ONLY_NO_AUTOMATED_SCORING"
+        },
+        "blindnessAttestation": {
+          "const": "CANDIDATE_IDENTITY_NOT_VIEWED"
+        },
+        "humanReviewAttestation": {
+          "const": "I_REVIEWED_THIS_ITEM_WITHOUT_AUTOMATED_SCORING"
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "acceptability": {
+          "enum": [
+            "ACCEPTABLE",
+            "UNACCEPTABLE"
+          ]
+        },
+        "adequacyScore": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "fluencyScore": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "errors": {
+          "$ref": "#/$defs/errorFlags"
+        }
+      }
+    },
+    "directionReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "direction",
+        "candidates"
+      ],
+      "properties": {
+        "direction": {
+          "enum": [
+            "en-zh",
+            "zh-en"
+          ]
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/candidateReport"
+          }
+        }
+      }
+    },
+    "candidateReport": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "candidateId",
+        "generationRunIds",
+        "N",
+        "validN",
+        "uniqueItemN",
+        "pendingN",
+        "acceptance",
+        "adequacyMean",
+        "fluencyMean",
+        "severeErrors",
+        "blindEvaluationEvidence"
+      ],
+      "properties": {
+        "candidateId": {
+          "$ref": "#/$defs/slug"
+        },
+        "generationRunIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/slug"
+          }
+        },
+        "N": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "validN": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uniqueItemN": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pendingN": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "acceptance": {
+          "$ref": "#/$defs/countRate"
+        },
+        "adequacyMean": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 5
+        },
+        "fluencyMean": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 5
+        },
+        "severeErrors": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "severeMistranslation",
+            "untranslated",
+            "garbled",
+            "properNounError",
+            "longSentenceError"
+          ],
+          "properties": {
+            "severeMistranslation": {
+              "$ref": "#/$defs/countRate"
+            },
+            "untranslated": {
+              "$ref": "#/$defs/countRate"
+            },
+            "garbled": {
+              "$ref": "#/$defs/countRate"
+            },
+            "properNounError": {
+              "$ref": "#/$defs/countRate"
+            },
+            "longSentenceError": {
+              "$ref": "#/$defs/countRate"
+            }
+          }
+        },
+        "blindEvaluationEvidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "blind",
+            "humanReviewed",
+            "sampleCount",
+            "rawScoresRecorded",
+            "severeErrorClassificationRecorded",
+            "minimumRequired",
+            "componentStatus"
+          ],
+          "properties": {
+            "blind": {
+              "const": true
+            },
+            "humanReviewed": {
+              "type": "boolean"
+            },
+            "sampleCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rawScoresRecorded": {
+              "type": "boolean"
+            },
+            "severeErrorClassificationRecorded": {
+              "type": "boolean"
+            },
+            "minimumRequired": {
+              "const": 200
+            },
+            "componentStatus": {
+              "enum": [
+                "HUMAN_BLIND_EVALUATION_COMPONENT_COMPLETE",
+                "HUMAN_BLIND_EVALUATION_INCOMPLETE"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "countRate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "count",
+        "rate"
+      ],
+      "properties": {
+        "count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "rate": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,780 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-argos-direct-poc-candidates-v1.json",
+  "title": "Desktop Translate Phase 7 Argos direct POC candidate manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "metadataSnapshot",
+    "policy",
+    "gateA",
+    "runtime",
+    "candidateSets",
+    "candidates"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "phase7-argos-direct-poc-candidates-v1"
+    },
+    "metadataSnapshot": {
+      "$ref": "#/$defs/metadataSnapshot"
+    },
+    "policy": {
+      "$ref": "#/$defs/policy"
+    },
+    "gateA": {
+      "$ref": "#/$defs/gateA"
+    },
+    "runtime": {
+      "$ref": "#/$defs/runtime"
+    },
+    "candidateSets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "$ref": "#/$defs/candidateSet"
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "httpsUrl": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "safePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)(?!.*:).+$"
+    },
+    "metadataSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capturedAt",
+        "packageIndexRepository",
+        "packageIndexRevision",
+        "packageIndexUrl",
+        "argosTranslateRepository",
+        "argosTranslateRevision"
+      ],
+      "properties": {
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "packageIndexRepository": {
+          "const": "argosopentech/argospm-index"
+        },
+        "packageIndexRevision": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "packageIndexUrl": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "argosTranslateRepository": {
+          "const": "argosopentech/argos-translate"
+        },
+        "argosTranslateRevision": {
+          "$ref": "#/$defs/gitSha"
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "defaultNetworkAccess",
+        "downloadsRequireExplicitFlags",
+        "downloadsRequireBoundResearchAuthorization",
+        "artifactRoot",
+        "globalPackageInstallationAllowed",
+        "automaticPackageInstallationAllowed",
+        "productIntegrationAllowed",
+        "modelDistributionAllowed",
+        "rawSourceOrTranslationTextInReportsAllowed",
+        "privateBlindEvaluationCandidateOutputAllowed",
+        "maximumArchiveCompressionRatio",
+        "maximumSingleExtractedFileBytes"
+      ],
+      "properties": {
+        "scope": {
+          "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+        },
+        "defaultNetworkAccess": {
+          "const": false
+        },
+        "downloadsRequireExplicitFlags": {
+          "const": [
+            "--download",
+            "--allow-network"
+          ]
+        },
+        "downloadsRequireBoundResearchAuthorization": {
+          "const": true
+        },
+        "artifactRoot": {
+          "const": "artifacts/phase7/offline-poc"
+        },
+        "globalPackageInstallationAllowed": {
+          "const": false
+        },
+        "automaticPackageInstallationAllowed": {
+          "const": false
+        },
+        "productIntegrationAllowed": {
+          "const": false
+        },
+        "modelDistributionAllowed": {
+          "const": false
+        },
+        "rawSourceOrTranslationTextInReportsAllowed": {
+          "const": false
+        },
+        "privateBlindEvaluationCandidateOutputAllowed": {
+          "const": true
+        },
+        "maximumArchiveCompressionRatio": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "maximumSingleExtractedFileBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000000
+        }
+      }
+    },
+    "gateA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "harnessMayDecide",
+        "blocksPocResearch",
+        "blockers"
+      ],
+      "properties": {
+        "status": {
+          "const": "BLOCKED"
+        },
+        "harnessMayDecide": {
+          "const": false
+        },
+        "blocksPocResearch": {
+          "const": false
+        },
+        "blockers": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "$ref": "#/$defs/blocker"
+          }
+        }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "appliesTo",
+        "detail"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "appliesTo": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "executionMode",
+        "python",
+        "ctranslate2",
+        "sentencepiece",
+        "dependencyWheels",
+        "executionTreeStatus",
+        "runtimeSupplySetSha256",
+        "executionTreeSha256",
+        "executionTreeFileCount",
+        "executionTreeBytes",
+        "excludedWheelFileCount",
+        "builderScriptSha256",
+        "translationOptions"
+      ],
+      "properties": {
+        "id": {
+          "const": "argos-direct-ctranslate2-runtime"
+        },
+        "executionMode": {
+          "const": "DIRECT_SENTENCEPIECE_AND_CTRANSLATE2"
+        },
+        "python": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "requiredMajorMinor",
+            "isolatedEnvironmentRequired",
+            "distribution"
+          ],
+          "properties": {
+            "requiredMajorMinor": {
+              "const": "3.13"
+            },
+            "isolatedEnvironmentRequired": {
+              "const": true
+            },
+            "distribution": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "filename",
+                "localPath",
+                "size",
+                "sha256",
+                "url",
+                "spdxUrl"
+              ],
+              "properties": {
+                "filename": {
+                  "const": "python-3.13.10-embed-amd64.zip"
+                },
+                "localPath": {
+                  "$ref": "#/$defs/safePath"
+                },
+                "size": {
+                  "const": 10924998
+                },
+                "sha256": {
+                  "$ref": "#/$defs/sha256"
+                },
+                "url": {
+                  "$ref": "#/$defs/httpsUrl"
+                },
+                "spdxUrl": {
+                  "$ref": "#/$defs/httpsUrl"
+                }
+              }
+            }
+          }
+        },
+        "ctranslate2": {
+          "$ref": "#/$defs/ctranslate2Runtime"
+        },
+        "sentencepiece": {
+          "$ref": "#/$defs/sentencepieceRuntime"
+        },
+        "dependencyWheels": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/runtimeDependency"
+          }
+        },
+        "executionTreeStatus": {
+          "const": "PINNED_CONTROLLED_MATERIALIZATION_V1"
+        },
+        "runtimeSupplySetSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "executionTreeSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "executionTreeFileCount": {
+          "const": 1435
+        },
+        "executionTreeBytes": {
+          "const": 132513327
+        },
+        "excludedWheelFileCount": {
+          "const": 79
+        },
+        "builderScriptSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "translationOptions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "beamSize",
+            "replaceUnknowns",
+            "lengthPenalty",
+            "device"
+          ],
+          "properties": {
+            "beamSize": {
+              "const": 4
+            },
+            "replaceUnknowns": {
+              "const": true
+            },
+            "lengthPenalty": {
+              "const": 0.2
+            },
+            "device": {
+              "const": "cpu"
+            }
+          }
+        }
+      }
+    },
+    "ctranslate2Runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "tag",
+        "tagObjectSha",
+        "commit",
+        "source",
+        "declaredLicenseExpression",
+        "licenseEvidence",
+        "wheel"
+      ],
+      "properties": {
+        "version": {
+          "const": "4.8.1"
+        },
+        "tag": {
+          "const": "v4.8.1"
+        },
+        "tagObjectSha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "commit": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "source": {
+          "const": "https://github.com/OpenNMT/CTranslate2"
+        },
+        "declaredLicenseExpression": {
+          "const": "MIT"
+        },
+        "licenseEvidence": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "wheel": {
+          "$ref": "#/$defs/wheel"
+        }
+      }
+    },
+    "sentencepieceRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "sourceRevision",
+        "source",
+        "declaredLicenseExpression",
+        "licenseEvidence",
+        "wheel"
+      ],
+      "properties": {
+        "version": {
+          "const": "0.2.1"
+        },
+        "sourceRevision": {
+          "const": "v0.2.1"
+        },
+        "source": {
+          "const": "https://github.com/google/sentencepiece"
+        },
+        "declaredLicenseExpression": {
+          "const": "Apache-2.0"
+        },
+        "licenseEvidence": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "wheel": {
+          "$ref": "#/$defs/wheel"
+        }
+      }
+    },
+    "wheel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "localPath",
+        "size",
+        "sha256",
+        "url"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+\\.whl$"
+        },
+        "localPath": {
+          "$ref": "#/$defs/safePath"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        }
+      }
+    },
+    "runtimeDependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "package",
+        "version",
+        "wheel"
+      ],
+      "properties": {
+        "package": {
+          "enum": [
+            "numpy",
+            "PyYAML",
+            "setuptools"
+          ]
+        },
+        "version": {
+          "enum": [
+            "2.2.6",
+            "6.0.3",
+            "80.9.0"
+          ]
+        },
+        "wheel": {
+          "$ref": "#/$defs/wheel"
+        }
+      }
+    },
+    "candidateSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "candidateIds",
+        "runtimeId",
+        "archiveBytes",
+        "archiveUnpackedBytes",
+        "topLevelWheelBytes",
+        "dependencyWheelBytes",
+        "pythonDistributionBytes",
+        "pinnedDownloadBytes",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "const": "argos-opus-en-zh-bidirectional-1.9"
+        },
+        "candidateIds": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "runtimeId": {
+          "const": "argos-direct-ctranslate2-runtime"
+        },
+        "archiveBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "archiveUnpackedBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "topLevelWheelBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "dependencyWheelBytes": {
+          "const": 13966461
+        },
+        "pythonDistributionBytes": {
+          "const": 10924998
+        },
+        "pinnedDownloadBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "const": "BLOCKED_GATE_A"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "route",
+        "indexMetadata",
+        "license",
+        "archive"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^argos-opus-(?:en-zh|zh-en)-1\\.9$"
+        },
+        "route": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "target"
+          ],
+          "properties": {
+            "source": {
+              "enum": [
+                "en",
+                "zh"
+              ]
+            },
+            "target": {
+              "enum": [
+                "en",
+                "zh"
+              ]
+            }
+          }
+        },
+        "indexMetadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "packageVersion",
+            "argosVersion"
+          ],
+          "properties": {
+            "code": {
+              "type": "string",
+              "pattern": "^translate-(?:en_zh|zh_en)$"
+            },
+            "packageVersion": {
+              "const": "1.9"
+            },
+            "argosVersion": {
+              "const": "1.9.0"
+            }
+          }
+        },
+        "license": {
+          "$ref": "#/$defs/modelLicense"
+        },
+        "archive": {
+          "$ref": "#/$defs/archive"
+        }
+      }
+    },
+    "modelLicense": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "expression",
+        "status",
+        "commercialUseConclusion",
+        "packageReadmeObservation"
+      ],
+      "properties": {
+        "expression": {
+          "const": "NOASSERTION"
+        },
+        "status": {
+          "const": "LEGAL_REVIEW_REQUIRED"
+        },
+        "commercialUseConclusion": {
+          "const": "LEGAL_REVIEW_REQUIRED"
+        },
+        "packageReadmeObservation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "statementScope",
+            "observedExpression",
+            "coverageStatus"
+          ],
+          "properties": {
+            "statementScope": {
+              "const": "ORIGINAL_OPUS_MODEL_FROM_WHICH_THE_PACKAGED_MODEL_DERIVES"
+            },
+            "observedExpression": {
+              "const": "CC-BY-4.0"
+            },
+            "coverageStatus": {
+              "const": "LEGAL_REVIEW_REQUIRED"
+            }
+          }
+        }
+      }
+    },
+    "archive": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "localPath",
+        "url",
+        "size",
+        "sha256",
+        "unpackedSize",
+        "extractedFileCount",
+        "extractedTreeSha256",
+        "centralDirectoryEntryCount",
+        "packageRoot",
+        "allowedGeneralPurposeFlags",
+        "allowedCompressionMethods",
+        "requiredFiles",
+        "requiredDirectoryPrefixes",
+        "embeddedFilePins"
+      ],
+      "properties": {
+        "filename": {
+          "type": "string",
+          "pattern": "^translate-(?:en_zh|zh_en)-1_9\\.argosmodel$"
+        },
+        "localPath": {
+          "$ref": "#/$defs/safePath"
+        },
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "unpackedSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "extractedFileCount": {
+          "const": 8
+        },
+        "extractedTreeSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "centralDirectoryEntryCount": {
+          "const": 13
+        },
+        "packageRoot": {
+          "type": "string",
+          "pattern": "^translate-(?:en_zh|zh_en)-1_9/$"
+        },
+        "allowedGeneralPurposeFlags": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              0,
+              8
+            ]
+          }
+        },
+        "allowedCompressionMethods": {
+          "const": [
+            0,
+            8
+          ]
+        },
+        "requiredFiles": {
+          "type": "array",
+          "minItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/safePath"
+          }
+        },
+        "requiredDirectoryPrefixes": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/safePath"
+          }
+        },
+        "embeddedFilePins": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "$ref": "#/$defs/embeddedFilePin"
+          }
+        }
+      }
+    },
+    "embeddedFilePin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "size",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "enum": [
+            "metadata.json",
+            "README.md"
+          ]
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    }
+  }
+}

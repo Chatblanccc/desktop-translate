@@ -35,7 +35,12 @@ export function BallApp({ api }: BallAppProps): JSX.Element {
   };
 
   return (
-    <div className="ball-frame" data-selection-status={selectionStatus}>
+    <div
+      className="ball-frame"
+      data-selection-status={selectionStatus}
+      title="按住上方把手拖动悬浮球"
+    >
+      <span className="ball-drag-handle" aria-hidden="true" />
       <button
         className="ball-button"
         type="button"

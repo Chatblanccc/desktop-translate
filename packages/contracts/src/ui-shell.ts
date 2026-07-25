@@ -59,11 +59,29 @@ export interface TranslationUiState {
   readonly consentVersion: number;
 }
 
-export interface BallAnchor {
+export interface EdgeBallAnchor {
+  /**
+   * Legacy anchors did not include a mode. They remain valid and are
+   * normalized to an explicit edge anchor when loaded from storage.
+   */
+  readonly mode?: "edge";
   readonly displayId: string;
   readonly edge: BallEdge;
   readonly verticalRatio: number;
 }
+
+export interface FreeBallAnchor {
+  readonly mode: "free";
+  readonly displayId: string;
+  readonly horizontalRatio: number;
+  readonly verticalRatio: number;
+}
+
+export type BallAnchor = EdgeBallAnchor | FreeBallAnchor;
+
+export type CanonicalBallAnchor =
+  | (EdgeBallAnchor & { readonly mode: "edge" })
+  | FreeBallAnchor;
 
 export interface UiShellSnapshot {
   readonly version: typeof UI_SHELL_VERSION;
@@ -201,17 +219,46 @@ function isRendererSafeBaiduAppId(value: unknown): value is string {
 }
 
 export function isBallAnchor(value: unknown): value is BallAnchor {
+  if (
+    !isRecord(value) ||
+    typeof value.displayId !== "string" ||
+    value.displayId.length < 1 ||
+    value.displayId.length > 128 ||
+    !isUnitRatio(value.verticalRatio)
+  ) return false;
+
+  if (value.mode === "free") {
+    return (
+      hasOnlyKeys(value, ["mode", "displayId", "horizontalRatio", "verticalRatio"]) &&
+      isUnitRatio(value.horizontalRatio)
+    );
+  }
+
+  const hasMode = Object.prototype.hasOwnProperty.call(value, "mode");
   return (
-    isRecord(value) &&
-    hasOnlyKeys(value, ["displayId", "edge", "verticalRatio"]) &&
-    typeof value.displayId === "string" &&
-    value.displayId.length >= 1 &&
-    value.displayId.length <= 128 &&
-    BALL_EDGES.includes(value.edge as BallEdge) &&
-    typeof value.verticalRatio === "number" &&
-    Number.isFinite(value.verticalRatio) &&
-    value.verticalRatio >= 0 &&
-    value.verticalRatio <= 1
+    (!hasMode || value.mode === "edge") &&
+    hasOnlyKeys(value, ["mode", "displayId", "edge", "verticalRatio"]) &&
+    BALL_EDGES.includes(value.edge as BallEdge)
+  );
+}
+
+export function normalizeBallAnchor(value: BallAnchor): CanonicalBallAnchor {
+  return value.mode === "free"
+    ? value
+    : {
+        mode: "edge",
+        displayId: value.displayId,
+        edge: value.edge,
+        verticalRatio: value.verticalRatio,
+      };
+}
+
+function isUnitRatio(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
   );
 }
 

@@ -218,6 +218,7 @@ const mocks = vi.hoisted(() => {
       this.settings = undefined;
       this.card = undefined;
     });
+    public readonly stopBallMoveTracking = vi.fn(() => this.getBallBounds());
     public readonly resolveRole = vi.fn(() => 'ball' as const);
     public ball: ReturnType<typeof makeBrowserWindow> | undefined;
     public settings: ReturnType<typeof makeBrowserWindow> | undefined;
@@ -757,6 +758,58 @@ describe('ShellController', () => {
     expect(windows.dispose).toHaveBeenCalledOnce();
   });
 
+  it('freezes Ball move intake and drains the final bounds before closing storage', async () => {
+    mocks.settingsState.loadResult.ball = {
+      visible: true,
+      edgeSnap: false,
+      anchor: {
+        mode: 'free',
+        displayId: '1',
+        horizontalRatio: 0.25,
+        verticalRatio: 0.25
+      }
+    };
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+    const windows = latestWindows();
+    const settings = latestSettings();
+    const database = mocks.FakeDatabaseSync.instances.at(-1);
+    windows.setBallBounds({ x: 600, y: 400, width: 56, height: 56 });
+    expect(settings.setBallAnchor).not.toHaveBeenCalled();
+
+    let releaseWrite!: () => void;
+    const writeGate = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    settings.setBallAnchor.mockImplementationOnce(async () => writeGate);
+    const disposal = controller.dispose();
+    try {
+      await vi.waitFor(() => {
+        expect(windows.stopBallMoveTracking).toHaveBeenCalledOnce();
+        expect(settings.setBallAnchor).toHaveBeenCalledOnce();
+      });
+      expect(settings.setBallAnchor).toHaveBeenCalledWith({
+        mode: 'free',
+        displayId: '1',
+        horizontalRatio: expect.any(Number),
+        verticalRatio: expect.any(Number)
+      });
+      expect(database?.close).not.toHaveBeenCalled();
+
+      // A queued or late native `moved` notification after intake was frozen
+      // must not append another write behind the tail captured by dispose.
+      windows.options.onBallMoved({ x: 900, y: 700, width: 56, height: 56 });
+      await flushAsyncWork();
+      expect(settings.setBallAnchor).toHaveBeenCalledOnce();
+      expect(database?.close).not.toHaveBeenCalled();
+    } finally {
+      releaseWrite();
+      await disposal;
+    }
+    expect(database?.close).toHaveBeenCalledOnce();
+    expect(windows.dispose).toHaveBeenCalledOnce();
+  });
+
   it('starts the secure shell once and remains available without a Native Host', async () => {
     const requestQuit = vi.fn();
     const controller = new ShellController({ requestQuit });
@@ -858,7 +911,7 @@ describe('ShellController', () => {
     expect(mocks.screen.getDisplayNearestPoint).toHaveBeenCalledWith({ x: -640, y: 400 });
     expect(latestSettings().setBallAnchor).toHaveBeenCalledOnce();
     expect(latestSettings().setBallAnchor).toHaveBeenCalledWith({
-      displayId: '2', edge: 'right', verticalRatio: 0.6
+      mode: 'edge', displayId: '2', edge: 'right', verticalRatio: 0.6
     });
     expect(latestWindows().options.initialBallBounds).toEqual({
       x: -68, y: 554, width: 56, height: 56
@@ -867,7 +920,7 @@ describe('ShellController', () => {
     expect(latestSettings().setBallVisible).not.toHaveBeenCalled();
     expect(controller.getDebugState().snapshot.ball).toMatchObject({
       visible: true,
-      anchor: { displayId: '2', edge: 'right', verticalRatio: 0.6 }
+      anchor: { mode: 'edge', displayId: '2', edge: 'right', verticalRatio: 0.6 }
     });
   });
 
@@ -884,7 +937,7 @@ describe('ShellController', () => {
     expect(latestWindows().start).toHaveBeenCalledOnce();
     expect(latestWindows().options.initialBallVisible).toBe(true);
     expect(controller.getDebugState().snapshot.ball.anchor).toEqual({
-      displayId: '1', edge: 'right', verticalRatio: 0.6
+      mode: 'edge', displayId: '1', edge: 'right', verticalRatio: 0.6
     });
     warning.mockRestore();
   });
@@ -925,7 +978,7 @@ describe('ShellController', () => {
     expect(mocks.screen.getDisplayNearestPoint).toHaveBeenCalledWith({ x: -900, y: 300 });
     expect(settings.setBallAnchor).toHaveBeenCalledOnce();
     expect(settings.setBallAnchor).toHaveBeenCalledWith({
-      displayId: '2', edge: 'right', verticalRatio: 0.6
+      mode: 'edge', displayId: '2', edge: 'right', verticalRatio: 0.6
     });
     expect(windows.setBallBounds).toHaveBeenLastCalledWith({
       x: -68, y: 554, width: 56, height: 56
@@ -933,7 +986,7 @@ describe('ShellController', () => {
     expect(settings.setBallVisible).not.toHaveBeenCalled();
     expect(controller.getDebugState().snapshot.ball).toMatchObject({
       visible: false,
-      anchor: { displayId: '2', edge: 'right', verticalRatio: 0.6 }
+      anchor: { mode: 'edge', displayId: '2', edge: 'right', verticalRatio: 0.6 }
     });
     expect(controller.getDebugState().ballVisible).toBe(false);
   });
@@ -973,10 +1026,175 @@ describe('ShellController', () => {
 
     await controller.resetBallPosition();
     expect(settings.setBallAnchor).toHaveBeenLastCalledWith({
-      displayId: '1', edge: 'right', verticalRatio: 0.6
+      mode: 'edge', displayId: '1', edge: 'right', verticalRatio: 0.6
     });
     expect(windows.setBallBounds).toHaveBeenCalled();
   });
+
+  it('persists a free move and restores both axes after a complete restart', async () => {
+    mocks.settingsState.loadResult.ball = {
+      visible: true,
+      edgeSnap: false,
+      anchor: {
+        mode: 'free',
+        displayId: '1',
+        horizontalRatio: 1,
+        verticalRatio: 0.6
+      }
+    };
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+
+    latestWindows().options.onBallMoved({ x: 700, y: 300, width: 56, height: 56 });
+    await vi.waitFor(() => expect(latestSettings().setBallAnchor).toHaveBeenCalledOnce());
+    const savedAnchor = latestSettings().setBallAnchor.mock.calls[0]?.[0];
+    expect(savedAnchor).toEqual({
+      mode: 'free',
+      displayId: '1',
+      horizontalRatio: (700 - 12) / (1920 - 56 - 24),
+      verticalRatio: (300 - 12) / (1032 - 56 - 24)
+    });
+    if (savedAnchor === undefined) throw new Error('Expected the free anchor to be persisted');
+
+    await controller.dispose();
+    mocks.settingsState.loadResult.ball = {
+      visible: true,
+      edgeSnap: false,
+      anchor: savedAnchor
+    };
+    const restarted = new ShellController({ requestQuit: vi.fn() });
+    await restarted.start();
+
+    expect(latestWindows().options.initialBallBounds).toEqual({
+      x: 700,
+      y: 300,
+      width: 56,
+      height: 56
+    });
+    expect(latestSettings().setBallAnchor).not.toHaveBeenCalled();
+    await restarted.dispose();
+  });
+
+  it('normalizes a split free-to-snap write fail-safe after a complete restart', async () => {
+    const staleFreeAnchor: BallAnchor = {
+      mode: 'free',
+      displayId: '1',
+      horizontalRatio: 0.75,
+      verticalRatio: 0.25
+    };
+    mocks.settingsState.loadResult.ball = {
+      visible: true,
+      edgeSnap: false,
+      anchor: staleFreeAnchor
+    };
+    const controller = new ShellController({ requestQuit: vi.fn() });
+    await controller.start();
+
+    mocks.settingsState.rejectAnchor = true;
+    await expect(controller.setEdgeSnap(true)).rejects.toThrow(/anchor write failed/u);
+    expect(controller.getDebugState()).toMatchObject({
+      snapshot: {
+        ball: {
+          edgeSnap: true,
+          anchor: {
+            mode: 'edge',
+            displayId: '1',
+            edge: 'right',
+            verticalRatio: 0.25
+          }
+        }
+      },
+      ballBounds: { x: 1852, y: 250, width: 56, height: 56 }
+    });
+    await controller.dispose();
+
+    // setEdgeSnap committed but its separate anchor write did not: reproduce
+    // the exact durable state loaded by a new application process.
+    mocks.settingsState.loadResult.ball = {
+      visible: true,
+      edgeSnap: true,
+      anchor: staleFreeAnchor
+    };
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const restarted = new ShellController({ requestQuit: vi.fn() });
+    await expect(restarted.start()).resolves.toBeUndefined();
+
+    expect(warning).toHaveBeenCalledWith(
+      '[phase2:display] Failed to persist the normalized ball position.'
+    );
+    expect(latestSettings().setBallAnchor).toHaveBeenCalledWith({
+      mode: 'edge',
+      displayId: '1',
+      edge: 'right',
+      verticalRatio: 0.25
+    });
+    expect(latestWindows().options.initialBallBounds).toEqual({
+      x: 1852,
+      y: 250,
+      width: 56,
+      height: 56
+    });
+    expect(restarted.getDebugState().snapshot.ball).toEqual({
+      visible: true,
+      edgeSnap: true,
+      anchor: {
+        mode: 'edge',
+        displayId: '1',
+        edge: 'right',
+        verticalRatio: 0.25
+      }
+    });
+    warning.mockRestore();
+    await restarted.dispose();
+  });
+
+  it.each([
+    [
+      'edge',
+      true,
+      { mode: 'edge', displayId: 'removed', edge: 'left', verticalRatio: 0.25 },
+      { mode: 'edge', displayId: '1', edge: 'left', verticalRatio: 0.25 }
+    ],
+    [
+      'free',
+      false,
+      {
+        mode: 'free',
+        displayId: 'removed',
+        horizontalRatio: 0.4,
+        verticalRatio: 0.75
+      },
+      {
+        mode: 'free',
+        displayId: '1',
+        horizontalRatio: expect.any(Number),
+        verticalRatio: expect.any(Number)
+      }
+    ]
+  ] as const)(
+    'repairs a %s anchor whose display disappeared while the application was closed',
+    async (_label, edgeSnap, anchor, expectedAnchor) => {
+      mocks.settingsState.loadResult.ball = {
+        visible: true,
+        edgeSnap,
+        anchor
+      };
+      const controller = new ShellController({ requestQuit: vi.fn() });
+      await controller.start();
+
+      expect(latestSettings().setBallAnchor).toHaveBeenCalledWith(expectedAnchor);
+      expect(controller.getDebugState().snapshot.ball.anchor).toEqual(expectedAnchor);
+      expect(latestWindows().options.initialBallBounds).toEqual(
+        expect.objectContaining({
+          x: expect.any(Number),
+          y: expect.any(Number),
+          width: 56,
+          height: 56
+        })
+      );
+      await controller.dispose();
+    }
+  );
 
   it('keeps online translation fail-closed and manages encrypted BYOK consent', async () => {
     mocks.settingsState.loadResult.translation = {

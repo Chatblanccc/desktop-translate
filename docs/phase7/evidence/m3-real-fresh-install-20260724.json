@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "status": "DEVELOPMENT PASS WITH OPEN ACCEPTANCE GAPS",
+  "recordedAtLocalDate": "2026-07-24",
+  "candidate": {
+    "path": "artifacts/phase5/package/dist/Desktop-Translate-0.5.0-phase5-x64-setup.exe",
+    "sizeBytes": 130639803,
+    "sha256": "031968d94e2f0b73a2bffae38843806881940d919e10842ac76f31bb0906eaab",
+    "authenticodeStatus": "NotSigned",
+    "sourceIdentity": "HEAD+WORKTREE:9dc2086ba44b7048fbd6d7b7b91e8549e71e4d44003488822277cfad96547a3e",
+    "formalPackageEvidence": "artifacts/phase5/d117e4b1b4989157826aad1febc59bf49ee17539/local-20260724T0948490501384Z-191f9979946b4a6d91f686f7583073d6",
+    "releaseStatus": "RELEASE BLOCKED"
+  },
+  "environment": {
+    "os": "Microsoft Windows 11 Pro",
+    "version": "10.0.26200",
+    "build": "26200",
+    "architecture": "x64",
+    "user": "<REDACTED_HOST>\\<REDACTED_USER>",
+    "isAdministrator": false,
+    "integrityLevel": "Medium"
+  },
+  "launchBoundary": {
+    "acceptedLauncher": "Windows Shell broker",
+    "rejectedEvidencePath": "Direct child launch from the Codex packaged app",
+    "reason": "The direct child path used Windows packaged-app filesystem and registry virtualization."
+  },
+  "observedUiFlow": [
+    "The assisted directory page was displayed.",
+    "<USERPROFILE>\\Desktop was selected as the parent directory.",
+    "The installer resolved the exact application root to <USERPROFILE>\\Desktop\\desktop-translate.",
+    "The completion page reported that installation succeeded."
+  ],
+  "postInstallSnapshot": {
+    "installRoot": "<USERPROFILE>\\Desktop\\desktop-translate",
+    "appExists": true,
+    "uninstallerExists": true,
+    "stableMarkerPath": "<USERPROFILE>\\Desktop\\desktop-translate\\.desktop-translate-install-root-v1",
+    "stableMarkerContent": "DesktopTranslate.InstallRoot.v1|5baab977-0efe-5c82-9f9c-b3786aa388e3",
+    "productRegistryKey": "HKCU\\Software\\5baab977-0efe-5c82-9f9c-b3786aa388e3",
+    "installLocation": "<USERPROFILE>\\Desktop\\desktop-translate",
+    "keepShortcuts": "true",
+    "shortcutName": "Desktop Translate",
+    "appsAndFeaturesRegistryKey": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\5baab977-0efe-5c82-9f9c-b3786aa388e3",
+    "uninstallString": "\"<USERPROFILE>\\Desktop\\desktop-translate\\Uninstall desktop-translate.exe\" /currentuser",
+    "quietUninstallString": "\"<USERPROFILE>\\Desktop\\desktop-translate\\Uninstall desktop-translate.exe\" /currentuser /S",
+    "startMenuShortcutExists": true,
+    "exactInstalledRootProcessCountAfterDiagnosticCleanup": 0
+  },
+  "notProven": [
+    "Default, space-containing, Chinese, D:, E:, protected, and unwritable directory cases",
+    "Registered same-version rerun or upgrade",
+    "Normal and quiet uninstall, reinstall, and userData retention",
+    "Normal Chromium-sandbox installed-app rendering in this Codex environment",
+    "Physical mouse and physical touchpad drag",
+    "Authenticode, clean VM, and release acceptance"
+  ]
+}

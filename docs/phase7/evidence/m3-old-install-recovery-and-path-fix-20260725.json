@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "recordedAtLocalDate": "2026-07-25",
+  "status": "OLD INSTALLATION RECOVERY REMOVAL PASS; TRANSACTION PATH FIX DEVELOPMENT PASS; RELEASE BLOCKED",
+  "source": {
+    "branch": "codex/phase7-first-beta",
+    "headSha": "d117e4b1b4989157826aad1febc59bf49ee17539",
+    "installerIncludeNormalizedSha256": "fb9cbc194376da19f3995fee9c6a3ba905beafb5f2d2212f5e077572df4a0ddd",
+    "developmentDirty": true,
+    "candidateBuiltOrRunAfterFix": false
+  },
+  "initialHostState": {
+    "installRoot": "<USERPROFILE>\\Desktop\\desktop-translate",
+    "installRootExists": true,
+    "installRootEntryCount": 23,
+    "stableMarkerContent": "DesktopTranslate.InstallRoot.v1|5baab977-0efe-5c82-9f9c-b3786aa388e3",
+    "appSha256": "FC6B79965CB611B376B70B737E86163423F2085F14EE56ABF53FCCC01C04401F",
+    "uninstallerSha256": "B3175374467A6A734547D1E002B7EF0BB3B4B08BBFAD5560970755DFBE62D456",
+    "markerSha256": "E310533FBF802E73F5C5CE24F0687A5FF7969DAF591F9E1280B9D14BCD402B6D",
+    "rootOrDescendantReparseCount": 0,
+    "stageSiblingCount": 0,
+    "installedRootProcessCount": 0,
+    "productRegistryKeyExists": false,
+    "appsAndFeaturesRegistryKeyExists": false,
+    "transactionRegistryKeyExists": false,
+    "backupRegistryKeyExists": false,
+    "startMenuShortcutTarget": "<USERPROFILE>\\Desktop\\desktop-translate\\desktop-translate.exe"
+  },
+  "registryRecovery": {
+    "sourceEvidence": "docs/phase7/evidence/m3-real-fresh-install-20260724.json",
+    "restoredExactValues": {
+      "InstallLocation": "<USERPROFILE>\\Desktop\\desktop-translate",
+      "KeepShortcuts": "true",
+      "ShortcutName": "Desktop Translate",
+      "UninstallString": "\"<USERPROFILE>\\Desktop\\desktop-translate\\Uninstall desktop-translate.exe\" /currentuser",
+      "QuietUninstallString": "\"<USERPROFILE>\\Desktop\\desktop-translate\\Uninstall desktop-translate.exe\" /currentuser /S"
+    },
+    "readbackMatched": true
+  },
+  "oldUninstallerAttempt": {
+    "launchBoundary": "existing Windows Explorer window and Windows Shell",
+    "welcomePageObserved": true,
+    "nextButtonStartedUninstallWithoutASecondConfirmationPage": true,
+    "result": "FAILED BEFORE ROOT STAGING",
+    "exactError": "The Phase 7 uninstall transaction paths are invalid.",
+    "rootRemainedIntact": true,
+    "stageSiblingCount": 0,
+    "transactionRegistryKeyExists": false,
+    "backupRegistryKeyExists": false,
+    "registryIdentityAfterFailure": "absent",
+    "registryIdentityDisappearanceAttribution": "UNRESOLVED; static call-graph review does not attribute deletion to the transaction-path failure branch"
+  },
+  "recoveryRemoval": {
+    "authorization": "user explicitly requested removal of the old version",
+    "preconditionsRechecked": [
+      "exact resolved install root and exact application leaf",
+      "stable marker content",
+      "known root entries",
+      "no root or descendant reparse points",
+      "no exact installed-root process",
+      "exact Start Menu shortcut target"
+    ],
+    "method": "Microsoft.VisualBasic.FileIO.FileSystem moved the exact install root and exact shortcut to the Windows Recycle Bin",
+    "recoverableFromRecycleBin": true,
+    "postState": {
+      "installRootExists": false,
+      "startMenuShortcutExists": false,
+      "productRegistryKeyExists": false,
+      "appsAndFeaturesRegistryKeyExists": false,
+      "transactionRegistryKeyExists": false,
+      "backupRegistryKeyExists": false,
+      "stageSiblingCount": 0,
+      "installedRootProcessCount": 0
+    },
+    "userData": {
+      "path": "<USERPROFILE>\\AppData\\Roaming\\@desktop-translate\\desktop\\desktop-translate.sqlite3",
+      "exists": true,
+      "sha256Before": "C271733515016181C06EBDC011E96BFA6223F1F24AB9B0625BA3C11B44A45420",
+      "sha256After": "C271733515016181C06EBDC011E96BFA6223F1F24AB9B0625BA3C11B44A45420"
+    },
+    "retainedByDesign": [
+      "<USERPROFILE>\\AppData\\Local\\@desktop-translatedesktop-updater\\installer.exe"
+    ]
+  },
+  "rootCauseAndFix": {
+    "rootCause": "NSIS GetFullPathName returns an empty result for a path whose final directory does not exist. Both stage preparation and transaction validation canonicalized the intentionally absent random staging root.",
+    "affectedValidWindows": [
+      "prepared: source present, stage absent",
+      "staged or rollback: source absent, stage present",
+      "committed cleanup: source absent, stage absent while their parent remains"
+    ],
+    "fix": [
+      "bind transaction source to the verified registered path",
+      "canonicalize only the existing common parent",
+      "reconstruct and compare the exact source and stage leaves",
+      "handle a direct drive-root parent without C: current-directory semantics",
+      "forbid direct canonicalization of a transaction root that may be absent"
+    ]
+  },
+  "verification": {
+    "transactionPathRuntimeProbe": {
+      "command": "pnpm phase7:installer-transaction-path:selftest",
+      "makensisVersion": "v3.04",
+      "validatorSource": "exact macro extracted from apps/desktop/build/installer.nsh",
+      "validStateCount": 4,
+      "rejectedStateCount": 11,
+      "probeSha256": "2439E154C1C380BA6F472DC973F1020E3162092F1D68F1D523954D2A4845DFD9",
+      "probeBytes": 48668,
+      "exitCode": 0
+    },
+    "atomicDirectoryRuntimeProbe": {
+      "command": "pnpm phase7:installer-atomic-directory:selftest",
+      "probeSha256": "18210E7E35736BCA2B966C9F1EDDD3F82FD7819A820825E87B76826F91877D88",
+      "probeBytes": 48202,
+      "exitCode": 0,
+      "tempLeakCount": 0
+    },
+    "electronBuilderPolicy": "PASS",
+    "installerCompileChainTests": "6/6 PASS",
+    "releaseEvidenceNegativeSelftest": "PASS",
+    "releaseHardeningSelftest": "PASS",
+    "releaseStatus": "BLOCKED; no signed candidate was produced"
+  },
+  "notProven": [
+    "the writer that removed the restored registry identity during the old-uninstaller attempt",
+    "ordinary or quiet uninstall completed by an installer-produced uninstaller",
+    "a newly built candidate install or registered upgrade after this source fix",
+    "clean VM, Authenticode, or release acceptance"
+  ]
+}

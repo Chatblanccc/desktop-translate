@@ -1,0 +1,579 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-offline-poc-candidates-v1.json",
+  "title": "Desktop Translate Phase 7 offline POC candidate manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "metadataSnapshot",
+    "policy",
+    "gateA",
+    "runtime",
+    "toolchain",
+    "candidateSets",
+    "candidates"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "const": "phase7-offline-poc-candidates-v1"
+    },
+    "metadataSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capturedAt",
+        "networkScope",
+        "userAgent"
+      ],
+      "properties": {
+        "capturedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "networkScope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "userAgent": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "defaultNetworkAccess",
+        "largeDownloadsRequirePocAuthorization",
+        "pocAuthorizationScope",
+        "gateARequiredForPocResearch",
+        "artifactRoot",
+        "conversionQuantization",
+        "conversionTrustRemoteCode",
+        "benchmarkDevice",
+        "benchmarkInterThreads",
+        "benchmarkIntraThreads",
+        "benchmarkBeamSize",
+        "measurementSchema"
+      ],
+      "properties": {
+        "defaultNetworkAccess": {
+          "const": false
+        },
+        "largeDownloadsRequirePocAuthorization": {
+          "const": true
+        },
+        "pocAuthorizationScope": {
+          "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+        },
+        "gateARequiredForPocResearch": {
+          "const": false
+        },
+        "artifactRoot": {
+          "const": "artifacts/phase7/offline-poc"
+        },
+        "conversionQuantization": {
+          "const": "int8"
+        },
+        "conversionTrustRemoteCode": {
+          "const": false
+        },
+        "benchmarkDevice": {
+          "const": "cpu"
+        },
+        "benchmarkInterThreads": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "benchmarkIntraThreads": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "benchmarkBeamSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "measurementSchema": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "gateA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "decisionAuthority",
+        "harnessMayDecide",
+        "blocksPocResearch",
+        "requiredInput",
+        "blockers"
+      ],
+      "properties": {
+        "status": {
+          "const": "BLOCKED"
+        },
+        "decisionAuthority": {
+          "type": "string",
+          "minLength": 1
+        },
+        "harnessMayDecide": {
+          "const": false
+        },
+        "blocksPocResearch": {
+          "const": false
+        },
+        "requiredInput": {
+          "type": "string",
+          "minLength": 1
+        },
+        "blockers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/blocker"
+          }
+        }
+      }
+    },
+    "runtime": {
+      "$ref": "#/$defs/runtime"
+    },
+    "toolchain": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/tool"
+      }
+    },
+    "candidateSets": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "$ref": "#/$defs/candidateSet"
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 3,
+      "items": {
+        "$ref": "#/$defs/candidate"
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "license": {
+      "type": "object",
+      "required": [
+        "expression",
+        "evidence"
+      ],
+      "properties": {
+        "expression": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observedMetadata": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observedMetadataExpression": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "const": "UNRESOLVED"
+        },
+        "evidence": {
+          "type": "string",
+          "format": "uri"
+        },
+        "upstreamLicenseEvidence": {
+          "type": "string",
+          "format": "uri"
+        },
+        "commercialUseConclusion": {
+          "const": "NOT_ESTABLISHED"
+        },
+        "requiresGateAForIntegration": {
+          "type": "boolean"
+        }
+      }
+    },
+    "wheel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "filename",
+        "size",
+        "sha256",
+        "url"
+      ],
+      "properties": {
+        "pythonAbi": {
+          "type": "string"
+        },
+        "platform": {
+          "type": "string"
+        },
+        "filename": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^https://files\\.pythonhosted\\.org/"
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "source",
+        "release",
+        "tag",
+        "tagObjectSha",
+        "commit",
+        "license",
+        "windowsWheel"
+      ],
+      "properties": {
+        "id": {
+          "const": "ctranslate2"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
+        "source": {
+          "type": "string",
+          "format": "uri"
+        },
+        "release": {
+          "type": "string",
+          "format": "uri"
+        },
+        "tag": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tagObjectSha": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "commit": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "license": {
+          "$ref": "#/$defs/license"
+        },
+        "windowsWheel": {
+          "$ref": "#/$defs/wheel"
+        }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "license",
+        "wheel"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "license": {
+          "$ref": "#/$defs/license"
+        },
+        "wheel": {
+          "$ref": "#/$defs/wheel"
+        }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "appliesTo",
+        "detail"
+      ],
+      "properties": {
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "appliesTo": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "detail": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      }
+    },
+    "candidateSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "priority",
+        "strategy",
+        "candidateIds",
+        "licenseExpressions",
+        "observedMetadataExpressions",
+        "licenseConsistency",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "strategy": {
+          "type": "string",
+          "minLength": 1
+        },
+        "candidateIds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "licenseExpressions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "observedMetadataExpressions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "licenseConsistency": {
+          "enum": [
+            "UNRESOLVED_CONFLICT",
+            "UNRESOLVED_SCOPE"
+          ]
+        },
+        "status": {
+          "const": "BLOCKED_GATE_A"
+        }
+      }
+    },
+    "sourceFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "size",
+        "digestAlgorithm",
+        "digest",
+        "purpose"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._/-]+$"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "digestAlgorithm": {
+          "enum": [
+            "sha256",
+            "git-blob-sha1"
+          ]
+        },
+        "digest": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$"
+        },
+        "purpose": {
+          "enum": [
+            "license-evidence",
+            "conversion",
+            "provenance",
+            "conversion-pickle-weight",
+            "tokenizer"
+          ]
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "role",
+        "architecture",
+        "repository",
+        "revision",
+        "lastModified",
+        "gated",
+        "routes",
+        "license",
+        "modelCard",
+        "sourceFiles",
+        "conversion"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "enum": [
+            "MarianMT",
+            "M2M100"
+          ]
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+        },
+        "revision": {
+          "$ref": "#/$defs/gitSha"
+        },
+        "lastModified": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "gated": {
+          "const": false
+        },
+        "routes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "target"
+            ],
+            "properties": {
+              "source": {
+                "enum": [
+                  "en",
+                  "zh"
+                ]
+              },
+              "target": {
+                "enum": [
+                  "en",
+                  "zh"
+                ]
+              }
+            }
+          }
+        },
+        "license": {
+          "$ref": "#/$defs/license"
+        },
+        "modelCard": {
+          "type": "string",
+          "format": "uri"
+        },
+        "sourceFiles": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/sourceFile"
+          }
+        },
+        "conversion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "converter",
+            "quantization",
+            "trustRemoteCode",
+            "copyFiles"
+          ],
+          "properties": {
+            "converter": {
+              "const": "ctranslate2.converters.TransformersConverter"
+            },
+            "quantization": {
+              "const": "int8"
+            },
+            "trustRemoteCode": {
+              "const": false
+            },
+            "copyFiles": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

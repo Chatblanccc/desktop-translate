@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "recordedAtLocalDate": "2026-07-25",
+  "status": "CURRENT-USER DEFAULT INTERACTIVE AND QUIET UNINSTALL DEVELOPMENT PASS; RELEASE BLOCKED",
+  "source": {
+    "branch": "codex/phase7-first-beta",
+    "headSha": "d117e4b1b4989157826aad1febc59bf49ee17539",
+    "workspaceIdentity": "HEAD+WORKTREE:f75885a3d738dbfc7f5cc46a697366bf55bf49dab5aea26d0c3bef6f0dd406ee",
+    "developmentDirty": true,
+    "installerIncludeSha256": "313c6e1231b35c986ff168d4985c77145e3c90bb8a2bdbf5d66750baf9b711e4",
+    "appBuilderPatchSha256": "e506aad9c1ae833d706cd54dd20da67ec94176bdcdf30f01a300092a0043e357"
+  },
+  "candidate": {
+    "path": "artifacts/phase5/package/dist/Desktop-Translate-0.5.0-phase5-x64-setup.exe",
+    "sizeBytes": 130653975,
+    "sha256": "2912d3cc60aa521ee71a92bccacf51713f96cf41eff5000cea08cb714b69bae9",
+    "authenticodeStatus": "NotSigned",
+    "formalPackageEvidence": "artifacts/phase5/d117e4b1b4989157826aad1febc59bf49ee17539/local-20260725T0832514101253Z-421dbd1aea3d4f5d8e0dd1cfa6c4b339",
+    "packagePipelineExitCode": 0,
+    "embeddedCurrentUninstallerCompileChain": "PASS"
+  },
+  "preTestRecovery": {
+    "reason": "two same-product orphan roots existed while both canonical CurrentUser registry keys were absent",
+    "rootsMovedToRecycleBin": [
+      "<USERPROFILE>\\Desktop\\desktop-translate",
+      "<USERPROFILE>\\AppData\\Local\\Programs\\desktop-translate"
+    ],
+    "preconditions": {
+      "stableMarkersMatched": true,
+      "rootOrDescendantReparseCount": 0,
+      "productProcessCount": 0,
+      "canonicalRegistryKeysAbsent": true
+    },
+    "recoverableFromRecycleBin": true,
+    "userDataWasNotARecoveryTarget": true
+  },
+  "launchBoundary": {
+    "discardedPath": "Computer Use direct child launch from the Codex packaged app",
+    "discardedObservation": "application files and stable marker appeared, but canonical registry identity was unavailable to the host user after the virtualized child ended",
+    "reasonDiscarded": "this environment is already recorded as using packaged-app filesystem and registry virtualization and is not accepted as host install evidence",
+    "acceptedPath": "ordinary current-user host process launched with Start-Process; no elevation; /S /currentuser",
+    "acceptedInteractivePath": "ordinary Windows Shell broker launch via explorer.exe; installer and installed uninstaller controlled only after their normal process-backed windows appeared",
+    "acceptedRegistryVisibility": "canonical host HKCU"
+  },
+  "install": {
+    "cyclesCompleted": 2,
+    "installerExitCode": 0,
+    "installRoot": "<USERPROFILE>\\AppData\\Local\\Programs\\desktop-translate",
+    "rootExistsAfterInstall": true,
+    "rootOrDescendantReparseCount": 0,
+    "stableMarker": "DesktopTranslate.InstallRoot.v1|5baab977-0efe-5c82-9f9c-b3786aa388e3",
+    "productRegistry": {
+      "key": "HKCU\\Software\\5baab977-0efe-5c82-9f9c-b3786aa388e3",
+      "firstObservedMilliseconds": 732,
+      "InstallLocation": "<USERPROFILE>\\AppData\\Local\\Programs\\desktop-translate",
+      "KeepShortcuts": "true",
+      "ShortcutName": "Desktop Translate"
+    },
+    "appsAndFeaturesRegistry": {
+      "key": "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\5baab977-0efe-5c82-9f9c-b3786aa388e3",
+      "firstObservedMilliseconds": 4200,
+      "DisplayName": "Desktop Translate",
+      "DisplayVersion": "0.5.0-phase5",
+      "UninstallString": "\"<USERPROFILE>\\AppData\\Local\\Programs\\desktop-translate\\Uninstall desktop-translate.exe\" /currentuser",
+      "QuietUninstallString": "\"<USERPROFILE>\\AppData\\Local\\Programs\\desktop-translate\\Uninstall desktop-translate.exe\" /currentuser /S"
+    },
+    "installedUninstaller": {
+      "sizeBytes": 203933,
+      "sha256": "68eb7ae43bb22ce920b5a2d19810ae6b3e2e954fe1021ae20cf49e194d93040a"
+    }
+  },
+  "quietUninstall": {
+    "cyclesCompleted": 2,
+    "arguments": [
+      "/currentuser",
+      "/S"
+    ],
+    "originalUninstallerExitCode": 0,
+    "exactSecondCycleTimeline": [
+      {
+        "milliseconds": 0,
+        "productRegistry": true,
+        "appsAndFeaturesRegistry": true,
+        "transactionRegistry": false,
+        "backupRegistry": false,
+        "sourceRoot": true,
+        "stageCount": 0
+      },
+      {
+        "milliseconds": 1720,
+        "productRegistry": true,
+        "appsAndFeaturesRegistry": true,
+        "transactionRegistry": true,
+        "backupRegistry": false,
+        "sourceRoot": false,
+        "stageCount": 1
+      },
+      {
+        "milliseconds": 2314,
+        "productRegistry": true,
+        "appsAndFeaturesRegistry": true,
+        "transactionRegistry": true,
+        "backupRegistry": true,
+        "sourceRoot": false,
+        "stageCount": 1
+      },
+      {
+        "milliseconds": 2327,
+        "productRegistry": false,
+        "appsAndFeaturesRegistry": false,
+        "transactionRegistry": true,
+        "backupRegistry": true,
+        "sourceRoot": false,
+        "stageCount": 1
+      },
+      {
+        "milliseconds": 2521,
+        "productRegistry": false,
+        "appsAndFeaturesRegistry": false,
+        "transactionRegistry": true,
+        "backupRegistry": false,
+        "sourceRoot": false,
+        "stageCount": 0
+      },
+      {
+        "milliseconds": 2667,
+        "productRegistry": false,
+        "appsAndFeaturesRegistry": false,
+        "transactionRegistry": false,
+        "backupRegistry": false,
+        "sourceRoot": false,
+        "stageCount": 0
+      }
+    ],
+    "finalState": {
+      "installRootExists": false,
+      "desktopOrphanRootExists": false,
+      "productRegistryKeyExists": false,
+      "appsAndFeaturesRegistryKeyExists": false,
+      "registryWriteProbeKeyCount": 0,
+      "transactionOrClaimKeyCount": 0,
+      "backupRegistryKeyExists": false,
+      "stageCount": 0,
+      "startMenuShortcutExists": false,
+      "desktopShortcutExists": false,
+      "productProcessCount": 0
+    }
+  },
+  "ordinaryInteractiveUninstall": {
+    "cyclesCompleted": 1,
+    "installerLaunch": "explorer.exe shell broker opened the exact candidate",
+    "installerWindow": {
+      "title": "Desktop Translate 安装",
+      "installAction": "Alt+I on the accessible 安装(I) button",
+      "completionText": "Desktop Translate 已安装在你的系统。 单击 [完成(F)] 关闭此向导。"
+    },
+    "hostIdentityWhileInstallerCompletionWasOpen": {
+      "installRootExists": true,
+      "stableMarker": "DesktopTranslate.InstallRoot.v1|5baab977-0efe-5c82-9f9c-b3786aa388e3",
+      "rootOrDescendantReparseCount": 0,
+      "productRegistryKeyExists": true,
+      "appsAndFeaturesRegistryKeyExists": true,
+      "InstallLocation": "<USERPROFILE>\\AppData\\Local\\Programs\\desktop-translate",
+      "KeepShortcuts": "true",
+      "ShortcutName": "Desktop Translate",
+      "DisplayName": "Desktop Translate",
+      "DisplayVersion": "0.5.0-phase5",
+      "UninstallString": "\"<USERPROFILE>\\AppData\\Local\\Programs\\desktop-translate\\Uninstall desktop-translate.exe\" /currentuser",
+      "QuietUninstallString": "\"<USERPROFILE>\\AppData\\Local\\Programs\\desktop-translate\\Uninstall desktop-translate.exe\" /currentuser /S",
+      "installedUninstallerSizeBytes": 203933,
+      "installedUninstallerSha256": "68eb7ae43bb22ce920b5a2d19810ae6b3e2e954fe1021ae20cf49e194d93040a"
+    },
+    "uninstallerLaunch": "explorer.exe shell broker opened the installed uninstaller",
+    "tempSelfCopy": {
+      "observedProcessImage": "C:\\Users\\CHATBL~1\\AppData\\Local\\Temp\\~nsu.tmp\\Un_A.exe",
+      "normalizedFilePath": "<USERPROFILE>\\AppData\\Local\\Temp\\~nsu.tmp\\Un_A.exe",
+      "sizeBytes": 203933,
+      "sha256": "68eb7ae43bb22ce920b5a2d19810ae6b3e2e954fe1021ae20cf49e194d93040a",
+      "matchesInstalledUninstaller": true,
+      "processCountAfterWizardClose": 0,
+      "fileStillPresentAfterWizardClose": true,
+      "postEvidenceCleanup": "after the host rejected permanent deletion, the exact no-reparse Temp directory containing only this stopped, hash-matched file was moved to the Windows Recycle Bin",
+      "recoverableFromRecycleBin": true,
+      "fileExistsAfterPostEvidenceCleanup": false
+    },
+    "uninstallerWindow": {
+      "title": "Desktop Translate 解除安装",
+      "initialAction": "Alt+N on the accessible 下一步(N) button",
+      "completionText": "Desktop Translate 已从你的计算机解除安装。 单击 [完成] 关闭这个向导。"
+    },
+    "finalState": {
+      "installRootExists": false,
+      "desktopOrphanRootExists": false,
+      "productRegistryKeyExists": false,
+      "appsAndFeaturesRegistryKeyExists": false,
+      "registryWriteProbeKeyCount": 0,
+      "transactionOrClaimKeyCount": 0,
+      "backupRegistryKeyExists": false,
+      "stageCount": 0,
+      "startMenuShortcutExists": false,
+      "desktopShortcutExists": false,
+      "productProcessCount": 0,
+      "tempSelfCopyProcessCount": 0,
+      "tempSelfCopyFileExistsAfterPostEvidenceCleanup": false
+    }
+  },
+  "userData": {
+    "path": "<USERPROFILE>\\AppData\\Roaming\\@desktop-translate\\desktop\\desktop-translate.sqlite3",
+    "sha256BeforeSecondCycleQuietUninstall": "8238256649c22cc231d60860c61d52fc5651a2cfd27c535d33c202d5decd8ee2",
+    "sha256AfterSecondCycleQuietUninstall": "8238256649c22cc231d60860c61d52fc5651a2cfd27c535d33c202d5decd8ee2",
+    "sha256BeforeOrdinaryInteractiveCycle": "8238256649c22cc231d60860c61d52fc5651a2cfd27c535d33c202d5decd8ee2",
+    "sha256AfterOrdinaryInteractiveCycle": "8238256649c22cc231d60860c61d52fc5651a2cfd27c535d33c202d5decd8ee2",
+    "retained": true
+  },
+  "fixesExercised": [
+    "uninstall transaction paths reconstruct absent source or stage leaves from the canonical existing parent",
+    "registry writability probes use owned sibling scratch keys rather than canonical identity keys",
+    "canonical install identity is re-read under the lifecycle mutex after the scratch probe",
+    "fresh-target validation uses expansion-unique NSIS labels",
+    "quiet uninstall stages the whole root, commits registry deletion through durable backups, removes the stage, and clears the canonical transaction"
+  ],
+  "remainingReleaseBlocks": [
+    "Authenticode and independent attestation",
+    "clean VM standard and elevated launch matrix",
+    "registered same-version rerun and upgrade",
+    "custom path, protected path, fault injection, crash replay, and concurrency matrices",
+    "final signed candidate security scan and acceptance"
+  ]
+}

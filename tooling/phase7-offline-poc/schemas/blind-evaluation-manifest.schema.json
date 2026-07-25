@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-blind-eval-manifest-v1.json",
+  "title": "Phase 7 human blind evaluation run manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "runId",
+    "createdAt",
+    "scope",
+    "requirements",
+    "input",
+    "randomization",
+    "reviewerToken",
+    "files",
+    "privacy",
+    "gateA"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "phase7-blind-eval-manifest-v1"
+    },
+    "status": {
+      "const": "PENDING_HUMAN_REVIEW"
+    },
+    "runId": {
+      "$ref": "#/$defs/runId"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scope": {
+      "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+    },
+    "requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "directions",
+        "minimumUniqueItemsPerCandidateDirection",
+        "humanOnly",
+        "blindCandidateIdentity",
+        "duplicateEvaluationCountingAllowed"
+      ],
+      "properties": {
+        "directions": {
+          "$ref": "#/$defs/directions"
+        },
+        "minimumUniqueItemsPerCandidateDirection": {
+          "const": 200
+        },
+        "humanOnly": {
+          "const": true
+        },
+        "blindCandidateIdentity": {
+          "const": true
+        },
+        "duplicateEvaluationCountingAllowed": {
+          "const": false
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sha256",
+        "itemCount",
+        "itemCountByDirection",
+        "candidateCountByDirection",
+        "provenanceKinds",
+        "acceptedProvenance",
+        "userHistoryAccepted",
+        "freeFormSourceAccepted"
+      ],
+      "properties": {
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "itemCount": {
+          "type": "integer",
+          "minimum": 400
+        },
+        "itemCountByDirection": {
+          "$ref": "#/$defs/directionCounts"
+        },
+        "candidateCountByDirection": {
+          "$ref": "#/$defs/positiveDirectionCounts"
+        },
+        "provenanceKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "enum": [
+              "PUBLIC_DATASET",
+              "SELF_AUTHORED_SYNTHETIC"
+            ]
+          }
+        },
+        "acceptedProvenance": {
+          "const": "PUBLIC_DATASET_OR_SELF_AUTHORED_SYNTHETIC_ONLY"
+        },
+        "userHistoryAccepted": {
+          "const": false
+        },
+        "freeFormSourceAccepted": {
+          "const": false
+        }
+      }
+    },
+    "randomization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "seedCommitment",
+        "candidateIdentityPresentInReviewBatch",
+        "privateAnswerKeyMustBeWithheldFromReviewer"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "HMAC_SHA256_RANK_V1"
+        },
+        "seedCommitment": {
+          "$ref": "#/$defs/sha256"
+        },
+        "candidateIdentityPresentInReviewBatch": {
+          "const": false
+        },
+        "privateAnswerKeyMustBeWithheldFromReviewer": {
+          "const": true
+        }
+      }
+    },
+    "reviewerToken": {
+      "type": "string",
+      "pattern": "^reviewer-[a-f0-9]{24}$"
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewBatch",
+        "scoreTemplate",
+        "privateAnswerKey"
+      ],
+      "properties": {
+        "reviewBatch": {
+          "$ref": "#/$defs/file"
+        },
+        "scoreTemplate": {
+          "$ref": "#/$defs/file"
+        },
+        "privateAnswerKey": {
+          "$ref": "#/$defs/file"
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceTextPresentOnlyInReviewBatch",
+        "sourceTextEmittedInManifestOrReport",
+        "absolutePathsEmitted",
+        "usernamesEmitted",
+        "freeTextReviewerNotesAccepted",
+        "structuredScoresOnly"
+      ],
+      "properties": {
+        "sourceTextPresentOnlyInReviewBatch": {
+          "const": true
+        },
+        "sourceTextEmittedInManifestOrReport": {
+          "const": false
+        },
+        "absolutePathsEmitted": {
+          "const": false
+        },
+        "usernamesEmitted": {
+          "const": false
+        },
+        "freeTextReviewerNotesAccepted": {
+          "const": false
+        },
+        "structuredScoresOnly": {
+          "const": true
+        }
+      }
+    },
+    "gateA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputStatus",
+        "blindEvaluationStatus",
+        "overallGateAStatus"
+      ],
+      "properties": {
+        "inputStatus": {
+          "const": "GATE_A_INPUT_INCOMPLETE"
+        },
+        "blindEvaluationStatus": {
+          "const": "PENDING_HUMAN_REVIEW"
+        },
+        "overallGateAStatus": {
+          "const": "BLOCKED_INCOMPLETE_M4_EVIDENCE"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "runId": {
+      "type": "string",
+      "pattern": "^run-[a-f0-9]{16}$"
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "directions": {
+      "type": "array",
+      "prefixItems": [
+        {
+          "const": "en-zh"
+        },
+        {
+          "const": "zh-en"
+        }
+      ],
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "directionCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "en-zh",
+        "zh-en"
+      ],
+      "properties": {
+        "en-zh": {
+          "type": "integer",
+          "minimum": 200
+        },
+        "zh-en": {
+          "type": "integer",
+          "minimum": 200
+        }
+      }
+    },
+    "positiveDirectionCounts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "en-zh",
+        "zh-en"
+      ],
+      "properties": {
+        "en-zh": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "zh-en": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "logicalName",
+        "sha256",
+        "recordCount"
+      ],
+      "properties": {
+        "logicalName": {
+          "enum": [
+            "review-batch.jsonl",
+            "score-template.jsonl",
+            "private-answer-key.json"
+          ]
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "recordCount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}

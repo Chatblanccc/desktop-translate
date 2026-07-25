@@ -1,0 +1,313 @@
+{
+  "$schema": "./schemas/argos-candidate-manifest.schema.json",
+  "schemaVersion": "phase7-argos-direct-poc-candidates-v1",
+  "metadataSnapshot": {
+    "capturedAt": "2026-07-23T00:00:00.000Z",
+    "packageIndexRepository": "argosopentech/argospm-index",
+    "packageIndexRevision": "ff90de60728f7c1338ff6b75974e4c89b2442d22",
+    "packageIndexUrl": "https://raw.githubusercontent.com/argosopentech/argospm-index/ff90de60728f7c1338ff6b75974e4c89b2442d22/index.json",
+    "argosTranslateRepository": "argosopentech/argos-translate",
+    "argosTranslateRevision": "c72ec9040a580bc5f9ad4272f2c8a685d9bc66dd"
+  },
+  "policy": {
+    "scope": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION",
+    "defaultNetworkAccess": false,
+    "downloadsRequireExplicitFlags": [
+      "--download",
+      "--allow-network"
+    ],
+    "downloadsRequireBoundResearchAuthorization": true,
+    "artifactRoot": "artifacts/phase7/offline-poc",
+    "globalPackageInstallationAllowed": false,
+    "automaticPackageInstallationAllowed": false,
+    "productIntegrationAllowed": false,
+    "modelDistributionAllowed": false,
+    "rawSourceOrTranslationTextInReportsAllowed": false,
+    "privateBlindEvaluationCandidateOutputAllowed": true,
+    "maximumArchiveCompressionRatio": 200,
+    "maximumSingleExtractedFileBytes": 100000000
+  },
+  "gateA": {
+    "status": "BLOCKED",
+    "harnessMayDecide": false,
+    "blocksPocResearch": false,
+    "blockers": [
+      {
+        "code": "ARGOS_MODEL_PACKAGE_LICENSE_LEGAL_REVIEW_REQUIRED",
+        "appliesTo": [
+          "argos-opus-en-zh-1.9",
+          "argos-opus-zh-en-1.9"
+        ],
+        "detail": "The package README observations do not establish the license coverage, training-data provenance, redistribution rights, or commercial-use terms for every byte in either Argos package."
+      },
+      {
+        "code": "ARGOS_TRANSITIVE_RUNTIME_LOCK_AND_SBOM_INCOMPLETE",
+        "appliesTo": [
+          "argos-direct-ctranslate2-runtime"
+        ],
+        "detail": "Only the top-level CTranslate2 and SentencePiece Windows wheels are pinned. Their complete dependency closure, licenses, native runtime prerequisites, and SBOM are not yet frozen."
+      },
+      {
+        "code": "ARGOS_WINDOWS_RUNTIME_AND_PACKAGE_SIGNING_REVIEW_REQUIRED",
+        "appliesTo": [
+          "argos-direct-ctranslate2-runtime",
+          "argos-opus-en-zh-1.9",
+          "argos-opus-zh-en-1.9"
+        ],
+        "detail": "Authenticode status, release packaging boundaries, updater compatibility, and Windows Visual C++ runtime delivery remain unresolved."
+      },
+      {
+        "code": "ARGOS_QUALITY_PERFORMANCE_AND_OS_NETWORK_EVIDENCE_MISSING",
+        "appliesTo": [
+          "argos-opus-en-zh-1.9",
+          "argos-opus-zh-en-1.9"
+        ],
+        "detail": "No formal 200-item-per-direction human blind evaluation, 20-trial Windows Private Working Set evidence, or OS-level network trace exists for this candidate."
+      }
+    ]
+  },
+  "runtime": {
+    "id": "argos-direct-ctranslate2-runtime",
+    "executionMode": "DIRECT_SENTENCEPIECE_AND_CTRANSLATE2",
+    "python": {
+      "requiredMajorMinor": "3.13",
+      "isolatedEnvironmentRequired": true,
+      "distribution": {
+        "filename": "python-3.13.10-embed-amd64.zip",
+        "localPath": "runtime/python-3.13.10-embed-amd64.zip",
+        "size": 10924998,
+        "sha256": "e0780912ee37496035bfc81120cc18a0d93921842012d5e83a71b42110452965",
+        "url": "https://www.python.org/ftp/python/3.13.10/python-3.13.10-embed-amd64.zip",
+        "spdxUrl": "https://www.python.org/ftp/python/3.13.10/python-3.13.10-embed-amd64.zip.spdx.json"
+      }
+    },
+    "ctranslate2": {
+      "version": "4.8.1",
+      "tag": "v4.8.1",
+      "tagObjectSha": "399239a790ad0da4e4363e0dcbb83495b5abd742",
+      "commit": "0d8bcd362ac75ef860ef161d6f0efad0ae439ff0",
+      "source": "https://github.com/OpenNMT/CTranslate2",
+      "declaredLicenseExpression": "MIT",
+      "licenseEvidence": "https://github.com/OpenNMT/CTranslate2/blob/0d8bcd362ac75ef860ef161d6f0efad0ae439ff0/LICENSE",
+      "wheel": {
+        "filename": "ctranslate2-4.8.1-cp313-cp313-win_amd64.whl",
+        "localPath": "wheels/ctranslate2-4.8.1-cp313-cp313-win_amd64.whl",
+        "size": 19220784,
+        "sha256": "d52499f05a60a791aeadee28d609efa130142f376d1ea76b2b1c593bb01f8827",
+        "url": "https://files.pythonhosted.org/packages/cb/e7/37da1a7500b57496a5269318c4f57962ea0c26dcac06b85222d7831acf00/ctranslate2-4.8.1-cp313-cp313-win_amd64.whl"
+      }
+    },
+    "sentencepiece": {
+      "version": "0.2.1",
+      "sourceRevision": "v0.2.1",
+      "source": "https://github.com/google/sentencepiece",
+      "declaredLicenseExpression": "Apache-2.0",
+      "licenseEvidence": "https://github.com/google/sentencepiece/blob/v0.2.1/LICENSE",
+      "wheel": {
+        "filename": "sentencepiece-0.2.1-cp313-cp313-win_amd64.whl",
+        "localPath": "wheels/sentencepiece-0.2.1-cp313-cp313-win_amd64.whl",
+        "size": 1054669,
+        "sha256": "10ed3dab2044c47f7a2e7b4969b0c430420cdd45735d78c8f853191fa0e3148b",
+        "url": "https://files.pythonhosted.org/packages/dd/e9/932b9eae6fd7019548321eee1ab8d5e3b3d1294df9d9a0c9ac517c7b636d/sentencepiece-0.2.1-cp313-cp313-win_amd64.whl"
+      }
+    },
+    "dependencyWheels": [
+      {
+        "package": "numpy",
+        "version": "2.2.6",
+        "wheel": {
+          "filename": "numpy-2.2.6-cp313-cp313-win_amd64.whl",
+          "localPath": "wheels/numpy-2.2.6-cp313-cp313-win_amd64.whl",
+          "size": 12610885,
+          "sha256": "b0544343a702fa80c95ad5d3d608ea3599dd54d4632df855e4c8d24eb6ecfa1c",
+          "url": "https://files.pythonhosted.org/packages/cb/3b/d58c12eafcb298d4e6d0d40216866ab15f59e55d148a5658bb3132311fcf/numpy-2.2.6-cp313-cp313-win_amd64.whl"
+        }
+      },
+      {
+        "package": "PyYAML",
+        "version": "6.0.3",
+        "wheel": {
+          "filename": "pyyaml-6.0.3-cp313-cp313-win_amd64.whl",
+          "localPath": "wheels/pyyaml-6.0.3-cp313-cp313-win_amd64.whl",
+          "size": 154090,
+          "sha256": "79005a0d97d5ddabfeeea4cf676af11e647e41d81c9a7722a193022accdb6b7c",
+          "url": "https://files.pythonhosted.org/packages/97/c9/39d5b874e8b28845e4ec2202b5da735d0199dbe5b8fb85f91398814a9a46/pyyaml-6.0.3-cp313-cp313-win_amd64.whl"
+        }
+      },
+      {
+        "package": "setuptools",
+        "version": "80.9.0",
+        "wheel": {
+          "filename": "setuptools-80.9.0-py3-none-any.whl",
+          "localPath": "wheels/setuptools-80.9.0-py3-none-any.whl",
+          "size": 1201486,
+          "sha256": "062d34222ad13e0cc312a4c02d73f059e86a4acbfbdea8f8f76b28c99f306922",
+          "url": "https://files.pythonhosted.org/packages/a3/dc/17031897dae0efacfea57dfd3a82fdd2a2aeb58e0ff71b77b87e44edc772/setuptools-80.9.0-py3-none-any.whl"
+        }
+      }
+    ],
+    "executionTreeStatus": "PINNED_CONTROLLED_MATERIALIZATION_V1",
+    "runtimeSupplySetSha256": "467c14a8205fd3f10a82ee39424d792ca7daa80d64111defa160ff21df12ed88",
+    "executionTreeSha256": "161fdea29bd9910a7c9e33d64a8c733099bbdee0829e921adeb951c45268147c",
+    "executionTreeFileCount": 1435,
+    "executionTreeBytes": 132513327,
+    "excludedWheelFileCount": 79,
+    "builderScriptSha256": "d6482b9c66dd79f4eefb392dac234b336a54bcfaaf5a17515986251d788ddf9e",
+    "translationOptions": {
+      "beamSize": 4,
+      "replaceUnknowns": true,
+      "lengthPenalty": 0.2,
+      "device": "cpu"
+    }
+  },
+  "candidateSets": [
+    {
+      "id": "argos-opus-en-zh-bidirectional-1.9",
+      "candidateIds": [
+        "argos-opus-en-zh-1.9",
+        "argos-opus-zh-en-1.9"
+      ],
+      "runtimeId": "argos-direct-ctranslate2-runtime",
+      "archiveBytes": 145224423,
+      "archiveUnpackedBytes": 171778261,
+      "topLevelWheelBytes": 20275453,
+      "dependencyWheelBytes": 13966461,
+      "pythonDistributionBytes": 10924998,
+      "pinnedDownloadBytes": 190391335,
+      "status": "BLOCKED_GATE_A"
+    }
+  ],
+  "candidates": [
+    {
+      "id": "argos-opus-en-zh-1.9",
+      "route": {
+        "source": "en",
+        "target": "zh"
+      },
+      "indexMetadata": {
+        "code": "translate-en_zh",
+        "packageVersion": "1.9",
+        "argosVersion": "1.9.0"
+      },
+      "license": {
+        "expression": "NOASSERTION",
+        "status": "LEGAL_REVIEW_REQUIRED",
+        "commercialUseConclusion": "LEGAL_REVIEW_REQUIRED",
+        "packageReadmeObservation": {
+          "statementScope": "ORIGINAL_OPUS_MODEL_FROM_WHICH_THE_PACKAGED_MODEL_DERIVES",
+          "observedExpression": "CC-BY-4.0",
+          "coverageStatus": "LEGAL_REVIEW_REQUIRED"
+        }
+      },
+      "archive": {
+        "filename": "translate-en_zh-1_9.argosmodel",
+        "localPath": "packages/translate-en_zh-1_9.argosmodel",
+        "url": "https://argos-net.com/v1/translate-en_zh-1_9.argosmodel",
+        "size": 70743021,
+        "sha256": "433e7c4f034d87fbe2353161e05f18646d7999452f801a4e1f0378522b9850ab",
+        "unpackedSize": 85640765,
+        "extractedFileCount": 8,
+        "extractedTreeSha256": "65b50a0764aa356b7053984bff1b7f7bd867adc1058bf33be7776a53c53e1da2",
+        "centralDirectoryEntryCount": 13,
+        "packageRoot": "translate-en_zh-1_9/",
+        "allowedGeneralPurposeFlags": [
+          0
+        ],
+        "allowedCompressionMethods": [
+          0,
+          8
+        ],
+        "requiredFiles": [
+          "metadata.json",
+          "README.md",
+          "sentencepiece.model",
+          "model/config.json",
+          "model/model.bin",
+          "model/shared_vocabulary.json"
+        ],
+        "requiredDirectoryPrefixes": [
+          "model/",
+          "stanza/"
+        ],
+        "embeddedFilePins": [
+          {
+            "path": "metadata.json",
+            "size": 135,
+            "sha256": "106086bc1b77d2d5c298aa38be69e8e87263eeb4167b4614b08a030c43d31b6a"
+          },
+          {
+            "path": "README.md",
+            "size": 401,
+            "sha256": "050e546664f0e70d80b6f83aa1da5f04ee85335f4a1b62d1c89184f76100b5dc"
+          }
+        ]
+      }
+    },
+    {
+      "id": "argos-opus-zh-en-1.9",
+      "route": {
+        "source": "zh",
+        "target": "en"
+      },
+      "indexMetadata": {
+        "code": "translate-zh_en",
+        "packageVersion": "1.9",
+        "argosVersion": "1.9.0"
+      },
+      "license": {
+        "expression": "NOASSERTION",
+        "status": "LEGAL_REVIEW_REQUIRED",
+        "commercialUseConclusion": "LEGAL_REVIEW_REQUIRED",
+        "packageReadmeObservation": {
+          "statementScope": "ORIGINAL_OPUS_MODEL_FROM_WHICH_THE_PACKAGED_MODEL_DERIVES",
+          "observedExpression": "CC-BY-4.0",
+          "coverageStatus": "LEGAL_REVIEW_REQUIRED"
+        }
+      },
+      "archive": {
+        "filename": "translate-zh_en-1_9.argosmodel",
+        "localPath": "packages/translate-zh_en-1_9.argosmodel",
+        "url": "https://argos-net.com/v1/translate-zh_en-1_9.argosmodel",
+        "size": 74481402,
+        "sha256": "62e7af5a3a48b530e47b7b3e5c78c2de79073ecd815750d2bf3ab35b4a67da2d",
+        "unpackedSize": 86137496,
+        "extractedFileCount": 8,
+        "extractedTreeSha256": "60b0a02913d6bd4082cd247c2686cf4c91e6dc634114d4fc1df641b72bfdeb34",
+        "centralDirectoryEntryCount": 13,
+        "packageRoot": "translate-zh_en-1_9/",
+        "allowedGeneralPurposeFlags": [
+          0,
+          8
+        ],
+        "allowedCompressionMethods": [
+          0,
+          8
+        ],
+        "requiredFiles": [
+          "metadata.json",
+          "README.md",
+          "sentencepiece.model",
+          "model/config.json",
+          "model/model.bin",
+          "model/shared_vocabulary.json"
+        ],
+        "requiredDirectoryPrefixes": [
+          "model/",
+          "stanza/"
+        ],
+        "embeddedFilePins": [
+          {
+            "path": "metadata.json",
+            "size": 135,
+            "sha256": "e42259bbbec6cd09ecd16d97d614bebbf1e7351130c6970fe77a2f1ed7f99cca"
+          },
+          {
+            "path": "README.md",
+            "size": 393,
+            "sha256": "1bb7a1261520b8f7d1f94b7fd108c0ccfd7333a3e40a2256df274df0a2ff1cc8"
+          }
+        ]
+      }
+    }
+  ]
+}

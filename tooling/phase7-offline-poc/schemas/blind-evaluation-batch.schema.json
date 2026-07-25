@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-blind-eval-review-batch-item-v1.json",
+  "title": "Phase 7 candidate-anonymous human review batch item",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "itemToken",
+    "direction",
+    "source",
+    "reference",
+    "tags",
+    "candidates"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "phase7-blind-eval-review-batch-item-v1"
+    },
+    "itemToken": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{24}$"
+    },
+    "direction": {
+      "enum": [
+        "en-zh",
+        "zh-en"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 12000
+    },
+    "reference": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 12000
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 3,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "evaluationId",
+          "candidateAlias",
+          "translation"
+        ],
+        "properties": {
+          "evaluationId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "candidateAlias": {
+            "type": "string",
+            "pattern": "^[A-Z]$"
+          },
+          "translation": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 12000
+          }
+        }
+      }
+    }
+  }
+}

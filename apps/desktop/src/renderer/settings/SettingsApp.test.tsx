@@ -186,6 +186,7 @@ describe('SettingsApp', () => {
       expect(setTheme).toHaveBeenCalledWith('dark');
     });
 
+    expect(screen.getByText('将悬浮球恢复到鼠标所在屏幕右侧默认位置。')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: '重置位置' }));
     await waitFor(() => {
       expect(resetBallPosition).toHaveBeenCalledOnce();

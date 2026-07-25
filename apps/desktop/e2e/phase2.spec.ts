@@ -583,6 +583,17 @@ function bottomLeftBallBounds(workArea: RectangleLike): RectangleLike {
   };
 }
 
+function freeBallBounds(workArea: RectangleLike): RectangleLike {
+  const horizontalTravel = workArea.width - BALL_SIZE_DIP - BALL_MARGIN_DIP * 2;
+  const verticalTravel = workArea.height - BALL_SIZE_DIP - BALL_MARGIN_DIP * 2;
+  return {
+    x: workArea.x + BALL_MARGIN_DIP + Math.round(horizontalTravel * 0.37),
+    y: workArea.y + BALL_MARGIN_DIP + Math.round(verticalTravel * 0.42),
+    width: BALL_SIZE_DIP,
+    height: BALL_SIZE_DIP
+  };
+}
+
 async function waitForShell(application: ElectronApplication): Promise<DebugState> {
   await expect.poll(() => debugState(application)).toMatchObject({
     trayCreated: true,
@@ -613,23 +624,68 @@ async function openSettingsView(settings: Page, label: SettingsViewLabel): Promi
   await expect(navigationButton).toHaveAttribute('aria-current', 'page');
 }
 
+/**
+ * Programmatic persistence evidence only. This deliberately bypasses the
+ * native BrowserWindow drag gesture and cannot satisfy the physical
+ * mouse/touchpad release gate.
+ */
+async function moveBallProgrammaticallyForPersistenceEvidence(
+  application: ElectronApplication,
+  bounds: RectangleLike
+): Promise<void> {
+  await application.evaluate(async (_electron, requestedBounds) => {
+    await globalThis.__desktopTranslateTestApi?.moveBall(
+      requestedBounds.x,
+      requestedBounds.y
+    );
+  }, bounds);
+}
+
 async function expectBallRendered(ball: Page): Promise<void> {
   const appearance = await ball.getByRole('button').evaluate((button) => {
     const style = getComputedStyle(button);
     const icon = getComputedStyle(button.querySelector('.ball-icon')!);
+    const frame = button.closest('.ball-frame');
+    const frameStyle = frame === null ? undefined : getComputedStyle(frame);
+    const dragHandle = frame?.querySelector('.ball-drag-handle');
+    const dragHandleStyle = dragHandle === null || dragHandle === undefined
+      ? undefined
+      : getComputedStyle(dragHandle);
+    const appRegion = (computedStyle: CSSStyleDeclaration | undefined): string | undefined =>
+      computedStyle?.getPropertyValue('-webkit-app-region').trim() ||
+      computedStyle?.getPropertyValue('app-region').trim() ||
+      undefined;
     return {
       width: style.width,
       height: style.height,
       opacity: style.opacity,
       backgroundColor: style.backgroundColor,
       color: style.color,
-      maskImage: icon.maskImage || icon.getPropertyValue('-webkit-mask-image')
+      maskImage: icon.maskImage || icon.getPropertyValue('-webkit-mask-image'),
+      dragHint: frame?.getAttribute('title'),
+      dragHandleWidth: dragHandleStyle?.width,
+      dragHandleHeight: dragHandleStyle?.height,
+      dragHandleBackground: dragHandleStyle?.backgroundColor,
+      frameAppRegion: appRegion(frameStyle),
+      dragHandleAppRegion: appRegion(dragHandleStyle),
+      buttonAppRegion: appRegion(style)
     };
   });
-  expect(appearance).toMatchObject({ width: '44px', height: '44px', opacity: '1' });
+  expect(appearance).toMatchObject({
+    width: '44px',
+    height: '44px',
+    opacity: '1',
+    dragHint: '按住上方把手拖动悬浮球',
+    dragHandleWidth: '30px',
+    dragHandleHeight: '8px',
+    frameAppRegion: 'drag',
+    dragHandleAppRegion: 'drag',
+    buttonAppRegion: 'no-drag'
+  });
   expect(appearance.backgroundColor).not.toBe('rgba(0, 0, 0, 0)');
   expect(appearance.color).not.toBe('rgba(0, 0, 0, 0)');
   expect(appearance.maskImage).not.toBe('none');
+  expect(appearance.dragHandleBackground).not.toBe('rgba(0, 0, 0, 0)');
 }
 
 test('Phase 2 shell stays usable without Native Host and persists UI settings @smoke', async () => {
@@ -700,11 +756,19 @@ test('Phase 2 shell stays usable without Native Host and persists UI settings @s
     });
     await expectBallRendered(ball);
 
-    await application.evaluate(async (_electron, bounds) => {
-      await globalThis.__desktopTranslateTestApi?.moveBall(bounds.x, bounds.y + bounds.height);
-    }, workArea);
+    await moveBallProgrammaticallyForPersistenceEvidence(application, {
+      ...workArea,
+      y: workArea.y + workArea.height
+    });
     await expect.poll(() => debugState(application!)).toMatchObject({
       ballBounds: expectedBottomLeftBounds
+    });
+    const expectedFreeBounds = freeBallBounds(workArea);
+    await settings.getByRole('checkbox', { name: /自动吸附屏幕边缘/u }).click();
+    await moveBallProgrammaticallyForPersistenceEvidence(application, expectedFreeBounds);
+    await expect.poll(() => debugState(application!)).toMatchObject({
+      snapshot: { ball: { edgeSnap: false } },
+      ballBounds: expectedFreeBounds
     });
     application.evaluate(() => globalThis.__desktopTranslateTestApi?.closeSettings());
     await expect.poll(() => debugState(application!)).toMatchObject({ settingsVisible: false });
@@ -740,11 +804,11 @@ test('Phase 2 shell stays usable without Native Host and persists UI settings @s
 
     application = await launch(userData);
     await waitForShell(application);
-    const restartedBottomLeftBounds = bottomLeftBallBounds(await primaryWorkArea(application));
+    const restartedFreeBounds = freeBallBounds(await primaryWorkArea(application));
     await expect.poll(() => debugState(application!)).toMatchObject({
-      snapshot: { theme: 'dark' },
+      snapshot: { theme: 'dark', ball: { edgeSnap: false } },
       ballVisible: true,
-      ballBounds: restartedBottomLeftBounds
+      ballBounds: restartedFreeBounds
     });
     await expectBallRendered(await findWindow(application, '桌面翻译悬浮球'));
   } finally {

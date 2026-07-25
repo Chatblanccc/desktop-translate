@@ -1,0 +1,307 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-argos-direct-poc-report-v1.json",
+  "title": "Phase 7 Argos direct POC sanitized report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "scope",
+    "manifestSha256",
+    "candidateId",
+    "generationRunId",
+    "authorizationRecordId",
+    "authorizationSha256",
+    "materializedTreeSha256",
+    "runtime",
+    "translationOptions",
+    "input",
+    "output",
+    "privacy",
+    "networkIsolation",
+    "gateA"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "phase7-argos-direct-poc-report-v1"
+    },
+    "status": {
+      "enum": [
+        "ARGOS_DIRECT_SMOKE_COMPLETE",
+        "ARGOS_BLIND_EVAL_CANDIDATE_GENERATION_COMPLETE"
+      ]
+    },
+    "scope": {
+      "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+    },
+    "manifestSha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "candidateId": {
+      "enum": [
+        "argos-opus-en-zh-1.9",
+        "argos-opus-zh-en-1.9"
+      ]
+    },
+    "generationRunId": {
+      "$ref": "#/$defs/slug"
+    },
+    "authorizationRecordId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$"
+    },
+    "authorizationSha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "materializedTreeSha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "python",
+        "ctranslate2",
+        "sentencepiece",
+        "isolatedEnvironment",
+        "runtimeIdentityVerified",
+        "runtimeSupplySetSha256",
+        "executionTreeSha256",
+        "builderScriptSha256",
+        "globalSitePackagesUsed"
+      ],
+      "properties": {
+        "python": {
+          "const": "3.13.10"
+        },
+        "ctranslate2": {
+          "const": "4.8.1"
+        },
+        "sentencepiece": {
+          "const": "0.2.1"
+        },
+        "isolatedEnvironment": {
+          "const": true
+        },
+        "runtimeIdentityVerified": {
+          "const": true
+        },
+        "runtimeSupplySetSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "executionTreeSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "builderScriptSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "globalSitePackagesUsed": {
+          "const": false
+        }
+      }
+    },
+    "translationOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "beamSize",
+        "replaceUnknowns",
+        "lengthPenalty",
+        "device"
+      ],
+      "properties": {
+        "beamSize": {
+          "const": 4
+        },
+        "replaceUnknowns": {
+          "const": true
+        },
+        "lengthPenalty": {
+          "const": 0.2
+        },
+        "device": {
+          "const": "cpu"
+        }
+      }
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "recordCount",
+        "sha256",
+        "rawTextEmitted"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "BUILT_IN_SMOKE",
+            "CONTROLLED_BLIND_EVAL_BATCH"
+          ]
+        },
+        "recordCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "rawTextEmitted": {
+          "const": false
+        }
+      }
+    },
+    "output": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recordCount",
+        "aggregateCharacterCount",
+        "aggregateSha256",
+        "candidateOutputArtifactCreated",
+        "candidateOutputArtifactContainsTranslationText",
+        "stdoutContainsTranslationText"
+      ],
+      "properties": {
+        "recordCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "aggregateCharacterCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "aggregateSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "candidateOutputArtifactCreated": {
+          "type": "boolean"
+        },
+        "candidateOutputArtifactContainsTranslationText": {
+          "type": "boolean"
+        },
+        "stdoutContainsTranslationText": {
+          "const": false
+        }
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sourceTextInReport",
+        "translationTextInReport",
+        "absolutePathsInReport",
+        "usernamesInReport",
+        "logsContainRawText",
+        "runtimeStdoutCaptured",
+        "runtimeStderrCaptured",
+        "runtimeStdoutBytes",
+        "runtimeStderrBytes",
+        "runtimeDiagnosticBytesPublished",
+        "runtimeDiagnosticRawTextPublished",
+        "captureScope"
+      ],
+      "properties": {
+        "sourceTextInReport": {
+          "const": false
+        },
+        "translationTextInReport": {
+          "const": false
+        },
+        "absolutePathsInReport": {
+          "const": false
+        },
+        "usernamesInReport": {
+          "const": false
+        },
+        "logsContainRawText": {
+          "const": false
+        },
+        "runtimeStdoutCaptured": {
+          "const": true
+        },
+        "runtimeStderrCaptured": {
+          "const": true
+        },
+        "runtimeStdoutBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048576
+        },
+        "runtimeStderrBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1048576
+        },
+        "runtimeDiagnosticBytesPublished": {
+          "const": 0
+        },
+        "runtimeDiagnosticRawTextPublished": {
+          "const": false
+        },
+        "captureScope": {
+          "const": "PROCESS_STANDARD_HANDLES_ONLY"
+        }
+      }
+    },
+    "networkIsolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "processSocketGuardInstalled",
+        "externalNetworkAccess"
+      ],
+      "properties": {
+        "processSocketGuardInstalled": {
+          "const": true
+        },
+        "externalNetworkAccess": {
+          "const": "NOT_OS_LEVEL_VERIFIED"
+        }
+      }
+    },
+    "gateA": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ready",
+        "status",
+        "productIntegrationAuthorized",
+        "distributionAuthorized"
+      ],
+      "properties": {
+        "ready": {
+          "const": false
+        },
+        "status": {
+          "const": "BLOCKED_INCOMPLETE_M4_EVIDENCE"
+        },
+        "productIntegrationAuthorized": {
+          "const": false
+        },
+        "distributionAuthorized": {
+          "const": false
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{2,127}$"
+    }
+  }
+}

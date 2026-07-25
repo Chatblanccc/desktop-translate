@@ -29,6 +29,7 @@ describe('ball position', () => {
     };
 
     expect(createDefaultBallAnchor(cursorDisplay)).toEqual({
+      mode: 'edge',
       displayId: 'cursor-display',
       edge: 'right',
       verticalRatio: 0.6
@@ -47,7 +48,12 @@ describe('ball position', () => {
       [PRIMARY],
       true
     );
-    expect(placement.anchor.edge).toBe('left');
+    expect(placement.anchor).toEqual({
+      mode: 'edge',
+      displayId: '1',
+      edge: 'left',
+      verticalRatio: 1
+    });
     expect(placement.bounds).toEqual({
       x: BALL_MARGIN_DIP,
       y: 1032 - BALL_MARGIN_DIP - BALL_SIZE_DIP,
@@ -92,11 +98,49 @@ describe('ball position', () => {
       false
     );
     expect(placement.anchor).toEqual({
+      mode: 'free',
       displayId: '1',
-      edge: 'left',
+      horizontalRatio: (800 - BALL_MARGIN_DIP) /
+        (PRIMARY.workArea.width - BALL_SIZE_DIP - BALL_MARGIN_DIP * 2),
       verticalRatio: expect.any(Number)
     });
     expect(placement.bounds.x).toBe(800);
+    expect(resolveBallBounds(placement.anchor, [PRIMARY])).toEqual(placement.bounds);
+  });
+
+  it('restores a persisted free position across restart on a negative-coordinate display', () => {
+    const left: DisplayLike = {
+      id: 'left',
+      workArea: { x: -1600, y: -200, width: 1600, height: 900 }
+    };
+    const firstRun = deriveBallPlacement(
+      { x: -925, y: 217, width: BALL_SIZE_DIP, height: BALL_SIZE_DIP },
+      [PRIMARY, left],
+      false
+    );
+
+    expect(firstRun.anchor).toMatchObject({
+      mode: 'free',
+      displayId: 'left',
+      horizontalRatio: expect.any(Number),
+      verticalRatio: expect.any(Number)
+    });
+    expect(resolveBallBounds(firstRun.anchor, [PRIMARY, left])).toEqual(firstRun.bounds);
+  });
+
+  it('continues to restore legacy anchors as edge positions', () => {
+    expect(resolveBallBounds(
+      { displayId: '1', edge: 'right', verticalRatio: 0.5 },
+      [PRIMARY]
+    )).toEqual({
+      x: PRIMARY.workArea.width - BALL_MARGIN_DIP - BALL_SIZE_DIP,
+      y: Math.round(
+        BALL_MARGIN_DIP +
+        (PRIMARY.workArea.height - BALL_SIZE_DIP - BALL_MARGIN_DIP * 2) * 0.5
+      ),
+      width: BALL_SIZE_DIP,
+      height: BALL_SIZE_DIP
+    });
   });
 
   it('falls back to the primary display when a saved display is removed', () => {

@@ -20,6 +20,14 @@ const electron = vi.hoisted(() => {
       return this;
     }
 
+    public removeListener(event: string, handler: Handler): this {
+      this.listeners.set(
+        event,
+        (this.listeners.get(event) ?? []).filter((entry) => entry.handler !== handler)
+      );
+      return this;
+    }
+
     public emit(event: string, ...args: unknown[]): void {
       const entries = [...(this.listeners.get(event) ?? [])];
       this.listeners.set(event, entries.filter((entry) => !entry.once));
@@ -268,8 +276,14 @@ describe('WindowManager', () => {
 
     ball.emit('ready-to-show');
     expect(ball.showInactive).toHaveBeenCalledOnce();
+    ball.emit('move');
+    expect(onBallMoved).not.toHaveBeenCalled();
     ball.emit('moved');
     expect(onBallMoved).toHaveBeenCalledWith(initialBounds);
+    ball.bounds = { x: 300, y: 400, width: 56, height: 56 };
+    expect(manager.stopBallMoveTracking()).toEqual(ball.bounds);
+    ball.emit('moved');
+    expect(onBallMoved).toHaveBeenCalledOnce();
     ball.destroyed = true;
     ball.emit('moved');
     expect(onBallMoved).toHaveBeenCalledOnce();

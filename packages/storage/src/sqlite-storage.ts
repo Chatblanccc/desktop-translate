@@ -7,6 +7,7 @@ import {
   isBallAnchor,
   isOcrActivation,
   isThemeMode,
+  normalizeBallAnchor,
   type BallAnchor,
   type OcrActivation,
   type ThemeMode,
@@ -148,6 +149,7 @@ export function runStorageMigrations(
 
 interface SettingRow {
   readonly valueJson: string;
+  readonly updatedAt?: string;
 }
 
 function assertSettingKey(key: string): void {
@@ -162,12 +164,20 @@ function assertUpdatedAt(updatedAt: string): void {
   }
 }
 
+function serializeSettingValue(value: unknown): string {
+  const valueJson = JSON.stringify(value);
+  if (valueJson === undefined) throw new TypeError("Setting value must be JSON-serializable");
+  return valueJson;
+}
+
 export class SqliteSettingsRepository implements SettingsRepository {
+  readonly #database: DatabaseSync;
   readonly #select: StatementSync;
   readonly #upsert: StatementSync;
   readonly #delete: StatementSync;
 
   constructor(database: DatabaseSync) {
+    this.#database = database;
     this.#select = database.prepare("SELECT value_json AS valueJson FROM settings WHERE key = ?");
     this.#upsert = database.prepare(`
       INSERT INTO settings(key, value_json, updated_at) VALUES (?, ?, ?)
@@ -190,15 +200,59 @@ export class SqliteSettingsRepository implements SettingsRepository {
   async set<T>(key: string, value: T, updatedAt: string): Promise<void> {
     assertSettingKey(key);
     assertUpdatedAt(updatedAt);
-    const valueJson = JSON.stringify(value);
-    if (valueJson === undefined) throw new TypeError("Setting value must be JSON-serializable");
+    const valueJson = serializeSettingValue(value);
     this.#upsert.run(key, valueJson, updatedAt);
+  }
+
+  async setMany(
+    values: readonly (readonly [key: string, value: unknown])[],
+    updatedAt: string,
+  ): Promise<void> {
+    assertUpdatedAt(updatedAt);
+    if (values.length < 1) throw new TypeError("At least one setting is required");
+    const serialized = values.map(([key, value]) => {
+      assertSettingKey(key);
+      return [key, serializeSettingValue(value)] as const;
+    });
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      for (const [key, valueJson] of serialized) {
+        this.#upsert.run(key, valueJson, updatedAt);
+      }
+      this.#database.exec("COMMIT");
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original write error.
+      }
+      throw error;
+    }
   }
 
   async delete(key: string): Promise<boolean> {
     assertSettingKey(key);
     const result = this.#delete.run(key);
     return Number(result.changes) > 0;
+  }
+
+  async deleteMany(keys: readonly string[]): Promise<boolean> {
+    if (keys.length < 1) throw new TypeError("At least one setting key is required");
+    for (const key of keys) assertSettingKey(key);
+    this.#database.exec("BEGIN IMMEDIATE");
+    try {
+      let changes = 0;
+      for (const key of keys) changes += Number(this.#delete.run(key).changes);
+      this.#database.exec("COMMIT");
+      return changes > 0;
+    } catch (error) {
+      try {
+        this.#database.exec("ROLLBACK");
+      } catch {
+        // Preserve the original delete error.
+      }
+      throw error;
+    }
   }
 }
 
@@ -310,10 +364,79 @@ export const PHASE2_SETTING_KEYS = Object.freeze({
   ballVisible: "ui.ball.visible",
   ballEdgeSnap: "ui.ball.edgeSnap",
   ballAnchor: "ui.ball.anchor",
+  ballAnchorV2: "ui.ball.anchor.v2",
   theme: "ui.theme",
 } as const);
 
 export type Phase2SettingKey = (typeof PHASE2_SETTING_KEYS)[keyof typeof PHASE2_SETTING_KEYS];
+
+interface StoredBallAnchor {
+  readonly anchor: BallAnchor;
+  readonly updatedAt: string;
+}
+
+function readCompatibleBallAnchor(
+  select: StatementSync,
+  onInvalid: (key: Phase2SettingKey) => void,
+): BallAnchor | undefined {
+  const legacy = readStoredBallAnchor(select, PHASE2_SETTING_KEYS.ballAnchor, onInvalid);
+  const canonical = readStoredBallAnchor(select, PHASE2_SETTING_KEYS.ballAnchorV2, onInvalid);
+  const selected = canonical === undefined
+    ? legacy
+    : legacy === undefined || (
+        legacy.updatedAt === canonical.updatedAt &&
+        hasSameLegacyProjection(legacy.anchor, canonical.anchor)
+      )
+      ? canonical
+      : legacy;
+  return selected === undefined ? undefined : normalizeBallAnchor(selected.anchor);
+}
+
+function readStoredBallAnchor(
+  select: StatementSync,
+  key: typeof PHASE2_SETTING_KEYS.ballAnchor | typeof PHASE2_SETTING_KEYS.ballAnchorV2,
+  onInvalid: (key: Phase2SettingKey) => void,
+): StoredBallAnchor | undefined {
+  const row = select.get(key) as unknown as SettingRow | undefined;
+  if (row === undefined) return undefined;
+  try {
+    const value = JSON.parse(row.valueJson) as unknown;
+    const updatedAt = row.updatedAt ?? "";
+    const updatedAtMs = Date.parse(updatedAt);
+    if (isBallAnchor(value) && Number.isFinite(updatedAtMs)) {
+      return { anchor: value, updatedAt };
+    }
+  } catch {
+    // Invalid values use the diagnostic and safe fallback path below.
+  }
+  onInvalid(key);
+  return undefined;
+}
+
+function hasSameLegacyProjection(legacy: BallAnchor, canonical: BallAnchor): boolean {
+  const normalizedLegacy = normalizeBallAnchor(legacy);
+  const projectedCanonical = normalizeBallAnchor(toLegacyBallAnchor(canonical));
+  return (
+    normalizedLegacy.mode === "edge" &&
+    projectedCanonical.mode === "edge" &&
+    normalizedLegacy.displayId === projectedCanonical.displayId &&
+    normalizedLegacy.edge === projectedCanonical.edge &&
+    normalizedLegacy.verticalRatio === projectedCanonical.verticalRatio
+  );
+}
+
+function toLegacyBallAnchor(value: BallAnchor): BallAnchor {
+  const anchor = normalizeBallAnchor(value);
+  return {
+    displayId: anchor.displayId,
+    edge: anchor.mode === "edge"
+      ? anchor.edge
+      : anchor.horizontalRatio <= 0.5
+        ? "left"
+        : "right",
+    verticalRatio: anchor.verticalRatio,
+  };
+}
 
 export interface Phase2UiSettings {
   readonly ball: {
@@ -351,7 +474,9 @@ export class SqlitePhase2SettingsRepository {
 
   constructor(database: DatabaseSync, options: SqlitePhase2SettingsRepositoryOptions = {}) {
     this.#settings = new SqliteSettingsRepository(database);
-    this.#select = database.prepare("SELECT value_json AS valueJson FROM settings WHERE key = ?");
+    this.#select = database.prepare(
+      "SELECT value_json AS valueJson, updated_at AS updatedAt FROM settings WHERE key = ?",
+    );
     this.#now = options.now ?? (() => new Date().toISOString());
     this.#onInvalidSetting = options.onInvalidSetting;
   }
@@ -359,7 +484,10 @@ export class SqlitePhase2SettingsRepository {
   async load(): Promise<Phase2UiSettings> {
     const visible = this.#readValidated(PHASE2_SETTING_KEYS.ballVisible, isBoolean, true);
     const edgeSnap = this.#readValidated(PHASE2_SETTING_KEYS.ballEdgeSnap, isBoolean, true);
-    const anchor = this.#readValidated(PHASE2_SETTING_KEYS.ballAnchor, isBallAnchor, undefined);
+    const anchor = readCompatibleBallAnchor(
+      this.#select,
+      (key) => this.#reportInvalid(key),
+    );
     const theme = this.#readValidated(PHASE2_SETTING_KEYS.theme, isThemeMode, "system");
     return anchor === undefined
       ? { ball: { visible, edgeSnap }, theme }
@@ -383,11 +511,21 @@ export class SqlitePhase2SettingsRepository {
 
   async setBallAnchor(value: BallAnchor): Promise<void> {
     if (!isBallAnchor(value)) throw new TypeError("Ball anchor is invalid");
-    await this.#settings.set(PHASE2_SETTING_KEYS.ballAnchor, value, this.#now());
+    const canonical = normalizeBallAnchor(value);
+    await this.#settings.setMany(
+      [
+        [PHASE2_SETTING_KEYS.ballAnchor, toLegacyBallAnchor(canonical)],
+        [PHASE2_SETTING_KEYS.ballAnchorV2, canonical],
+      ],
+      this.#now(),
+    );
   }
 
   async resetBallAnchor(): Promise<void> {
-    await this.#settings.delete(PHASE2_SETTING_KEYS.ballAnchor);
+    await this.#settings.deleteMany([
+      PHASE2_SETTING_KEYS.ballAnchor,
+      PHASE2_SETTING_KEYS.ballAnchorV2,
+    ]);
   }
 
   #readSetting(key: Phase2SettingKey): ReadResult {
@@ -409,12 +547,16 @@ export class SqlitePhase2SettingsRepository {
     const result = this.#readSetting(key);
     if (result.kind === "missing") return fallback;
     if (result.kind === "value" && guard(result.value)) return result.value;
+    this.#reportInvalid(key);
+    return fallback;
+  }
+
+  #reportInvalid(key: Phase2SettingKey): void {
     try {
       this.#onInvalidSetting?.(key);
     } catch {
       // Diagnostics must never prevent safe startup defaults.
     }
-    return fallback;
   }
 }
 
@@ -456,7 +598,9 @@ export class SqlitePhase3SettingsRepository {
 
   constructor(database: DatabaseSync, options: SqlitePhase3SettingsRepositoryOptions = {}) {
     this.#settings = new SqliteSettingsRepository(database);
-    this.#select = database.prepare("SELECT value_json AS valueJson FROM settings WHERE key = ?");
+    this.#select = database.prepare(
+      "SELECT value_json AS valueJson, updated_at AS updatedAt FROM settings WHERE key = ?",
+    );
     this.#now = options.now ?? (() => new Date().toISOString());
     this.#onInvalidSetting = options.onInvalidSetting;
   }
@@ -464,7 +608,10 @@ export class SqlitePhase3SettingsRepository {
   async load(): Promise<Phase3UiSettings> {
     const visible = this.#readValidated(PHASE3_SETTING_KEYS.ballVisible, isBoolean, true);
     const edgeSnap = this.#readValidated(PHASE3_SETTING_KEYS.ballEdgeSnap, isBoolean, true);
-    const anchor = this.#readValidated(PHASE3_SETTING_KEYS.ballAnchor, isBallAnchor, undefined);
+    const anchor = readCompatibleBallAnchor(
+      this.#select,
+      (key) => this.#reportInvalid(key),
+    );
     const theme = this.#readValidated(PHASE3_SETTING_KEYS.theme, isThemeMode, "system");
     const enabled = this.#readValidated(PHASE3_SETTING_KEYS.selectionEnabled, isBoolean, true);
     const ocrActivation = this.#readValidated(
@@ -495,11 +642,21 @@ export class SqlitePhase3SettingsRepository {
 
   async setBallAnchor(value: BallAnchor): Promise<void> {
     if (!isBallAnchor(value)) throw new TypeError("Ball anchor is invalid");
-    await this.#settings.set(PHASE3_SETTING_KEYS.ballAnchor, value, this.#now());
+    const canonical = normalizeBallAnchor(value);
+    await this.#settings.setMany(
+      [
+        [PHASE3_SETTING_KEYS.ballAnchor, toLegacyBallAnchor(canonical)],
+        [PHASE3_SETTING_KEYS.ballAnchorV2, canonical],
+      ],
+      this.#now(),
+    );
   }
 
   async resetBallAnchor(): Promise<void> {
-    await this.#settings.delete(PHASE3_SETTING_KEYS.ballAnchor);
+    await this.#settings.deleteMany([
+      PHASE3_SETTING_KEYS.ballAnchor,
+      PHASE3_SETTING_KEYS.ballAnchorV2,
+    ]);
   }
 
   async setSelectionEnabled(value: boolean): Promise<void> {
@@ -521,12 +678,16 @@ export class SqlitePhase3SettingsRepository {
     } catch {
       // Invalid values use the safe fallback path below.
     }
+    this.#reportInvalid(key);
+    return fallback;
+  }
+
+  #reportInvalid(key: Phase3SettingKey): void {
     try {
       this.#onInvalidSetting?.(key);
     } catch {
       // Diagnostics must never prevent safe startup defaults.
     }
-    return fallback;
   }
 }
 
@@ -693,12 +854,16 @@ export class SqlitePhase4SettingsRepository {
     } catch {
       // Invalid values use the safe fallback path below.
     }
+    this.#reportInvalid(key);
+    return fallback;
+  }
+
+  #reportInvalid(key: Phase4SettingKey): void {
     try {
       this.#onInvalidSetting?.(key);
     } catch {
       // Diagnostics must never prevent safe startup defaults.
     }
-    return fallback;
   }
 }
 

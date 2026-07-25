@@ -1,0 +1,642 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-bergamot-poc-measurement-v1.json",
+  "title": "Desktop Translate Phase 7 Firefox/Bergamot POC measurement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "measuredAt",
+    "scope",
+    "manifest",
+    "runtime",
+    "environment",
+    "networkIsolation",
+    "artifacts",
+    "routes",
+    "quality",
+    "gateACompleteness",
+    "timeouts",
+    "limitations"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "phase7-bergamot-poc-measurement-v1"
+    },
+    "status": {
+      "enum": [
+        "PARTIAL_M4_MEASUREMENT",
+        "BLOCKED_RUNTIME_COMPATIBILITY",
+        "BLOCKED_SUPPLY_ARTIFACTS",
+        "NO_MODEL_STATIC_SELF_TEST_PASS"
+      ]
+    },
+    "measuredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scope": {
+      "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sha256",
+        "candidateIds"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "phase7-bergamot-poc-candidates-v1"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "candidateIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "packageName",
+        "version",
+        "sourceCommit",
+        "tarballSha256",
+        "tarballIntegrity",
+        "installScriptsExecuted",
+        "packageMutated",
+        "probe"
+      ],
+      "properties": {
+        "packageName": {
+          "const": "@browsermt/bergamot-translator"
+        },
+        "version": {
+          "const": "0.4.9"
+        },
+        "sourceCommit": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "tarballSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "tarballIntegrity": {
+          "type": "string",
+          "pattern": "^sha512-"
+        },
+        "installScriptsExecuted": {
+          "const": false
+        },
+        "packageMutated": {
+          "const": false
+        },
+        "probe": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "blockerCode",
+            "importMs",
+            "wasmInitMs",
+            "rawErrorEmitted"
+          ],
+          "properties": {
+            "status": {
+              "enum": [
+                "READY",
+                "BLOCKED",
+                "STATIC_FIXTURE_ONLY"
+              ]
+            },
+            "blockerCode": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^[A-Z0-9_]+$"
+            },
+            "importMs": {
+              "type": "number",
+              "minimum": 0
+            },
+            "wasmInitMs": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "rawErrorEmitted": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "architecture",
+        "node",
+        "logicalCpuCount"
+      ],
+      "properties": {
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1
+        },
+        "node": {
+          "type": "string",
+          "pattern": "^v[0-9]+\\."
+        },
+        "logicalCpuCount": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "networkIsolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "offlineEnvironment",
+        "mainThreadSocketGuard",
+        "attemptedCalls",
+        "externalNetworkAccess",
+        "osFirewallVerified"
+      ],
+      "properties": {
+        "mode": {
+          "const": "PROCESS_LEVEL_OFFLINE_GUARD"
+        },
+        "offlineEnvironment": {
+          "const": true
+        },
+        "mainThreadSocketGuard": {
+          "const": true
+        },
+        "attemptedCalls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "externalNetworkAccess": {
+          "const": "NOT_VERIFIED"
+        },
+        "osFirewallVerified": {
+          "const": false
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verifiedFileCount",
+        "verifiedCompressedBytes",
+        "supplyTreeSha256",
+        "fixtureBytes",
+        "fixtureSha256"
+      ],
+      "properties": {
+        "verifiedFileCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "verifiedCompressedBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "supplyTreeSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "fixtureBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fixtureSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/route"
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "sampleCount",
+        "humanReviewStatus",
+        "rawTextEmitted"
+      ],
+      "properties": {
+        "metric": {
+          "const": "CHARACTER_NGRAM_F1_V1"
+        },
+        "sampleCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "humanReviewStatus": {
+          "const": "NOT_PERFORMED"
+        },
+        "rawTextEmitted": {
+          "const": false
+        }
+      }
+    },
+    "gateACompleteness": {
+      "$ref": "#/$defs/gateACompleteness"
+    },
+    "timeouts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runtimeProbeBudgetMs",
+        "routeBudgetMs",
+        "hardKillCount"
+      ],
+      "properties": {
+        "runtimeProbeBudgetMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "routeBudgetMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hardKillCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "gateACompleteness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputStatus",
+        "ready",
+        "gateAStatus",
+        "requirements",
+        "unmetConditions"
+      ],
+      "properties": {
+        "inputStatus": {
+          "const": "GATE_A_INPUT_INCOMPLETE"
+        },
+        "ready": {
+          "const": false
+        },
+        "gateAStatus": {
+          "const": "BLOCKED_INCOMPLETE_M4_EVIDENCE"
+        },
+        "authorizationMode": {
+          "const": "NON_AUTHORIZING_SHAPE_CHECK"
+        },
+        "requirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minimumColdTrialsPerDirection",
+            "coldTrialsRequireFreshProcess",
+            "privateWorkingSetMetric",
+            "minimumHumanBlindReviewsPerDirection"
+          ],
+          "properties": {
+            "minimumColdTrialsPerDirection": {
+              "const": 20
+            },
+            "coldTrialsRequireFreshProcess": {
+              "const": true
+            },
+            "privateWorkingSetMetric": {
+              "const": "WINDOWS_PRIVATE_WORKING_SET"
+            },
+            "minimumValidSamplesPerTrial": {
+              "const": 10
+            },
+            "minimumCoverageMillisecondsPerTrial": {
+              "const": 1000
+            },
+            "maximumLaunchToFirstSampleMilliseconds": {
+              "const": 250
+            },
+            "maximumSamplingCadenceMilliseconds": {
+              "const": 250
+            },
+            "maximumLogicalSampleSpanMilliseconds": {
+              "const": 250
+            },
+            "maximumProcessQuerySkewMilliseconds": {
+              "const": 250
+            },
+            "maximumVerifiedMembershipTransitionSamples": {
+              "const": 8
+            },
+            "maximumAdjacentValidSampleGapMilliseconds": {
+              "const": 500
+            },
+            "maximumExitOnlyAdjacentValidSampleGapMilliseconds": {
+              "const": 1250
+            },
+            "maximumTotalVerifiedTransitionGapMilliseconds": {
+              "const": 1000
+            },
+            "transitionReservePassBytes": {
+              "const": 1073741824
+            },
+            "privateWorkingSetBudgetBytes": {
+              "const": 1181116006
+            },
+            "minimumHumanBlindReviewsPerDirection": {
+              "const": 200
+            },
+            "rawArtifactSha256Binding": {
+              "const": true
+            },
+            "runnerAndHarnessSha256Binding": {
+              "const": true
+            },
+            "authorizationSha256Binding": {
+              "const": true
+            },
+            "logicalSamplesRecomputed": {
+              "const": true
+            }
+          }
+        },
+        "artifactBindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "coldPwsSha256",
+            "blindEvaluationSha256",
+            "pocAuthorizationSha256",
+            "harnessFileSetSha256",
+            "coldPwsRunnerSha256",
+            "coldPwsNativeSha256",
+            "electronMainSha256",
+            "electronLibrarySha256",
+            "electronRendererSha256"
+          ],
+          "properties": {
+            "coldPwsSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "blindEvaluationSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "pocAuthorizationSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "harnessFileSetSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "coldPwsRunnerSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "coldPwsNativeSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "electronMainSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "electronLibrarySha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "electronRendererSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" }
+          }
+        },
+        "derived": {
+          "type": "object"
+        },
+        "unmetConditions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "nullableMetric": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n",
+        "minMs",
+        "p50Ms",
+        "p95Ms",
+        "maxMs",
+        "meanMs"
+      ],
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minMs": {
+          "$ref": "#/$defs/nullableMetric"
+        },
+        "p50Ms": {
+          "$ref": "#/$defs/nullableMetric"
+        },
+        "p95Ms": {
+          "$ref": "#/$defs/nullableMetric"
+        },
+        "maxMs": {
+          "$ref": "#/$defs/nullableMetric"
+        },
+        "meanMs": {
+          "$ref": "#/$defs/nullableMetric"
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "direction",
+        "status",
+        "blockerCode",
+        "coldStartMs",
+        "firstTranslationMs",
+        "warmLatency",
+        "memory",
+        "quality",
+        "samples"
+      ],
+      "properties": {
+        "direction": {
+          "enum": [
+            "en-zh",
+            "zh-en"
+          ]
+        },
+        "status": {
+          "enum": [
+            "MEASURED",
+            "BLOCKED_RUNTIME",
+            "TIMEOUT",
+            "STATIC_FIXTURE_ONLY"
+          ]
+        },
+        "blockerCode": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[A-Z0-9_]+$"
+        },
+        "coldStartMs": {
+          "$ref": "#/$defs/nullableMetric"
+        },
+        "firstTranslationMs": {
+          "$ref": "#/$defs/nullableMetric"
+        },
+        "warmLatency": {
+          "$ref": "#/$defs/latency"
+        },
+        "memory": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rssBeforeBytes",
+            "rssAfterLoadBytes",
+            "peakRssBytes"
+          ],
+          "properties": {
+            "rssBeforeBytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "rssAfterLoadBytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "peakRssBytes": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "quality": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "characterNgramF1",
+            "digitsPreservedRate",
+            "urlsPreservedRate",
+            "placeholdersPreservedRate",
+            "nonEmptyRate"
+          ],
+          "properties": {
+            "characterNgramF1": {
+              "$ref": "#/$defs/nullableMetric"
+            },
+            "digitsPreservedRate": {
+              "$ref": "#/$defs/rate"
+            },
+            "urlsPreservedRate": {
+              "$ref": "#/$defs/rate"
+            },
+            "placeholdersPreservedRate": {
+              "$ref": "#/$defs/rate"
+            },
+            "nonEmptyRate": {
+              "$ref": "#/$defs/rate"
+            }
+          }
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sample"
+          }
+        }
+      }
+    },
+    "rate": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "sample": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "sourceChars",
+        "targetChars",
+        "characterNgramF1",
+        "digitsPreserved",
+        "urlsPreserved",
+        "placeholdersPreserved",
+        "nonEmpty"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sourceChars": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "targetChars": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "characterNgramF1": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "digitsPreserved": {
+          "type": "boolean"
+        },
+        "urlsPreserved": {
+          "type": "boolean"
+        },
+        "placeholdersPreserved": {
+          "type": "boolean"
+        },
+        "nonEmpty": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

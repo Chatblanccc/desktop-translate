@@ -1,0 +1,627 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-offline-poc-measurement-v1.json",
+  "title": "Desktop Translate Phase 7 offline POC measurement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "measuredAt",
+    "scope",
+    "manifest",
+    "candidate",
+    "environment",
+    "networkIsolation",
+    "artifacts",
+    "routes",
+    "quality",
+    "gateACompleteness",
+    "timeouts",
+    "limitations"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "phase7-offline-poc-measurement-v1"
+    },
+    "status": {
+      "enum": [
+        "PARTIAL_M4_MEASUREMENT",
+        "BLOCKED",
+        "NO_MODEL_STATIC_SELF_TEST_PASS"
+      ]
+    },
+    "measuredAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scope": {
+      "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+    },
+    "manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "sha256"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "phase7-offline-poc-candidates-v1"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "repository",
+        "revision",
+        "architecture",
+        "licenseExpression",
+        "observedLicenseMetadataExpression",
+        "commercialUseConclusion",
+        "pocAuthorizationScope",
+        "gateAStatus"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "repository": {
+          "type": "string",
+          "minLength": 1
+        },
+        "revision": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{40}$"
+        },
+        "architecture": {
+          "enum": [
+            "MarianMT",
+            "M2M100",
+            "FAKE"
+          ]
+        },
+        "licenseExpression": {
+          "type": "string",
+          "minLength": 1
+        },
+        "observedLicenseMetadataExpression": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commercialUseConclusion": {
+          "const": "NOT_ESTABLISHED"
+        },
+        "pocAuthorizationScope": {
+          "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+        },
+        "gateAStatus": {
+          "enum": [
+            "BLOCKED_INCOMPLETE_M4_EVIDENCE",
+            "SELF_TEST_ONLY"
+          ]
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": [
+        "os",
+        "architecture",
+        "cpu",
+        "logicalCpuCount",
+        "python",
+        "packages",
+        "supportedCpuComputeTypes"
+      ],
+      "properties": {
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "architecture": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cpu": {
+          "type": "string",
+          "minLength": 1
+        },
+        "logicalCpuCount": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "python": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packages": {
+          "type": "object"
+        },
+        "supportedCpuComputeTypes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "networkIsolation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "pythonSocketGuard",
+        "offlineEnvironment",
+        "attemptedCalls",
+        "externalNetworkAccess",
+        "osFirewallVerified"
+      ],
+      "properties": {
+        "mode": {
+          "const": "PROCESS_LEVEL_OFFLINE_GUARD"
+        },
+        "pythonSocketGuard": {
+          "const": true
+        },
+        "offlineEnvironment": {
+          "const": true
+        },
+        "attemptedCalls": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "externalNetworkAccess": {
+          "const": "NOT_VERIFIED"
+        },
+        "osFirewallVerified": {
+          "const": false
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "convertedModelBytes",
+        "convertedModelTreeSha256",
+        "fixtureBytes",
+        "fixtureSha256"
+      ],
+      "properties": {
+        "convertedModelBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "convertedModelTreeSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "fixtureBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "fixtureSha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/route"
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "sampleCount",
+        "humanReviewStatus",
+        "rawTextEmitted"
+      ],
+      "properties": {
+        "metric": {
+          "const": "sacreBLEU-chrF2++"
+        },
+        "sampleCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "humanReviewStatus": {
+          "const": "NOT_PERFORMED"
+        },
+        "rawTextEmitted": {
+          "const": false
+        }
+      }
+    },
+    "gateACompleteness": {
+      "$ref": "#/$defs/gateACompleteness"
+    },
+    "timeouts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "routeBudgetMs",
+        "hardKillCount"
+      ],
+      "properties": {
+        "routeBudgetMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "hardKillCount": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "gateACompleteness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "inputStatus",
+        "ready",
+        "gateAStatus",
+        "requirements",
+        "unmetConditions"
+      ],
+      "properties": {
+        "inputStatus": {
+          "const": "GATE_A_INPUT_INCOMPLETE"
+        },
+        "ready": {
+          "const": false
+        },
+        "gateAStatus": {
+          "const": "BLOCKED_INCOMPLETE_M4_EVIDENCE"
+        },
+        "authorizationMode": {
+          "const": "NON_AUTHORIZING_SHAPE_CHECK"
+        },
+        "requirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "minimumColdTrialsPerDirection",
+            "coldTrialsRequireFreshProcess",
+            "privateWorkingSetMetric",
+            "minimumHumanBlindReviewsPerDirection"
+          ],
+          "properties": {
+            "minimumColdTrialsPerDirection": {
+              "const": 20
+            },
+            "coldTrialsRequireFreshProcess": {
+              "const": true
+            },
+            "privateWorkingSetMetric": {
+              "const": "WINDOWS_PRIVATE_WORKING_SET"
+            },
+            "minimumValidSamplesPerTrial": {
+              "const": 10
+            },
+            "minimumCoverageMillisecondsPerTrial": {
+              "const": 1000
+            },
+            "maximumLaunchToFirstSampleMilliseconds": {
+              "const": 250
+            },
+            "maximumSamplingCadenceMilliseconds": {
+              "const": 250
+            },
+            "maximumLogicalSampleSpanMilliseconds": {
+              "const": 250
+            },
+            "maximumProcessQuerySkewMilliseconds": {
+              "const": 250
+            },
+            "maximumVerifiedMembershipTransitionSamples": {
+              "const": 8
+            },
+            "maximumAdjacentValidSampleGapMilliseconds": {
+              "const": 500
+            },
+            "maximumExitOnlyAdjacentValidSampleGapMilliseconds": {
+              "const": 1250
+            },
+            "maximumTotalVerifiedTransitionGapMilliseconds": {
+              "const": 1000
+            },
+            "transitionReservePassBytes": {
+              "const": 1073741824
+            },
+            "privateWorkingSetBudgetBytes": {
+              "const": 1181116006
+            },
+            "minimumHumanBlindReviewsPerDirection": {
+              "const": 200
+            },
+            "rawArtifactSha256Binding": {
+              "const": true
+            },
+            "runnerAndHarnessSha256Binding": {
+              "const": true
+            },
+            "authorizationSha256Binding": {
+              "const": true
+            },
+            "logicalSamplesRecomputed": {
+              "const": true
+            }
+          }
+        },
+        "artifactBindings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "coldPwsSha256",
+            "blindEvaluationSha256",
+            "pocAuthorizationSha256",
+            "harnessFileSetSha256",
+            "coldPwsRunnerSha256",
+            "coldPwsNativeSha256",
+            "electronMainSha256",
+            "electronLibrarySha256",
+            "electronRendererSha256"
+          ],
+          "properties": {
+            "coldPwsSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "blindEvaluationSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "pocAuthorizationSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "harnessFileSetSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "coldPwsRunnerSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "coldPwsNativeSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "electronMainSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "electronLibrarySha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+            "electronRendererSha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" }
+          }
+        },
+        "derived": {
+          "type": "object"
+        },
+        "unmetConditions": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "latency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "n",
+        "minMs",
+        "p50Ms",
+        "p95Ms",
+        "maxMs",
+        "meanMs"
+      ],
+      "properties": {
+        "n": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "minMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "p50Ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "p95Ms": {
+          "type": "number",
+          "minimum": 0
+        },
+        "maxMs": {
+          "type": "number",
+          "minimum": 0
+        },
+        "meanMs": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "route": {
+      "type": "object",
+      "required": [
+        "direction",
+        "status",
+        "modelLoadMs",
+        "firstTranslationMs",
+        "warmLatency",
+        "throughput",
+        "memory",
+        "quality",
+        "samples"
+      ],
+      "properties": {
+        "direction": {
+          "enum": [
+            "en-zh",
+            "zh-en"
+          ]
+        },
+        "status": {
+          "enum": [
+            "MEASURED",
+            "TIMEOUT",
+            "BLOCKED",
+            "STATIC_FIXTURE_ONLY"
+          ]
+        },
+        "modelLoadMs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "firstTranslationMs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "warmLatency": {
+          "$ref": "#/$defs/latency"
+        },
+        "throughput": {
+          "type": "object",
+          "required": [
+            "sourceCharsPerSecond",
+            "targetTokensPerSecond"
+          ],
+          "properties": {
+            "sourceCharsPerSecond": {
+              "type": "number",
+              "minimum": 0
+            },
+            "targetTokensPerSecond": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "memory": {
+          "type": "object",
+          "required": [
+            "loadedWorkingSetBytes",
+            "peakWorkingSetBytes",
+            "privateUsageBytes"
+          ],
+          "properties": {
+            "loadedWorkingSetBytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "peakWorkingSetBytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "privateUsageBytes": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        },
+        "quality": {
+          "type": "object",
+          "required": [
+            "chrf2Score",
+            "digitsPreservedRate",
+            "urlsPreservedRate",
+            "placeholdersPreservedRate",
+            "nonEmptyRate"
+          ],
+          "properties": {
+            "chrf2Score": {
+              "type": [
+                "number",
+                "null"
+              ]
+            },
+            "digitsPreservedRate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "urlsPreservedRate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "placeholdersPreservedRate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "nonEmptyRate": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "samples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "sourceChars",
+              "targetChars",
+              "targetTokens",
+              "digitsPreserved",
+              "urlsPreserved",
+              "placeholdersPreserved",
+              "nonEmpty"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "sourceChars": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "targetChars": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "targetTokens": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "digitsPreserved": {
+                "type": "boolean"
+              },
+              "urlsPreserved": {
+                "type": "boolean"
+              },
+              "placeholdersPreserved": {
+                "type": "boolean"
+              },
+              "nonEmpty": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

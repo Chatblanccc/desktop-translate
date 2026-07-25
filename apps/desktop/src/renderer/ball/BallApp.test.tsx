@@ -42,6 +42,9 @@ describe('BallApp', () => {
 
     const button = await screen.findByRole('button', { name: /打开桌面翻译设置/ });
     expect(button.tagName).toBe('BUTTON');
+    const frame = button.closest('.ball-frame');
+    expect(frame?.getAttribute('title')).toBe('按住上方把手拖动悬浮球');
+    expect(frame?.querySelector('.ball-drag-handle')).not.toBeNull();
 
     fireEvent.click(button);
     fireEvent.contextMenu(button);

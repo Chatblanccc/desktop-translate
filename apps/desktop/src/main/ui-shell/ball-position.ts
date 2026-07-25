@@ -36,6 +36,7 @@ function findDisplay(anchor: BallAnchor | undefined, displays: readonly DisplayL
 
 export function createDefaultBallAnchor(display: DisplayLike): BallAnchor {
   return {
+    mode: 'edge',
     displayId: String(display.id),
     edge: 'right',
     verticalRatio: DEFAULT_BALL_VERTICAL_RATIO
@@ -48,10 +49,14 @@ export function resolveBallBounds(
 ): RectangleLike {
   const display = findDisplay(anchor, displays);
   const effectiveAnchor = anchor ?? createDefaultBallAnchor(display);
+  const horizontalTravel = availableTravel(display.workArea.width);
   const verticalTravel = availableTravel(display.workArea.height);
-  const x = effectiveAnchor.edge === 'left'
-    ? display.workArea.x + BALL_MARGIN_DIP
-    : display.workArea.x + display.workArea.width - BALL_MARGIN_DIP - BALL_SIZE_DIP;
+  const leftX = display.workArea.x + BALL_MARGIN_DIP;
+  const x = effectiveAnchor.mode === 'free'
+    ? leftX + horizontalTravel * effectiveAnchor.horizontalRatio
+    : effectiveAnchor.edge === 'left'
+      ? leftX
+      : leftX + horizontalTravel;
   const y = display.workArea.y + BALL_MARGIN_DIP + verticalTravel * effectiveAnchor.verticalRatio;
   return {
     x: Math.round(x),
@@ -109,25 +114,37 @@ export function deriveBallPlacement(
   edgeSnap: boolean
 ): BallPlacement {
   const display = findNearestDisplay(requestedBounds, displays);
+  const horizontalTravel = availableTravel(display.workArea.width);
   const verticalTravel = availableTravel(display.workArea.height);
+  const leftX = display.workArea.x + BALL_MARGIN_DIP;
+  const rightX = leftX + horizontalTravel;
   const clampedX = clamp(
     requestedBounds.x,
-    display.workArea.x + BALL_MARGIN_DIP,
-    display.workArea.x + display.workArea.width - BALL_MARGIN_DIP - BALL_SIZE_DIP
+    leftX,
+    rightX
   );
+  const topY = display.workArea.y + BALL_MARGIN_DIP;
   const clampedY = clamp(
     requestedBounds.y,
-    display.workArea.y + BALL_MARGIN_DIP,
-    display.workArea.y + display.workArea.height - BALL_MARGIN_DIP - BALL_SIZE_DIP
+    topY,
+    topY + verticalTravel
   );
+  const horizontalRatio = horizontalTravel === 0
+    ? 0
+    : (clampedX - leftX) / horizontalTravel;
   const verticalRatio = verticalTravel === 0
     ? 0
-    : (clampedY - display.workArea.y - BALL_MARGIN_DIP) / verticalTravel;
-  const leftX = display.workArea.x + BALL_MARGIN_DIP;
-  const rightX = display.workArea.x + display.workArea.width - BALL_MARGIN_DIP - BALL_SIZE_DIP;
+    : (clampedY - topY) / verticalTravel;
   const edge = Math.abs(clampedX - leftX) <= Math.abs(clampedX - rightX) ? 'left' : 'right';
+  const anchor: BallAnchor = edgeSnap
+    ? { mode: 'edge', displayId: String(display.id), edge, verticalRatio }
+    : {
+        mode: 'free',
+        displayId: String(display.id),
+        horizontalRatio,
+        verticalRatio
+      };
   const x = edgeSnap ? (edge === 'left' ? leftX : rightX) : clampedX;
-  const anchor: BallAnchor = { displayId: String(display.id), edge, verticalRatio };
 
   return {
     anchor,

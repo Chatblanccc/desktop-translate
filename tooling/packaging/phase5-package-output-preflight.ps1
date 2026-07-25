@@ -436,6 +436,55 @@ function Resolve-Phase5PackageOutputProcessIdentity {
     }
 }
 
+function Get-Phase5PackageOutputProcessInventory {
+    [CmdletBinding()]
+    param()
+
+    try {
+        return @(
+            Get-CimInstance -Query (
+                'SELECT ProcessId, Name, ExecutablePath, CreationDate FROM Win32_Process'
+            ) -ErrorAction Stop
+        )
+    } catch {
+        # Managed Windows sandboxes can deny WMI/CIM while still allowing the
+        # same read-only identity fields through System.Diagnostics.Process.
+        # Preserve the fail-closed behavior: inaccessible path/start-time
+        # fields remain null and Resolve-Phase5PackageOutputProcessIdentity
+        # rejects them whenever the executable name matches package output.
+        try {
+            $processes = @(Get-Process -ErrorAction Stop)
+        } catch {
+            throw (New-Phase5PackageOutputException `
+                -Code 'PACKAGE_OUTPUT_PROCESS_IDENTITY_INDETERMINATE' `
+                -Message 'the process inventory could not be queried; no output was removed.')
+        }
+
+        $inventory = @()
+        foreach ($process in $processes) {
+            try {
+                $name = [string]$process.ProcessName
+                if (-not $name.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) {
+                    $name += '.exe'
+                }
+                $executablePath = $null
+                $creationDate = $null
+                try { $executablePath = [string]$process.Path } catch {}
+                try { $creationDate = [DateTime]$process.StartTime } catch {}
+                $inventory += [pscustomobject][ordered]@{
+                    ProcessId = [int]$process.Id
+                    Name = $name
+                    ExecutablePath = $executablePath
+                    CreationDate = $creationDate
+                }
+            } finally {
+                $process.Dispose()
+            }
+        }
+        return @($inventory)
+    }
+}
+
 function Get-Phase5PackageOutputProcessIdentity {
     [CmdletBinding()]
     param(
@@ -449,12 +498,7 @@ function Get-Phase5PackageOutputProcessIdentity {
     if ($KnownExecutableNames.Count -eq 0) {
         $KnownExecutableNames = @(Get-Phase5PackageOutputExecutableNames -PackageOutput $PackageOutput)
     }
-    try {
-        $candidates = @(Get-CimInstance -Query 'SELECT ProcessId, Name, ExecutablePath, CreationDate FROM Win32_Process' -ErrorAction Stop)
-    } catch {
-        throw (New-Phase5PackageOutputException -Code 'PACKAGE_OUTPUT_PROCESS_IDENTITY_INDETERMINATE' `
-            -Message 'the process inventory could not be queried; no output was removed.')
-    }
+    $candidates = @(Get-Phase5PackageOutputProcessInventory)
 
     $matches = @()
     foreach ($candidate in $candidates) {
@@ -675,10 +719,11 @@ function Get-Phase5PackageOutputEntryKeys {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string]$Root)
 
-    return @(Get-ChildItem -LiteralPath $Root -Recurse -Force -ErrorAction Stop |
+    $rootNative = ConvertTo-Phase5ExtendedLengthPath -Path $Root
+    return @(Get-ChildItem -LiteralPath $rootNative -Recurse -Force -ErrorAction Stop |
         ForEach-Object {
             ('{0}:{1}' -f $(if ($_.PSIsContainer) { 'D' } else { 'F' }),
-                (Get-Phase5PackageOutputRelativePath -Root $Root -Path $_.FullName))
+                (Get-Phase5PackageOutputRelativePath -Root $rootNative -Path $_.FullName))
         } | Sort-Object)
 }
 

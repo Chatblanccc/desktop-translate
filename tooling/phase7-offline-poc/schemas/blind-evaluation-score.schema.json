@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-blind-eval-score-v1.json",
+  "title": "Phase 7 human-only blind evaluation score",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "evaluationId",
+    "reviewerToken"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "phase7-blind-eval-score-v1"
+    },
+    "status": {
+      "enum": [
+        "PENDING_HUMAN_REVIEW",
+        "HUMAN_REVIEWED"
+      ]
+    },
+    "evaluationId": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{32}$"
+    },
+    "reviewerToken": {
+      "type": "string",
+      "pattern": "^reviewer-[a-f0-9]{24}$"
+    },
+    "reviewMode": {
+      "const": "HUMAN_ONLY_NO_AUTOMATED_SCORING"
+    },
+    "blindnessAttestation": {
+      "const": "CANDIDATE_IDENTITY_NOT_VIEWED"
+    },
+    "humanReviewAttestation": {
+      "const": "I_REVIEWED_THIS_ITEM_WITHOUT_AUTOMATED_SCORING"
+    },
+    "reviewedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "acceptability": {
+      "enum": [
+        "ACCEPTABLE",
+        "UNACCEPTABLE"
+      ]
+    },
+    "adequacyScore": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "fluencyScore": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 5
+    },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severeMistranslation",
+        "untranslated",
+        "garbled",
+        "properNounError",
+        "longSentenceError"
+      ],
+      "properties": {
+        "severeMistranslation": {
+          "type": "boolean"
+        },
+        "untranslated": {
+          "type": "boolean"
+        },
+        "garbled": {
+          "type": "boolean"
+        },
+        "properNounError": {
+          "type": "boolean"
+        },
+        "longSentenceError": {
+          "type": "boolean"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "PENDING_HUMAN_REVIEW"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "then": {
+        "properties": {
+          "reviewMode": false,
+          "blindnessAttestation": false,
+          "humanReviewAttestation": false,
+          "reviewedAt": false,
+          "acceptability": false,
+          "adequacyScore": false,
+          "fluencyScore": false,
+          "errors": false
+        }
+      },
+      "else": {
+        "properties": {
+          "reviewMode": {},
+          "blindnessAttestation": {},
+          "humanReviewAttestation": {},
+          "reviewedAt": {},
+          "acceptability": {},
+          "adequacyScore": {},
+          "fluencyScore": {},
+          "errors": {}
+        },
+        "required": [
+          "reviewMode",
+          "blindnessAttestation",
+          "humanReviewAttestation",
+          "reviewedAt",
+          "acceptability",
+          "adequacyScore",
+          "fluencyScore",
+          "errors"
+        ]
+      }
+    }
+  ]
+}

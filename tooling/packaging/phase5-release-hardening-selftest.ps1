@@ -7,16 +7,76 @@ $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $PSScriptRoot 'phase5-safe-filesystem.ps1')
 . (Join-Path $PSScriptRoot 'phase5-package-output-preflight.ps1')
 
+if ($null -eq ('Phase5.ReleaseHardeningSelftestNative' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.IO;
+using System.Runtime.InteropServices;
+
+namespace Phase5 {
+    public static class ReleaseHardeningSelftestNative {
+        private const uint SYMBOLIC_LINK_FLAG_FILE = 0x00000000;
+        private const uint SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE = 0x00000002;
+        private const int ERROR_INVALID_PARAMETER = 87;
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.U1)]
+        private static extern bool CreateSymbolicLinkW(
+            string symlinkFileName,
+            string targetFileName,
+            uint flags
+        );
+
+        private static string ToExtendedLengthPath(string value) {
+            var full = Path.GetFullPath(value);
+            if (full.StartsWith(@"\\?\", StringComparison.Ordinal)) {
+                return full;
+            }
+            if (full.StartsWith(@"\\", StringComparison.Ordinal)) {
+                return @"\\?\UNC\" + full.Substring(2);
+            }
+            return @"\\?\" + full;
+        }
+
+        public static void CreateFileSymbolicLink(string linkPath, string targetPath) {
+            var succeeded = CreateSymbolicLinkW(
+                ToExtendedLengthPath(linkPath),
+                ToExtendedLengthPath(targetPath),
+                SYMBOLIC_LINK_FLAG_FILE | SYMBOLIC_LINK_FLAG_ALLOW_UNPRIVILEGED_CREATE
+            );
+            var error = succeeded ? 0 : Marshal.GetLastWin32Error();
+            if (!succeeded && error == ERROR_INVALID_PARAMETER) {
+                succeeded = CreateSymbolicLinkW(
+                    ToExtendedLengthPath(linkPath),
+                    ToExtendedLengthPath(targetPath),
+                    SYMBOLIC_LINK_FLAG_FILE
+                );
+                error = succeeded ? 0 : Marshal.GetLastWin32Error();
+            }
+            if (!succeeded) {
+                throw new Win32Exception(
+                    error,
+                    "The release-hardening selftest could not create its file symbolic link."
+                );
+            }
+        }
+    }
+}
+'@
+}
+
 function Get-Phase5ReleaseSelftestTreeProof {
     [CmdletBinding()]
     param([Parameter(Mandatory = $true)][string]$Root)
 
     $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd('\')
-    return @(Get-ChildItem -LiteralPath $rootFull -Recurse -Force -ErrorAction Stop |
+    $rootNative = ConvertTo-Phase5ExtendedLengthPath -Path $rootFull
+    return @(Get-ChildItem -LiteralPath $rootNative -Recurse -Force -ErrorAction Stop |
         ForEach-Object {
             [pscustomobject][ordered]@{
                 Key = ('{0}:{1}' -f $(if ($_.PSIsContainer) { 'D' } else { 'F' }),
-                    $_.FullName.Substring($rootFull.Length + 1))
+                    $_.FullName.Substring($rootNative.Length + 1))
                 Sha256 = if ($_.PSIsContainer) { $null } else {
                     (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
                 }
@@ -50,6 +110,8 @@ if ($functionOrderFailures.Count -gt 0) { throw ($functionOrderFailures -join [E
 
 node (Join-Path $root 'tooling\supply-chain\phase5-release-evidence-selftest.mjs')
 if ($LASTEXITCODE -ne 0) { throw 'Release evidence exact-set selftest failed.' }
+node --test (Join-Path $root 'tooling\packaging\phase7-installer-compile-chain.test.mjs')
+if ($LASTEXITCODE -ne 0) { throw 'Phase 7 installer compile-chain selftest failed.' }
 
 $temporaryParent = Join-Path ([IO.Path]::GetTempPath()) ('desktop-translate-phase5-safe-delete-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $temporaryParent | Out-Null
@@ -110,8 +172,10 @@ try {
         } finally {
             $targetIdentityLease.Dispose()
         }
-        New-Item -ItemType SymbolicLink -Path $nativeFinalReparsePath `
-            -Target $nativeFinalReparseTarget -ErrorAction Stop | Out-Null
+        [Phase5.ReleaseHardeningSelftestNative]::CreateFileSymbolicLink(
+            $nativeFinalReparsePath,
+            $nativeFinalReparseTarget
+        )
         $nativeFinalReparseRejected = $false
         try {
             $unexpectedNativeReparseLease = `
@@ -400,7 +464,10 @@ try {
     $reparsePath = Join-Path $reparseOutput 'nested\linked.bin'
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $reparsePath) | Out-Null
     [IO.File]::WriteAllBytes($reparseTarget, [byte[]](81, 82, 83, 84))
-    New-Item -ItemType SymbolicLink -Path $reparsePath -Target $reparseTarget -ErrorAction Stop | Out-Null
+    [Phase5.ReleaseHardeningSelftestNative]::CreateFileSymbolicLink(
+        $reparsePath,
+        $reparseTarget
+    )
     $reparseOriginalProof = Get-Phase5ReleaseSelftestTreeProof -Root $reparseOutput
     $reparseTargetHash = (Get-FileHash -LiteralPath $reparseTarget -Algorithm SHA256).Hash
     $reparseLease = $null
@@ -449,7 +516,9 @@ try {
         $emptyDirectoryQuarantinedNested = Join-Path $emptyDirectoryQuarantineRoot 'empty-parent\empty-child'
         $emptyDirectoryExtendedPath = Join-Path $emptyDirectoryQuarantinedNested 'grandchild'
         if ($emptyDirectoryExtendedPath.Length -le 260 -or
-            -not (Test-Path -LiteralPath $emptyDirectoryExtendedPath -PathType Container)) {
+            -not (Test-Path -LiteralPath (
+                    ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryExtendedPath
+                ) -PathType Container)) {
             throw 'Directory-only quarantine did not exercise a native path beyond legacy MAX_PATH.'
         }
         $emptyDirectoryRenamedRoot = $emptyDirectoryQuarantineRoot + '-replacement-attempt'
@@ -457,7 +526,9 @@ try {
 
         $rootIdentityMismatchRejected = $false
         $rootIdentityProbe = $emptyDirectoryQuarantineRoot + '-different-identity'
-        New-Item -ItemType Directory -Path $rootIdentityProbe | Out-Null
+        New-Item -ItemType Directory -Path (
+            ConvertTo-Phase5ExtendedLengthPath -Path $rootIdentityProbe
+        ) | Out-Null
         try {
             Assert-Phase5PackageQuarantineDirectoryIdentity `
                 -DirectoryLease $emptyDirectoryLease.QuarantineDirectoryLease `
@@ -466,22 +537,30 @@ try {
             $rootIdentityMismatchRejected = $_.Exception.Data['StableErrorCode'] -eq `
                 'PACKAGE_OUTPUT_QUARANTINE_CHANGED'
         }
-        [IO.Directory]::Delete($rootIdentityProbe)
+        [IO.Directory]::Delete((ConvertTo-Phase5ExtendedLengthPath -Path $rootIdentityProbe))
         if (-not $rootIdentityMismatchRejected) {
             throw 'Quarantine-root path binding accepted a different directory identity.'
         }
 
         $emptyRootRebindingRejected = $false
         try {
-            [IO.Directory]::Move($emptyDirectoryQuarantineRoot, $emptyDirectoryRenamedRoot)
+            [IO.Directory]::Move(
+                (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryQuarantineRoot),
+                (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryRenamedRoot)
+            )
             New-Item -ItemType Directory -Path $emptyDirectoryQuarantineRoot | Out-Null
         } catch {
             $emptyRootRebindingRejected = $true
         }
         $emptyNestedRebindingRejected = $false
         try {
-            [IO.Directory]::Move($emptyDirectoryQuarantinedNested, $emptyDirectoryRenamedNested)
-            New-Item -ItemType Directory -Path $emptyDirectoryQuarantinedNested | Out-Null
+            [IO.Directory]::Move(
+                (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryQuarantinedNested),
+                (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryRenamedNested)
+            )
+            New-Item -ItemType Directory -Path (
+                ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryQuarantinedNested
+            ) | Out-Null
         } catch {
             $emptyNestedRebindingRejected = $true
         }
@@ -510,18 +589,39 @@ try {
             }
             if (-not $nestedIdentityDetected -or -not $nestedExitDetected -or
                 [bool]$emptyDirectoryLease.Active -or
-                -not (Test-Path -LiteralPath (Join-Path $emptyDirectoryRenamedNested 'grandchild') -PathType Container)) {
+                -not (Test-Path -LiteralPath (
+                        ConvertTo-Phase5ExtendedLengthPath -Path (
+                            Join-Path $emptyDirectoryRenamedNested 'grandchild'
+                        )
+                    ) -PathType Container)) {
                 throw 'Nested empty-directory replacement was not rejected by both identity validation boundaries with the original subtree retained.'
             }
             $emptyDirectoryLease = $null
-            [IO.Directory]::Delete($emptyDirectoryQuarantinedNested)
-            [IO.Directory]::Move($emptyDirectoryRenamedNested, $emptyDirectoryQuarantinedNested)
+            [IO.Directory]::Delete((
+                    ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryQuarantinedNested
+                ))
+            [IO.Directory]::Move(
+                (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryRenamedNested),
+                (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryQuarantinedNested)
+            )
         }
 
-        [IO.Directory]::Move($emptyDirectoryQuarantinedNested, $emptyDirectoryRenamedNested)
-        [IO.Directory]::Move($emptyDirectoryRenamedNested, $emptyDirectoryQuarantinedNested)
-        [IO.Directory]::Move($emptyDirectoryQuarantineRoot, $emptyDirectoryRenamedRoot)
-        [IO.Directory]::Move($emptyDirectoryRenamedRoot, $emptyDirectoryQuarantineRoot)
+        [IO.Directory]::Move(
+            (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryQuarantinedNested),
+            (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryRenamedNested)
+        )
+        [IO.Directory]::Move(
+            (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryRenamedNested),
+            (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryQuarantinedNested)
+        )
+        [IO.Directory]::Move(
+            (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryQuarantineRoot),
+            (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryRenamedRoot)
+        )
+        [IO.Directory]::Move(
+            (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryRenamedRoot),
+            (ConvertTo-Phase5ExtendedLengthPath -Path $emptyDirectoryQuarantineRoot)
+        )
         if ((Get-Phase5ReleaseSelftestTreeProof -Root $emptyDirectoryQuarantineRoot |
                 ConvertTo-Json -Compress) -cne
             ($emptyDirectoryOriginalProof | ConvertTo-Json -Compress)) {
@@ -1077,8 +1177,11 @@ try {
 
     $packageScriptText = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'phase5-package.ps1') -Raw -Encoding UTF8
     if ($packageScriptText -notmatch '--config\.directories\.output=\$packageBuildStaging' -or
+        $packageScriptText -notmatch '--config\.electronDist=\$electronDist' -or
+        $packageScriptText -notmatch '\$SignedRelease -and \$ManagedSandboxCompatibility' -or
+        $packageScriptText -notmatch 'smokeParameters\.ManagedSandboxCompatibility' -or
         $packageScriptText -notmatch 'Invoke-Phase5PackageCandidateGatesAndPublish') {
-        throw 'Package script does not bind electron-builder to unique staging and atomic final publish.'
+        throw 'Package script does not bind local Electron, staging, sandbox-compatible unsigned smoke, and atomic publish.'
     }
     $publishBoundaryIndex = $packageScriptText.IndexOf('Invoke-Phase5PackageCandidateGatesAndPublish')
     $publishedReverifyIndex = $packageScriptText.IndexOf('Re-verify atomically published live manifest and hashes')

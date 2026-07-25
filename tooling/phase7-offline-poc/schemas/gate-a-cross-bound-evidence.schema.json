@@ -1,0 +1,493 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-gate-a-cross-bound-evidence-v1.json",
+  "title": "Phase 7 Gate A cross-bound evidence documents",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/candidateGeneration"
+    },
+    {
+      "$ref": "#/$defs/legalReview"
+    },
+    {
+      "$ref": "#/$defs/osNetworkVerification"
+    },
+    {
+      "$ref": "#/$defs/packageSizing"
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "safeId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{2,127}$"
+    },
+    "direction": {
+      "enum": [
+        "en-zh",
+        "zh-en"
+      ]
+    },
+    "candidateBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "direction",
+        "candidateId",
+        "generationRunId",
+        "generationArtifactSha256",
+        "generationIdentitySha256"
+      ],
+      "properties": {
+        "direction": {
+          "$ref": "#/$defs/direction"
+        },
+        "candidateId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "generationRunId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "generationArtifactSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "generationIdentitySha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "candidateGeneration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "status",
+        "scope",
+        "identity",
+        "identitySha256",
+        "candidateOutput",
+        "privacy",
+        "gateA"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "phase7-gate-a-candidate-generation-v1"
+        },
+        "status": {
+          "const": "FORMAL_BLIND_CANDIDATE_GENERATION_COMPLETE"
+        },
+        "scope": {
+          "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+        },
+        "identity": {
+          "$ref": "#/$defs/generationIdentity"
+        },
+        "identitySha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "candidateOutput": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "artifactSha256",
+            "recordCount",
+            "itemIdentitySetSha256",
+            "rawTextEmittedInEvidence"
+          ],
+          "properties": {
+            "artifactSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "recordCount": {
+              "type": "integer",
+              "minimum": 200
+            },
+            "itemIdentitySetSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "rawTextEmittedInEvidence": {
+              "const": false
+            }
+          }
+        },
+        "privacy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sourceTextInEvidence",
+            "translationTextInEvidence",
+            "absolutePathsInEvidence",
+            "usernamesInEvidence"
+          ],
+          "properties": {
+            "sourceTextInEvidence": {
+              "const": false
+            },
+            "translationTextInEvidence": {
+              "const": false
+            },
+            "absolutePathsInEvidence": {
+              "const": false
+            },
+            "usernamesInEvidence": {
+              "const": false
+            }
+          }
+        },
+        "gateA": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ready",
+            "integrationOrDistributionAuthorized"
+          ],
+          "properties": {
+            "ready": {
+              "const": false
+            },
+            "integrationOrDistributionAuthorized": {
+              "const": false
+            }
+          }
+        }
+      }
+    },
+    "generationIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "direction",
+        "candidateId",
+        "generationRunId",
+        "manifestSha256",
+        "authorizationSha256",
+        "authorizationRecordId",
+        "model",
+        "runtime",
+        "sourceSet",
+        "workloadIdentitySha256"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "phase7-gate-a-candidate-generation-identity-v1"
+        },
+        "direction": {
+          "$ref": "#/$defs/direction"
+        },
+        "candidateId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "generationRunId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "manifestSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "authorizationSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "authorizationRecordId": {
+          "$ref": "#/$defs/safeId"
+        },
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "treeSha256"
+          ],
+          "properties": {
+            "treeSha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "materializedTreeSha256",
+            "servedTreeSha256"
+          ],
+          "properties": {
+            "materializedTreeSha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "servedTreeSha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "sourceSet": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "recordCount",
+            "identitySha256"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": "phase7-gate-a-source-set-v1"
+            },
+            "recordCount": {
+              "type": "integer",
+              "minimum": 200
+            },
+            "identitySha256": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        "workloadIdentitySha256": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "legalReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "status",
+        "scope",
+        "primaryEvidenceSetSha256",
+        "candidateGenerationBindingSetSha256",
+        "reviewedManifestSha256",
+        "reviewedCandidateIds",
+        "licenseNoticeSbomReviewComplete",
+        "redistributionConclusion",
+        "integrationOrDistributionAuthorized",
+        "reviewedAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "phase7-gate-a-legal-review-v1"
+        },
+        "status": {
+          "const": "LEGAL_REVIEW_COMPLETE_FOR_GATE_A_DECISION"
+        },
+        "scope": {
+          "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+        },
+        "primaryEvidenceSetSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "candidateGenerationBindingSetSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "reviewedManifestSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "reviewedCandidateIds": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/safeId"
+          }
+        },
+        "licenseNoticeSbomReviewComplete": {
+          "const": true
+        },
+        "redistributionConclusion": {
+          "const": "PERMITTED_FOR_PROPOSED_LIMITED_BETA"
+        },
+        "integrationOrDistributionAuthorized": {
+          "const": false
+        },
+        "reviewedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "osNetworkVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "status",
+        "scope",
+        "primaryEvidenceSetSha256",
+        "candidateGenerationBindingSetSha256",
+        "method",
+        "captureSha256",
+        "captureSizeBytes",
+        "observedExternalConnectionCount",
+        "osLevelVerified",
+        "rawTextEmitted",
+        "integrationOrDistributionAuthorized",
+        "verifiedAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "phase7-gate-a-os-network-verification-v1"
+        },
+        "status": {
+          "const": "OS_LEVEL_NO_EXTERNAL_TRAFFIC_OBSERVED"
+        },
+        "scope": {
+          "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+        },
+        "primaryEvidenceSetSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "candidateGenerationBindingSetSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "method": {
+          "const": "WINDOWS_FIREWALL_AND_PACKET_CAPTURE"
+        },
+        "captureSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "captureSizeBytes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "observedExternalConnectionCount": {
+          "const": 0
+        },
+        "osLevelVerified": {
+          "const": true
+        },
+        "rawTextEmitted": {
+          "const": false
+        },
+        "integrationOrDistributionAuthorized": {
+          "const": false
+        },
+        "verifiedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "packageSizing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "status",
+        "scope",
+        "primaryEvidenceSetSha256",
+        "candidateGenerationBindingSetSha256",
+        "baseInstaller",
+        "coreModelPack",
+        "limits",
+        "integrationOrDistributionAuthorized",
+        "measuredAt"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "phase7-gate-a-package-sizing-v1"
+        },
+        "status": {
+          "const": "FINAL_PACKAGE_SIZING_COMPLETE"
+        },
+        "scope": {
+          "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+        },
+        "primaryEvidenceSetSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "candidateGenerationBindingSetSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "baseInstaller": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sha256",
+            "sizeBytes",
+            "containsModel"
+          ],
+          "properties": {
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "sizeBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 157286400
+            },
+            "containsModel": {
+              "const": false
+            }
+          }
+        },
+        "coreModelPack": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "sha256",
+            "archiveSizeBytes",
+            "installedSizeBytes",
+            "candidateGenerationIdentitySha256s"
+          ],
+          "properties": {
+            "sha256": {
+              "$ref": "#/$defs/sha256"
+            },
+            "archiveSizeBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 419430400
+            },
+            "installedSizeBytes": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "candidateGenerationIdentitySha256s": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/sha256"
+              }
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "baseInstallerMaximumBytes",
+            "corePackTargetBytes",
+            "corePackHardMaximumBytes",
+            "customModelPathDecisionRequired"
+          ],
+          "properties": {
+            "baseInstallerMaximumBytes": {
+              "const": 157286400
+            },
+            "corePackTargetBytes": {
+              "const": 314572800
+            },
+            "corePackHardMaximumBytes": {
+              "const": 419430400
+            },
+            "customModelPathDecisionRequired": {
+              "type": "boolean"
+            }
+          }
+        },
+        "integrationOrDistributionAuthorized": {
+          "const": false
+        },
+        "measuredAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

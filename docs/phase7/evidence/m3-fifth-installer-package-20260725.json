@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "evidenceKind": "phase7-m3-unsigned-development-installer-identity-package",
+  "capturedAtUtc": "2026-07-25T02:19:43.6998391Z",
+  "headSha": "d117e4b1b4989157826aad1febc59bf49ee17539",
+  "sourceIdentity": "HEAD+WORKTREE:2eb074a29b2b5e9019d1385d4cf504fea12a27e82d0db0595be69a4afeb0974c",
+  "installer": {
+    "path": "artifacts/phase5/package/dist/Desktop-Translate-0.5.0-phase5-x64-setup.exe",
+    "sizeBytes": 130650207,
+    "sizeMiB": 124.598,
+    "sha256": "25a87d19ad7d2d2e5c887d94216f14de10ee61971deac3cbdded72b5a27eaa7a",
+    "authenticodeStatus": "NotSigned",
+    "modifiedAtUtc": "2026-07-25T02:16:47.4664106Z"
+  },
+  "formalEvidenceRoot": "artifacts/phase5/d117e4b1b4989157826aad1febc59bf49ee17539/local-20260725T0205184365724Z-2f1e3f67329f49919b60bd7f5a9fe531",
+  "auditedInputs": {
+    "installerIncludeSha256": "fcaf26d3407d2eb6244fce5411181985ac8877e9e0128cbc09df760f9e240448",
+    "installerIdentitySelftestSha256": "d023bcf3864bbb453f446ea47d0d8c4e4a8da583305ef487e3f891c1815ac0ed",
+    "nsisAtomicDirectoryProbeSourceSha256": "1cb8286b86d34c501adadea20e05a02222b43073d8572f0327bf4054e7625c30",
+    "nsisAtomicDirectoryProbeRunnerSha256": "f5be89f569f40e1a4cc0e73739aec3654904de607270c6bf5bba80e0c7e8b979",
+    "appBuilderPatchSha256": "94967619809c29ba46e4738c08bd5e0390e0c5df0dbf86e713d3ff8f319f44f7",
+    "appBuilderPhysicalTreeFileCount": 520,
+    "appBuilderPhysicalTreeSha256": "75deec9892aee18ebea9b60157e39cc530bb1ff9de13d5ba787297b0d722cdb0"
+  },
+  "gates": {
+    "electronBuilderPolicy": "PASS",
+    "releaseEvidenceNegativeSelftest": "PASS",
+    "installerIdentityRuntimeSelftest": {
+      "status": "PASS",
+      "passed": 7,
+      "failed": 0,
+      "notRun": 0,
+      "temporaryLeaks": 0
+    },
+    "nsisAtomicDirectoryProbe": {
+      "status": "PASS",
+      "makensisVersion": "3.04",
+      "probeSizeBytes": 47447,
+      "probeSha256": "5d2f54620cd637895403e732a0d0291fc10242775a7934804d78f1406f990c3d",
+      "exitCode": 0,
+      "probeTemporaryLeaks": 0,
+      "runnerTemporaryLeaks": 0
+    },
+    "pathnameAndEarlyCloseMutations": "PASS_REJECTED",
+    "nsisCompile": "PASS",
+    "packageAllowlistAsarResourcesHashesBudgets": "PASS",
+    "supplyChain": "PASS",
+    "isolatedPackagedStartupResourceSmoke": "PASS",
+    "productProcessLeftovers": 0,
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "tests": {
+      "status": "PASS",
+      "passed": 432,
+      "failed": 0,
+      "desktopFilesPassed": 34,
+      "desktopFilesTotal": 34
+    }
+  },
+  "release": {
+    "developmentPackageStatus": "PASS",
+    "status": "RELEASE BLOCKED",
+    "blockers": [
+      "Development package includes uncommitted or untracked inputs and is not HEAD acceptance evidence.",
+      "Application, native host, and installer are not Authenticode signed.",
+      "Independent GitHub attestation and clean-download verification are incomplete."
+    ]
+  },
+  "closedTargetedP2": [
+    "Fresh-directory creation and rollback are bound to held parent and exact created directory handles.",
+    "Stable and recovery marker failure and commit lifecycle use exact pinned handles without pathname deletion."
+  ],
+  "notRun": [
+    "Real registered same-version upgrade",
+    "Normal or quiet uninstall",
+    "Committed uninstall staging handle-relative identity protocol and fault injection",
+    "Clean VM install",
+    "Normal Chromium sandbox installed-app startup",
+    "Physical mouse and physical touchpad drag"
+  ]
+}

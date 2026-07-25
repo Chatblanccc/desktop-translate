@@ -185,6 +185,31 @@ export class ShellController {
         console.warn('[phase2:display] Failed to persist the default ball position.');
       }
     }
+    const displays = getDisplays();
+    const initializedBall = this.state.getSnapshot().ball;
+    let initialBounds = resolveBallBounds(initializedBall.anchor, displays);
+    const anchorDisplayExists = displays.some(
+      (display) => String(display.id) === initializedBall.anchor?.displayId
+    );
+    const anchorModeMatchesSetting = initializedBall.edgeSnap
+      ? initializedBall.anchor?.mode !== 'free'
+      : initializedBall.anchor?.mode === 'free';
+    if (!anchorDisplayExists || !anchorModeMatchesSetting) {
+      const placement = deriveBallPlacement(
+        initialBounds,
+        displays,
+        initializedBall.edgeSnap
+      );
+      this.state.setBallAnchor(placement.anchor);
+      initialBounds = placement.bounds;
+      try {
+        await settings.setBallAnchor(placement.anchor);
+      } catch {
+        // Keep runtime state and placement fail-safe even if repairing a
+        // split mode write or stale display id cannot be persisted yet.
+        console.warn('[phase2:display] Failed to persist the normalized ball position.');
+      }
+    }
     const translationProvider = new BaiduTranslationProvider({
       credentials: async () => {
         try {
@@ -209,8 +234,6 @@ export class ShellController {
     if (this.disposed) return;
     nativeTheme.themeSource = this.state.getSnapshot().theme;
 
-    const displays = getDisplays();
-    const initialBounds = resolveBallBounds(this.state.getSnapshot().ball.anchor, displays);
     const buildDirectory = join(app.getAppPath(), '.vite', 'build');
     const metricsEnabled = this.options.metrics?.enabled === true;
     const windows = new WindowManager({
@@ -330,7 +353,11 @@ export class ShellController {
     if (!Number.isFinite(x) || !Number.isFinite(y)) throw new TypeError('Invalid test bounds');
     const current = this.windows?.getBallBounds();
     if (current === undefined) throw new Error('Ball window is unavailable');
-    await this.handleBallMoved({ ...current, x: Math.round(x), y: Math.round(y) });
+    const requested = { ...current, x: Math.round(x), y: Math.round(y) };
+    // A physical drag has already moved BrowserWindow before `moved` is emitted.
+    // Keep the test hook faithful to that ordering for unsnapped interior positions.
+    this.windows?.setBallBounds(requested);
+    await this.handleBallMoved(requested);
   }
 
   public getDebugState(): Phase2DebugState {
@@ -635,6 +662,8 @@ export class ShellController {
 
   private async performDispose(): Promise<void> {
     this.shutdownPhase = 'starting';
+    const windows = this.windows;
+    const finalBallBounds = windows?.stopBallMoveTracking();
     this.disposed = true;
     this.cancelProviderTest('app-disposed');
     this.translation?.cancelAndHide();
@@ -653,7 +682,6 @@ export class ShellController {
 
     const tray = this.tray;
     this.tray = undefined;
-    const windows = this.windows;
     this.windows = undefined;
 
     const nativeHost = this.nativeHost;
@@ -661,9 +689,13 @@ export class ShellController {
     this.nativeClient = undefined;
     this.translation = undefined;
     this.translationProvider = undefined;
+    if (finalBallBounds !== undefined && this.settings !== undefined) {
+      this.queueBallPositionWrite(finalBallBounds, false);
+    }
+    const finalPositionWrite = this.positionWrite;
     this.shutdownPhase = 'waiting-native-and-position';
     await Promise.allSettled([
-      this.positionWrite,
+      finalPositionWrite,
       nativeHost?.stop() ?? Promise.resolve()
     ]);
     // Preserve the proven Phase 4 shutdown order: renderer windows stay alive
@@ -725,20 +757,32 @@ export class ShellController {
   }
 
   private async handleBallMoved(bounds: Rectangle): Promise<void> {
+    if (this.disposed) return;
+    await this.queueBallPositionWrite(bounds, true);
+  }
+
+  private queueBallPositionWrite(
+    bounds: Rectangle,
+    correctWindowBounds: boolean
+  ): Promise<void> {
+    const settings = this.settings;
+    if (settings === undefined) return Promise.resolve();
     const placement = deriveBallPlacement(bounds, getDisplays(), this.state.getSnapshot().ball.edgeSnap);
     if (
-      placement.bounds.x !== bounds.x ||
-      placement.bounds.y !== bounds.y ||
-      placement.bounds.width !== bounds.width ||
-      placement.bounds.height !== bounds.height
+      correctWindowBounds && (
+        placement.bounds.x !== bounds.x ||
+        placement.bounds.y !== bounds.y ||
+        placement.bounds.width !== bounds.width ||
+        placement.bounds.height !== bounds.height
+      )
     ) {
       this.windows?.setBallBounds(placement.bounds);
     }
     this.state.setBallAnchor(placement.anchor);
     this.positionWrite = this.positionWrite
       .catch(() => undefined)
-      .then(() => this.requireSettings().setBallAnchor(placement.anchor));
-    await this.positionWrite;
+      .then(() => settings.setBallAnchor(placement.anchor));
+    return this.positionWrite;
   }
 
   private async recoverBallPosition(): Promise<void> {

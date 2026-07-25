@@ -1,0 +1,242 @@
+{
+  "$schema": "./schemas/qvac-runtime-candidate.schema.json",
+  "schemaVersion": "phase7-qvac-runtime-candidate-v1",
+  "metadataSnapshot": {
+    "capturedAt": "2026-07-23T00:00:00.000Z",
+    "networkScope": "Official npm registry metadata and the pinned upstream GitHub revision only.",
+    "candidateRole": "CONTROLLED_BARE_SIDECAR_POC_ALTERNATIVE"
+  },
+  "policy": {
+    "defaultNetworkAccess": false,
+    "pocAuthorizationScope": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION",
+    "artifactRoot": "artifacts/phase7/offline-poc",
+    "packageInstallScriptsAllowed": false,
+    "modelFetcherAllowed": false,
+    "probeRequiresBoundAuthorization": true,
+    "runtimeExecutionRequiresVerifiedTree": true,
+    "productIntegrationAllowed": false,
+    "distributionAllowed": false
+  },
+  "runtime": {
+    "id": "qvac-translation-nmtcpp-bare",
+    "packageName": "@qvac/translation-nmtcpp",
+    "version": "8.1.0",
+    "publishedAt": "2026-07-20T11:05:00.019Z",
+    "sourceRepository": "https://github.com/tetherto/qvac",
+    "sourceCommit": "dfd1fd7eb0e1e3da70b68d5c8c2cca0c5c8875a7",
+    "repositoryDirectory": "packages/translation-nmtcpp",
+    "declaredLicenseExpression": "Apache-2.0",
+    "packageContainsLicenseFile": true,
+    "packageContainsNoticeFile": true,
+    "engine": {
+      "name": "bare",
+      "requiredRange": ">=1.19.0",
+      "pocVersion": "1.30.3",
+      "nodeDirectCompatibility": "BLOCKED"
+    },
+    "tarball": {
+      "filename": "qvac-translation-nmtcpp-8.1.0.tgz",
+      "size": 177006150,
+      "sha1": "c9a62131fc6671a85eb1f8d9754116cccf1bd11f",
+      "sha256": "fd05f5ebdd97872e89d35086e47cf72be0dfafb866562eac8db979b1b1511c86",
+      "integrity": "sha512-F5kAg4WP6MfKV5Qwfh9NNJMDqWNdXXFCE6lHoBuclmh5iTtO3Le4MpZCCHBixnZXM4n1l9IKB5h1AbihPoqYfQ==",
+      "unpackedSize": 546237344,
+      "fileCount": 155,
+      "url": "https://registry.npmjs.org/@qvac/translation-nmtcpp/-/translation-nmtcpp-8.1.0.tgz"
+    },
+    "licenseEvidence": [
+      {
+        "path": "LICENSE",
+        "size": 10216,
+        "sha256": "115146ca883126909247c429e0691b4f0a6c237e155036a4200cd224215a56df",
+        "url": "https://raw.githubusercontent.com/tetherto/qvac/dfd1fd7eb0e1e3da70b68d5c8c2cca0c5c8875a7/packages/translation-nmtcpp/LICENSE"
+      },
+      {
+        "path": "NOTICE",
+        "size": 14901,
+        "sha256": "f2484f256facdbc79ac76638e7842016220da7a2d5f4bb630aaced2ddad582d3",
+        "url": "https://raw.githubusercontent.com/tetherto/qvac/dfd1fd7eb0e1e3da70b68d5c8c2cca0c5c8875a7/packages/translation-nmtcpp/NOTICE"
+      }
+    ],
+    "windowsX64Prebuilds": [
+      {
+        "path": "prebuilds/win32-x64/qvac__translation-nmtcpp.bare",
+        "size": 96493056,
+        "sha256": "8a058f85166574b08ac8d89847a2fb6a1fd8f36c2b96400309c6bc67269cf3b9",
+        "authenticode": "NOT_SIGNED"
+      },
+      {
+        "path": "prebuilds/win32-x64/qvac__translation-nmtcpp.bare.exports",
+        "size": 948032,
+        "sha256": "bad2296e42b7f1b24e9a13383cdf15ffa44a334fed1b5477bd08cd2a7af1b106",
+        "authenticode": "NOT_APPLICABLE"
+      }
+    ],
+    "barePocRuntime": {
+      "packageName": "bare",
+      "version": "1.30.3",
+      "packageIntegrity": "sha512-0TX6o1k3XbRdWKwB7Aa34EjQRko6No20GkCHcyO9o7AXLIhN0iSpMqO07chVslF6rqAKKhJo6rT+/E80AqJuvg==",
+      "source": {
+        "repository": "https://github.com/holepunchto/bare",
+        "revision": "NOT_VERIFIED"
+      },
+      "declaredLicenseExpression": "Apache-2.0",
+      "licenseEvidence": {
+        "path": "node_modules/bare/LICENSE",
+        "status": "LOCAL_PACKAGE_FILE_PRESENT_NOT_PINNED"
+      },
+      "packageTarball": {
+        "integrity": "sha512-0TX6o1k3XbRdWKwB7Aa34EjQRko6No20GkCHcyO9o7AXLIhN0iSpMqO07chVslF6rqAKKhJo6rT+/E80AqJuvg==",
+        "sha256": "NOT_VERIFIED",
+        "size": "NOT_VERIFIED"
+      },
+      "platformPackageName": "bare-runtime-win32-x64",
+      "platformPackageVersion": "1.30.3",
+      "platformPackageIntegrity": "sha512-4ujzW6cAyZL1ED/TFiaBkFrfA/rmLvntN++HwG+wb2gjQfYF/5q0+2y5f4hy2DcFcFB3oTySbeERiBOXXXbp9Q==",
+      "platformSource": {
+        "repository": "https://github.com/holepunchto/bare-runtime",
+        "revision": "NOT_VERIFIED"
+      },
+      "platformLicenseEvidence": {
+        "path": "node_modules/bare-runtime-win32-x64/LICENSE",
+        "status": "LOCAL_PACKAGE_FILE_PRESENT_NOT_PINNED"
+      },
+      "platformPackageTarball": {
+        "integrity": "sha512-4ujzW6cAyZL1ED/TFiaBkFrfA/rmLvntN++HwG+wb2gjQfYF/5q0+2y5f4hy2DcFcFB3oTySbeERiBOXXXbp9Q==",
+        "sha256": "NOT_VERIFIED",
+        "size": "NOT_VERIFIED"
+      },
+      "executablePath": "bin/bare.exe",
+      "executableSize": 45142016,
+      "executableSha256": "61d7f0d40cbc061f657b126d2deb3a74e38ed46cd73f86da0163d7e613ec3962",
+      "executableAuthenticode": "NOT_SIGNED"
+    },
+    "dependencies": {
+      "declared": {
+        "@qvac/error": "^0.1.0",
+        "@qvac/infer-base": "^0.4.0",
+        "@qvac/logging": "^0.1.0",
+        "bare-path": "^3.0.0"
+      },
+      "observedTopLevelResolution": {
+        "@qvac/error": "0.1.1",
+        "@qvac/infer-base": "0.4.2",
+        "@qvac/logging": "0.1.1",
+        "bare-path": "3.1.1"
+      },
+      "distributionLockStatus": "INCOMPLETE",
+      "executionTreeStatus": "UNVERIFIED",
+      "probeExecutionAllowed": false
+    }
+  },
+  "modelContract": {
+    "sourceRepository": "mozilla/firefox-translations-models",
+    "sourceRevision": "e7957fc407441a5e3e35bbcbf9d60d9b35764618",
+    "compressedInputsAccepted": false,
+    "requiredModelExtension": ".bin",
+    "requiredVocabularyExtension": ".spm",
+    "modelFetcherAllowed": false,
+    "shortlistContract": "NOT_EXPOSED_BY_PUBLIC_RUNTIME_API",
+    "routes": [
+      {
+        "route": "en-zh",
+        "model": "model.enzh.intgemm.alphas.bin",
+        "sourceVocabulary": "srcvocab.enzh.spm",
+        "targetVocabulary": "trgvocab.enzh.spm",
+        "helperStatus": "BYPASSED_FOR_PINNED_LOCAL_FILES"
+      },
+      {
+        "route": "zh-en",
+        "model": "model.zhen.intgemm.alphas.bin",
+        "sourceVocabulary": "vocab.zhen.spm",
+        "targetVocabulary": "vocab.zhen.spm",
+        "helperStatus": "BYPASSED_DUE_TO_FILENAME_BUG"
+      }
+    ]
+  },
+  "probeEvidence": {
+    "evidenceStatus": "HISTORICAL_UNBOUND_OBSERVATION_ONLY",
+    "eligibleForGateA": false,
+    "host": {
+      "platform": "win32",
+      "architecture": "x64",
+      "nodeVersion": "23.11.1",
+      "bareVersion": "1.30.3"
+    },
+    "node": {
+      "status": "HISTORICAL_BLOCKED_OBSERVATION",
+      "blockerCode": "BARE_GLOBAL_NOT_DEFINED",
+      "runtimeImported": false
+    },
+    "bare": {
+      "status": "HISTORICAL_IMPORT_AND_CONSTRUCTOR_OBSERVATION",
+      "runtimeImported": true,
+      "bergamotConstructorCompleted": true,
+      "modelLoad": "NOT_RUN",
+      "firstTranslation": "NOT_RUN"
+    },
+    "networkAccessedDuringProbe": "NOT_VERIFIED",
+    "modelWeightsDownloadedForProbe": false,
+    "rawSourceOrOutputTextRecorded": false
+  },
+  "gateA": {
+    "status": "BLOCKED",
+    "candidateOnly": true,
+    "productIntegrationAllowed": false,
+    "requiredInput": "A fully pinned Bare dependency lock, legal and native-binary review, and real bidirectional translation benchmark.",
+    "blockers": [
+      {
+        "code": "BARE_SIDECAR_ARCHITECTURE_REVIEW_REQUIRED",
+        "detail": "This runtime is a Bare native addon and is not directly compatible with the current Node/Electron process. A sidecar lifecycle, IPC, crash, update, and process-cleanup design is required."
+      },
+      {
+        "code": "TRANSITIVE_NPM_LOCK_AND_LICENSE_BUNDLE_PENDING",
+        "detail": "The top-level runtime declares semver ranges. The observed resolution is evidence only; a complete immutable dependency lock, license bundle, and SBOM are not yet part of the POC."
+      },
+      {
+        "code": "QVAC_RUNTIME_EXECUTION_TREE_UNVERIFIED",
+        "detail": "The installed runtime/node_modules tree is not reconstructed from a complete offline lock and is not bound to an exact tree hash. Runtime import and constructor probes are disabled until that execution tree is verified."
+      },
+      {
+        "code": "BARE_RUNTIME_PROVENANCE_INCOMPLETE",
+        "detail": "Bare 1.30.3 package metadata declares Apache-2.0, but exact source revisions, pinned local license evidence, npm tarball sizes, and SHA-256 digests for Bare and bare-runtime-win32-x64 are not verified."
+      },
+      {
+        "code": "UNSIGNED_WINDOWS_NATIVE_PREBUILD",
+        "detail": "The pinned Windows x64 native addon is not Authenticode signed and needs provenance, malware, and release-signing review."
+      },
+      {
+        "code": "UNSIGNED_BARE_WINDOWS_EXECUTABLE",
+        "detail": "The pinned Bare 1.30.3 Windows x64 executable is not Authenticode signed and needs the same provenance, malware, and release-signing review as the native addon."
+      },
+      {
+        "code": "MULTIPLATFORM_TARBALL_SIZE_REVIEW_REQUIRED",
+        "detail": "The npm package is 177,006,150 compressed bytes and 546,237,344 unpacked bytes because it bundles multiple platform prebuilds; production packaging impact is unresolved."
+      },
+      {
+        "code": "QVAC_RECENT_RELEASE_MATURITY_REVIEW_REQUIRED",
+        "detail": "Version 8.1.0 was published on 2026-07-20, three days before this snapshot, so stability and maintenance evidence are immature."
+      },
+      {
+        "code": "ZH_EN_FETCHER_FILENAME_MISMATCH",
+        "detail": "The bundled helper asks for srcvocab.zhen.spm and trgvocab.zhen.spm, but the pinned Firefox model supplies one vocab.zhen.spm. The controlled POC must bypass the helper and pass that same local file twice."
+      },
+      {
+        "code": "COMPRESSED_MODEL_MATERIALIZATION_REQUIRED",
+        "detail": "The runtime rejects Firefox .gz model assets. POC preparation must gunzip into ignored artifacts and verify both compressed and materialized files."
+      },
+      {
+        "code": "SHORTLIST_RUNTIME_CONTRACT_UNRESOLVED",
+        "detail": "The model fetcher names a lex shortlist, but the public constructor and native configuration expose no shortlist input. Quality and performance without it require measurement."
+      },
+      {
+        "code": "MODEL_WEIGHT_LICENSE_SCOPE_REVIEW_REQUIRED",
+        "detail": "The model-weight license scope and training-data provenance remain unresolved independently of the Apache-2.0 wrapper package."
+      },
+      {
+        "code": "REAL_BIDIRECTIONAL_TRANSLATION_NOT_RUN",
+        "detail": "Only offline import and constructor behavior were probed. No real en-zh or zh-en model load, first translation, warm latency, memory, quality, or process-cleanup claim exists."
+      }
+    ]
+  }
+}

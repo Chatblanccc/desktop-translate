@@ -109,6 +109,13 @@ test("Phase 4 translation settings default safely and persist alongside Phase 3 
     });
 
     await repository.setBallVisible(false);
+    await repository.setEdgeSnap(false);
+    await repository.setBallAnchor({
+      mode: "free",
+      displayId: "primary",
+      horizontalRatio: 0.45,
+      verticalRatio: 0.55,
+    });
     await repository.setSelectionEnabled(false);
     await repository.setTranslationEnabled(true);
     await repository.setTranslationProviderId("baidu");
@@ -117,7 +124,16 @@ test("Phase 4 translation settings default safely and persist alongside Phase 3 
     await repository.setTranslationConsentVersion(1);
 
     assert.deepEqual(await new SqlitePhase4SettingsRepository(database).load(), {
-      ball: { visible: false, edgeSnap: true },
+      ball: {
+        visible: false,
+        edgeSnap: false,
+        anchor: {
+          mode: "free",
+          displayId: "primary",
+          horizontalRatio: 0.45,
+          verticalRatio: 0.55,
+        },
+      },
       theme: "system",
       selection: { enabled: false, ocrActivation: "fallback" },
       translation: {

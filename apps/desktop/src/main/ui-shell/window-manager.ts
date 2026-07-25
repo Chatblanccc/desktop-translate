@@ -170,9 +170,9 @@ export class WindowManager {
     window.setAlwaysOnTop(true, 'floating');
     this.register(window, 'ball', html);
     this.secure(window);
-    window.on('moved', () => {
-      if (!window.isDestroyed()) this.options.onBallMoved(window.getBounds());
-    });
+    // On Windows, `moved` is emitted once the interactive move has finished.
+    // Listening to `move` instead would let edge snapping interrupt the drag.
+    window.on('moved', this.handleBallMoved);
     window.on('close', (event) => {
       if (!this.quitting) {
         event.preventDefault();
@@ -213,6 +213,13 @@ export class WindowManager {
   public getBallBounds(): Rectangle | undefined {
     const window = this.ballWindow;
     return window === undefined || window.isDestroyed() ? undefined : window.getBounds();
+  }
+
+  public stopBallMoveTracking(): Rectangle | undefined {
+    const window = this.ballWindow;
+    if (window === undefined || window.isDestroyed()) return undefined;
+    window.removeListener('moved', this.handleBallMoved);
+    return window.getBounds();
   }
 
   public openSettings(): void {
@@ -288,6 +295,13 @@ export class WindowManager {
     this.currentCardBounds = undefined;
     this.registrations.clear();
   }
+
+  private readonly handleBallMoved = (): void => {
+    const window = this.ballWindow;
+    if (window !== undefined && !window.isDestroyed()) {
+      this.options.onBallMoved(window.getBounds());
+    }
+  };
 
   private async createSettingsWindow(): Promise<void> {
     if (this.settingsWindow !== undefined) return;

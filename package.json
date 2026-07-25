@@ -50,6 +50,8 @@
     "phase5:acceptance-decision": "node ./tooling/phase5-acceptance-decision.mjs",
     "phase5:acceptance-decision:selftest": "node --test ./tooling/phase5-acceptance-decision.test.mjs",
     "phase5:release:selftest": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/packaging/phase5-release-hardening-selftest.ps1",
+    "phase7:installer-atomic-directory:selftest": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/packaging/phase7-nsis-atomic-directory-probe.ps1",
+    "phase7:installer-transaction-path:selftest": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/packaging/phase7-nsis-transaction-path-probe.ps1",
     "phase5:audit": "node ./tooling/supply-chain/phase5-dependency-audit.mjs --output ./artifacts/phase5/local/dependency-audit.json",
     "phase5:package": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/packaging/phase5-package.ps1 -Mode Dir",
     "phase5:package:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File ./tooling/packaging/phase5-package.ps1 -Mode Installer",

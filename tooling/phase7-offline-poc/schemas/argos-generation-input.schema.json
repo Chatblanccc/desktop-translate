@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-argos-generation-input-item-v1.json",
+  "title": "Phase 7 Argos controlled blind-evaluation generation input item",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "itemId",
+    "direction",
+    "source",
+    "contentDeclaration",
+    "containsPersonalData",
+    "usageAuthorization"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "phase7-argos-generation-input-item-v1"
+    },
+    "itemId": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "direction": {
+      "enum": [
+        "en-zh",
+        "zh-en"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 12000
+    },
+    "contentDeclaration": {
+      "const": "NO_USER_HISTORY_NO_CLIPBOARD_NO_PRIVATE_CORPUS"
+    },
+    "containsPersonalData": {
+      "const": false
+    },
+    "usageAuthorization": {
+      "const": "AUTHORIZED_FOR_PHASE7_HUMAN_EVALUATION"
+    }
+  }
+}

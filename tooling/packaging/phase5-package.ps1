@@ -4,14 +4,20 @@ param(
     [Parameter()][string]$EvidenceRoot,
     [Parameter()][switch]$SkipBuild,
     [Parameter()][switch]$SignedRelease,
-    [Parameter()][string]$ExpectedPublisherSubject
+    [Parameter()][string]$ExpectedPublisherSubject,
+    [Parameter()][switch]$ManagedSandboxCompatibility
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if ($SignedRelease -and $ManagedSandboxCompatibility) {
+    throw 'RELEASE BLOCKED: ManagedSandboxCompatibility is forbidden for SignedRelease.'
+}
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $desktopRoot = Join-Path $root 'apps\desktop'
 $stageRoot = Join-Path $desktopRoot '.vite\phase5-resources'
+$electronBuilderCli = Join-Path $root 'node_modules\electron-builder\cli.js'
+$electronDist = Join-Path $root 'node_modules\electron\dist'
 $packageOutput = Join-Path $root 'artifacts\phase5\package\dist'
 $packageOutputParent = Split-Path -Parent $packageOutput
 $packageQuarantineRoot = Join-Path $root '.phase5-package-quarantine'
@@ -188,19 +194,53 @@ Copy-Item -LiteralPath $workspaceStateTemporary -Destination $workspaceStatePath
         $exception.Data['StagingPath'] = $packageBuildStaging
         throw $exception
     }
+    # Re-audit immediately before execution. Earlier production/native/supply
+    # chain steps are repository code and must not create a time-of-check gap
+    # in the installer config, include, patch, or package trees.
+    Invoke-CheckedExternal -Label 'Re-verify exact electron-builder policy before launch' -FilePath 'node' -ArgumentList @(
+        (Join-Path $PSScriptRoot 'phase5-electron-builder-policy.mjs'),
+        '--config', (Join-Path $desktopRoot 'electron-builder.yml')
+    )
+    # Invoke the exact root CLI audited above. Do not resolve electron-builder
+    # through the desktop cwd PATH, where an app-local .bin shadow could win.
+    $electronExecutable = Join-Path $electronDist 'electron.exe'
+    if (-not (Test-Path -LiteralPath $electronExecutable -PathType Leaf)) {
+        throw "Pinned local Electron distribution is incomplete: $electronExecutable"
+    }
     $builderArguments = @(
-        '--config.verify-deps-before-run=false',
-        'exec', 'electron-builder',
+        $electronBuilderCli,
         '--config', 'electron-builder.yml',
         "--config.directories.output=$packageBuildStaging",
+        "--config.electronDist=$electronDist",
         '--win', '--x64'
     )
     if ($Mode -eq 'Dir') { $builderArguments += '--dir' }
+    $savedPhase7BuilderDebugSetting = [Environment]::GetEnvironmentVariable(
+        'DEBUG',
+        [EnvironmentVariableTarget]::Process
+    )
+    if ($Mode -eq 'Installer') {
+        # The Phase 7 compile-chain gate consumes electron-builder's exact final
+        # NSIS script before the path-bearing debug file is removed below.
+        $env:DEBUG = 'electron-builder'
+    }
     Push-Location $desktopRoot
     try {
-        Invoke-CheckedExternal -Label "electron-builder $Mode" -FilePath 'pnpm' -ArgumentList $builderArguments
+        Invoke-CheckedExternal -Label "electron-builder $Mode" -FilePath 'node' -ArgumentList $builderArguments
     } finally {
-        Pop-Location
+        try {
+            Pop-Location
+        } finally {
+            if ($null -eq $savedPhase7BuilderDebugSetting) {
+                Remove-Item 'Env:DEBUG' -ErrorAction SilentlyContinue
+            } else {
+                [Environment]::SetEnvironmentVariable(
+                    'DEBUG',
+                    $savedPhase7BuilderDebugSetting,
+                    [EnvironmentVariableTarget]::Process
+                )
+            }
+        }
     }
 
     # electron-builder writes an implementation-detail builder-debug.yml beside
@@ -217,6 +257,22 @@ Copy-Item -LiteralPath $workspaceStateTemporary -Destination $workspaceStatePath
         if ($builderDebugItem.PSIsContainer) {
             throw "Refusing to remove unexpected builder-debug directory: $builderDebugPath"
         }
+    }
+    if ($Mode -eq 'Installer') {
+        $compileChainCandidateInstaller = Join-Path `
+            $candidatePackageOutput `
+            $script:Phase5CanonicalInstallerName
+        Invoke-CheckedExternal `
+            -Label 'Verify Phase 7 embedded current-uninstaller compile chain' `
+            -FilePath 'node' `
+            -ArgumentList @(
+                (Join-Path $PSScriptRoot 'phase7-installer-compile-chain.mjs'),
+                '--repository-root', $root,
+                '--builder-debug', $builderDebugPath,
+                '--candidate-installer', $compileChainCandidateInstaller
+            )
+    }
+    if (Test-Path -LiteralPath $builderDebugPath) {
         [IO.File]::Delete($builderDebugItem.FullName)
     }
     if (Test-Path -LiteralPath $builderDebugPath) {
@@ -264,9 +320,14 @@ Copy-Item -LiteralPath $workspaceStateTemporary -Destination $workspaceStatePath
                 '--package-dir', $candidateWinUnpacked
             )
         Write-Host '[phase5:package] Run isolated unpublished candidate startup/resource smoke'
-        & (Join-Path $PSScriptRoot 'phase5-clean-package-smoke.ps1') `
-            -PackageDirectory $candidateWinUnpacked `
-            -EvidenceDirectory $EvidenceRoot
+        $smokeParameters = @{
+            PackageDirectory = $candidateWinUnpacked
+            EvidenceDirectory = $EvidenceRoot
+        }
+        if ($ManagedSandboxCompatibility) {
+            $smokeParameters.ManagedSandboxCompatibility = $true
+        }
+        & (Join-Path $PSScriptRoot 'phase5-clean-package-smoke.ps1') @smokeParameters
 
         $candidateSignParameters = @{
             PackageDirectory = $candidateWinUnpacked

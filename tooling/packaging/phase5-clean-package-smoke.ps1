@@ -3,7 +3,8 @@ param(
     [Parameter()][string]$PackageDirectory,
     [Parameter()][string]$EvidenceDirectory,
     [Parameter()][ValidateRange(5, 120)][int]$StartupTimeoutSeconds = 30,
-    [Parameter()][ValidateRange(1, 60)][int]$ObservationSeconds = 5
+    [Parameter()][ValidateRange(1, 60)][int]$ObservationSeconds = 5,
+    [Parameter()][switch]$ManagedSandboxCompatibility
 )
 
 Set-StrictMode -Version Latest
@@ -16,10 +17,140 @@ $PackageDirectory = [IO.Path]::GetFullPath($PackageDirectory)
 $EvidenceDirectory = [IO.Path]::GetFullPath($EvidenceDirectory)
 $appExecutable = Join-Path $PackageDirectory 'desktop-translate.exe'
 $expectedHost = [IO.Path]::GetFullPath((Join-Path $PackageDirectory 'resources\selection-host\selection-host.exe'))
+$script:phase5CimProcessInventoryAvailable = $null
+
+function Initialize-Phase5ToolhelpProcessInventory {
+    if ($null -ne ('DesktopTranslate.Phase5ToolhelpProcessInventory' -as [type])) { return }
+    Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+namespace DesktopTranslate {
+    public sealed class Phase5ToolhelpProcessEntry {
+        public int ProcessId { get; set; }
+        public int ParentProcessId { get; set; }
+        public string Name { get; set; }
+    }
+
+    public static class Phase5ToolhelpProcessInventory {
+        private const uint TH32CS_SNAPPROCESS = 0x00000002;
+        private static readonly IntPtr InvalidHandleValue = new IntPtr(-1);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct PROCESSENTRY32 {
+            public uint dwSize;
+            public uint cntUsage;
+            public uint th32ProcessID;
+            public IntPtr th32DefaultHeapID;
+            public uint th32ModuleID;
+            public uint cntThreads;
+            public uint th32ParentProcessID;
+            public int pcPriClassBase;
+            public uint dwFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string szExeFile;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern IntPtr CreateToolhelp32Snapshot(uint flags, uint processId);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool Process32FirstW(IntPtr snapshot, ref PROCESSENTRY32 entry);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool Process32NextW(IntPtr snapshot, ref PROCESSENTRY32 entry);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool CloseHandle(IntPtr handle);
+
+        public static Phase5ToolhelpProcessEntry[] Snapshot() {
+            IntPtr snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+            if (snapshot == InvalidHandleValue) {
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            }
+            try {
+                var result = new List<Phase5ToolhelpProcessEntry>();
+                var entry = new PROCESSENTRY32();
+                entry.dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32));
+                if (!Process32FirstW(snapshot, ref entry)) {
+                    int error = Marshal.GetLastWin32Error();
+                    if (error == 18) return result.ToArray();
+                    throw new Win32Exception(error);
+                }
+                do {
+                    result.Add(new Phase5ToolhelpProcessEntry {
+                        ProcessId = checked((int)entry.th32ProcessID),
+                        ParentProcessId = checked((int)entry.th32ParentProcessID),
+                        Name = entry.szExeFile
+                    });
+                    entry.dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32));
+                } while (Process32NextW(snapshot, ref entry));
+                int finalError = Marshal.GetLastWin32Error();
+                if (finalError != 18) throw new Win32Exception(finalError);
+                return result.ToArray();
+            } finally {
+                CloseHandle(snapshot);
+            }
+        }
+    }
+}
+'@
+}
+
+function Get-Phase5ProcessInventory {
+    if ($script:phase5CimProcessInventoryAvailable -ne $false) {
+        try {
+            $inventory = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+            $script:phase5CimProcessInventoryAvailable = $true
+            return $inventory
+        } catch {
+            $script:phase5CimProcessInventoryAvailable = $false
+        }
+    }
+
+    Initialize-Phase5ToolhelpProcessInventory
+    $fallback = @()
+    foreach ($entry in [DesktopTranslate.Phase5ToolhelpProcessInventory]::Snapshot()) {
+        $managedProcess = Get-Process -Id $entry.ProcessId -ErrorAction SilentlyContinue
+        if ($null -eq $managedProcess) { continue }
+        try {
+            if ($managedProcess.HasExited) { continue }
+            $path = $null
+            $startedAt = $null
+            try {
+                $path = $managedProcess.Path
+                $startedAt = $managedProcess.StartTime
+            } catch {
+                # Identity-sensitive consumers fail closed when either value is
+                # unavailable; hierarchy-only consumers can still use the row.
+            }
+            $fallback += [pscustomobject][ordered]@{
+                ProcessId = [int]$entry.ProcessId
+                ParentProcessId = [int]$entry.ParentProcessId
+                Name = [string]$entry.Name
+                ExecutablePath = $path
+                CommandLine = $null
+                CreationDate = $startedAt
+            }
+        } finally {
+            $managedProcess.Dispose()
+        }
+    }
+    return $fallback
+}
+
+function Get-Phase5ProcessById {
+    param([Parameter(Mandatory = $true)][int]$ProcessId)
+    return @(Get-Phase5ProcessInventory | Where-Object {
+        [int]$_.ProcessId -eq $ProcessId
+    } | Select-Object -First 1)
+}
 
 function Get-DescendantProcesses {
     param([Parameter(Mandatory = $true)][int]$RootProcessId)
-    $all = @(Get-CimInstance Win32_Process)
+    $all = @(Get-Phase5ProcessInventory)
     $descendants = @()
     $known = @($RootProcessId)
     do {
@@ -44,8 +175,8 @@ function Get-SmokeUserDataProcesses {
         [Parameter(Mandatory = $true)][DateTime]$ExpectedStartTimeUtc
     )
     $userDataArgument = '--user-data-dir="' + $ExpectedUserDataPath + '"'
-    return @(Get-CimInstance Win32_Process | Where-Object {
-        if (-not $_.ExecutablePath -or -not $_.CommandLine) { return $false }
+    return @(Get-Phase5ProcessInventory | Where-Object {
+        if (-not $_.ExecutablePath -or -not $_.CreationDate) { return $false }
         $managedProcess = Get-Process -Id ([int]$_.ProcessId) -ErrorAction SilentlyContinue
         if ($null -eq $managedProcess) { return $false }
         try {
@@ -63,7 +194,14 @@ function Get-SmokeUserDataProcesses {
         )) { return $false }
         $actualStartTimeUtc = ([DateTime]$_.CreationDate).ToUniversalTime()
         if ($actualStartTimeUtc -lt $ExpectedStartTimeUtc.AddSeconds(-5)) { return $false }
-        return $_.CommandLine.IndexOf($userDataArgument, [StringComparison]::OrdinalIgnoreCase) -ge 0
+        if ($_.CommandLine) {
+            return $_.CommandLine.IndexOf($userDataArgument, [StringComparison]::OrdinalIgnoreCase) -ge 0
+        }
+        # Managed sandboxes can deny WMI/CIM command-line inventory. The
+        # unpublished package path plus the per-run start boundary remains an
+        # exact executable identity, and package preflight rejects an existing
+        # process from this output tree before the smoke starts.
+        return $true
     })
 }
 
@@ -205,7 +343,7 @@ function Stop-SmokeProcessTree {
     )
     $ExpectedExecutablePath = [IO.Path]::GetFullPath($ExpectedExecutablePath)
     $ExpectedUserDataPath = [IO.Path]::GetFullPath($ExpectedUserDataPath)
-    $rootProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $RootProcessId" | Select-Object -First 1
+    $rootProcess = Get-Phase5ProcessById -ProcessId $RootProcessId
     if ($null -ne $rootProcess) {
         if (-not $rootProcess.ExecutablePath) {
             throw "Refusing to terminate smoke PID $RootProcessId because its executable path is unavailable."
@@ -219,10 +357,9 @@ function Stop-SmokeProcessTree {
             throw "Refusing to terminate reused smoke PID ${RootProcessId}: creation time changed."
         }
     }
-    $descendants = if ($null -ne $rootProcess) {
-        @(Get-DescendantProcesses -RootProcessId $RootProcessId)
-    } else {
-        @()
+    [array]$descendants = @()
+    if ($null -ne $rootProcess) {
+        $descendants = @(Get-DescendantProcesses -RootProcessId $RootProcessId)
     }
 
     # First ask the main window to close so Chromium/LevelDB gets a bounded
@@ -249,7 +386,7 @@ function Stop-SmokeProcessTree {
     # cleanup. The loop below also finds the exact packaged executable bound to
     # this smoke's unique --user-data-dir and converges that identity dynamically.
     $taskkill = Join-Path $env:SystemRoot 'System32\taskkill.exe'
-    $rootStillRunning = Get-CimInstance Win32_Process -Filter "ProcessId = $RootProcessId" | Select-Object -First 1
+    $rootStillRunning = Get-Phase5ProcessById -ProcessId $RootProcessId
     if ($null -ne $rootStillRunning) {
         if (-not $rootStillRunning.ExecutablePath -or
             -not [string]::Equals(
@@ -268,8 +405,7 @@ function Stop-SmokeProcessTree {
     }
     [array]::Reverse($descendants)
     foreach ($process in $descendants) {
-        $currentProcess = Get-CimInstance Win32_Process -Filter "ProcessId = $([int]$process.ProcessId)" |
-            Select-Object -First 1
+        $currentProcess = Get-Phase5ProcessById -ProcessId ([int]$process.ProcessId)
         if ($null -eq $currentProcess) { continue }
         $expectedCreationTimeUtc = ([DateTime]$process.CreationDate).ToUniversalTime()
         $currentCreationTimeUtc = ([DateTime]$currentProcess.CreationDate).ToUniversalTime()
@@ -364,13 +500,18 @@ function Set-SmokeEvidenceState {
 $startedAt = [DateTime]::UtcNow
 $reportPath = Join-Path $EvidenceDirectory 'package\startup-smoke.json'
 $evidenceManifestPath = Join-Path $EvidenceDirectory 'release\evidence-manifest.json'
-$acceptanceBoundary = 'Startup/resource + packaged clear-data helper proof only; forced app cleanup is not graceful-exit, Settings UI two-step confirmation, or clean-VM installer evidence.'
+$acceptanceBoundary = if ($ManagedSandboxCompatibility) {
+    'Managed-sandbox startup/resource + packaged clear-data helper proof only; Chromium sandbox, graceful exit, Settings UI two-step confirmation, and clean-VM installer evidence remain unverified.'
+} else {
+    'Startup/resource + packaged clear-data helper proof only; forced app cleanup is not graceful-exit, Settings UI two-step confirmation, or clean-VM installer evidence.'
+}
 Set-SmokeEvidenceState -ReportPath $reportPath -EvidenceManifestPath $evidenceManifestPath -Report ([ordered]@{
     schemaVersion = 1
     status = 'PENDING'
     scenario = 'isolated-unpacked-startup'
     nonAsciiUserData = $false
     standardElevationRequested = $false
+    chromiumSandboxEnabled = -not $ManagedSandboxCompatibility
     packagedNativeHostPathVerified = $false
     packagedClearDataHelperExecuted = $false
     packagedClearDataHelperExactIdentityStopped = $false
@@ -398,8 +539,12 @@ $process = $null
 $processStartTimeUtc = $null
 $smokeProofReady = $false
 try {
+    $applicationArguments = @("--user-data-dir=`"$userData`"")
+    if ($ManagedSandboxCompatibility) {
+        $applicationArguments = @('--no-sandbox') + $applicationArguments
+    }
     $process = Start-Process -FilePath $appExecutable `
-        -ArgumentList @("--user-data-dir=`"$userData`"") `
+        -ArgumentList $applicationArguments `
         -WorkingDirectory $temporaryRoot -WindowStyle Hidden -PassThru
     $processStartTimeUtc = $process.StartTime.ToUniversalTime()
     $deadline = [DateTime]::UtcNow.AddSeconds($StartupTimeoutSeconds)
@@ -548,6 +693,7 @@ Set-SmokeEvidenceState -ReportPath $reportPath -EvidenceManifestPath $evidenceMa
     scenario = 'isolated-unpacked-startup'
     nonAsciiUserData = $true
     standardElevationRequested = $false
+    chromiumSandboxEnabled = -not $ManagedSandboxCompatibility
     packagedNativeHostPathVerified = $true
     packagedClearDataHelperExecuted = $true
     packagedClearDataHelperExactIdentityStopped = $true
