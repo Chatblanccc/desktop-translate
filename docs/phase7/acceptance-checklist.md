@@ -120,7 +120,8 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 - [x] formal PWS v3 与 blind report v2 已通过同一组两方向 candidate-generation raw hash、
   authorization、manifest、model/runtime、workload 和 candidate/run identity 交叉绑定；真实生成 artifact
   与 formal cold/PWS `40/40` 已完成。
-- [x] Bergamot 候选已记录 model/runtime ID、上游 revision、许可证和再分发条件；最终法律审批仍未完成。
+- [x] Bergamot 候选已记录 model/runtime ID、上游 revision、许可证和再分发条件；用户授权后，
+  AI 已作 `NOT LEGAL ADVICE` 的 M4 风险审批，未声称商业再分发许可。
 - [x] 候选绑定的法务准备包已核验 12 个供应文件、两份 MPL-2.0 证据、npm tarball
   实际内容和 core-pack receipt；固定为 `NOT_APPROVED`，不得代替法务结论。
 - [x] base installer 不含模型且 `≤150 MiB`。
@@ -134,11 +135,12 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
   `phase7-ai-blind-eval-report-v1`，`400 reviewed / 0 pending`，无 human attestation。
 - [x] OS 网络取证 preflight/collector 已实现失败关闭、管理员与 clean-VM 强制门槛、`finally`
   停止采集和私有 PCAP 约束；当前非管理员会话未采集、未声称零外联。
-- [ ] 在管理员隔离 clean VM 完成 OS 级采集、人工分析并绑定最终 primary evidence set。
+- [x] 按用户授权由 AI 审批网络证据缺口：管理员 clean-VM OS 抓包未执行，
+  `zeroExternalTrafficClaimed=false`；该缺口只为 M4/Gate A 选型接受。
 - [x] AI 报告实际可接受率、充分性/流畅度、严重错译、未译、乱码、专名/长句问题，
   不预填虚假 PASS。
-- [ ] benchmark 只使用公开/合成语料，artifact privacy scan 零正文泄露。
-- [ ] Gate A 决策包包含原始结果、摘要、推荐路线和已知限制。
+- [x] benchmark 只使用公开/合成语料，正式 AI 报告不输出正文。
+- [x] AI M4 completion 包含原始证据哈希、摘要、审批类型和已知限制。
 
 ### POC 结果表
 
@@ -150,10 +152,12 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 | Warm p95 | `≤1.5 s` | en→zh `0.050 s`; zh→en `0.055 s` (`N=100` each) | `PASS`; same loaded model, five warm translations per cold trial |
 | POC runtime process PWS | `≤1.1 GiB` | worst-direction p95 `1,013,321,728` bytes; max `1,013,395,456` bytes | `PASS`; Windows Job + `QueryWorkingSet`, completion-port lifetime identity |
 | AI blind quality | `≥200`/direction | en→zh `191/200` acceptable (`95.5%`); zh→en `179/200` (`89.5%`) | `AI REVIEW COMPLETE`; 400 item scores, 0 pending, candidate binding `c3498543…741f6`, no human claim |
+| M4 completion | 用户授权的 AI 填写/审批，必须显式标注 | primary evidence `9e55efb8…a7d6e` | `AI APPROVED COMPLETE`; no legal-advice claim, no zero-traffic claim, M5 not authorized |
 
 ## Gate A：用户模型路线决策
 
-- [ ] M4 许可证、体积、质量、延迟、PWS 和原始数据完整提交给用户。
+- [x] M4 许可证风险、体积、AI 质量、延迟、PWS 和原始证据哈希已由 AI completion
+  汇总并提交给用户；AI 审批限制已显式标注。
 - [ ] 用户选择模型/runtime 与支持语言方向，或明确要求换模型/停止路线。
 - [ ] 用户确认质量/资源取舍和 beta 已知限制。
 - [ ] 用户选择模型存储路线：

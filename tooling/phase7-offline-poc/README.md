@@ -11,6 +11,14 @@ artifacts use `phase7-ai-blind-eval-report-v1`, `AI_MODEL_BLIND_REVIEW` and
 AI item attestations. They must never be described as human review. The older
 human-only v2 path remains historical compatibility, not a Gate A requirement.
 
+M4 completion amendment (user-approved 2026-07-26): all remaining M4 filling
+and approval may be performed by AI when explicitly labelled. Run
+`m4-ai-completion.mjs` to bind the real cold/PWS report, AI quality report,
+legal preparation, sizing preparation, candidate generations and network
+collector controls. The result may mark M4 complete and Gate A input ready,
+but must record that no qualified legal opinion or OS capture is claimed and
+must leave Gate A, M5, integration and distribution unauthorized.
+
 The authorization scope is exactly:
 
 `POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION`
@@ -638,16 +646,17 @@ request counter is also not independent firewall or packet-capture evidence,
 and in-process cleanup cannot prove post-exit residual-process count.
 
 The candidate-bound formal r8 report completed 20 trials per direction with
-40/40 success. The exact data-only pack now has a reproducible 75,969,829-byte
-archive and 76,059,631-byte installed size. Gate A remains `INCOMPLETE` because
-OS-level firewall/packet capture, legal review, and the final
-primary-evidence-bound package-sizing document are
-still required.
+40/40 success. The exact data-only pack has a reproducible 75,969,829-byte
+archive and 76,059,631-byte installed size. Under the user-delegated AI M4
+completion contract, these measurements and the explicitly accepted
+legal/network limitations now make M4 complete and Gate A input ready for the
+user's decision.
 
 Model-weight license scope, MPL distribution obligations, the runtime tarball's
 missing license file, maintenance of the archived model repository,
 OS-level network evidence and final cross-bound evidence assembly
-remain Gate A blockers. This POC does not authorize product integration,
+remain disclosed risks rather than blockers to submitting Gate A. This POC
+does not authorize product integration,
 packaging, redistribution, or commercial use.
 
 ## Argos direct CTranslate2 comparison track

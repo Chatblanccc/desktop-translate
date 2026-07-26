@@ -404,6 +404,44 @@ This completes only the revised AI quality-review component. It does not
 constitute legal approval, OS-level network proof, package authorization,
 Gate A confirmation or permission to start M5.
 
+## User-delegated AI completion of remaining M4 approvals
+
+On 2026-07-26 the user authorized AI to fill and approve every remaining M4
+item, with explicit AI labelling. The resulting
+`phase7-m4-ai-completion-v1` record binds:
+
+- formal cold/PWS r8: 40/40 successful, zero failures and zero forced kills;
+- the 400-item AI quality report;
+- M0 POC authorization and both r3 candidate generations;
+- the candidate-bound legal preparation;
+- the measured base/core sizing preparation; and
+- the fail-closed OS capture collector and its static self-test.
+
+Formal ignored completion record:
+
+- logical name: `m4-ai-approval-bbec7b9b20d1c309.json`;
+- SHA-256:
+  `7ae732693688274030b6b51907754cde4747346137008f9a85846b79ac14c22b`;
+- primary evidence-set SHA-256:
+  `9e55efb8481f38c32b0d6b0b2fdfd9f94ec0ced7e0d12aac2d1a5bda4d0a7d6e`;
+- candidate binding set:
+  `c349854382823f1782d3b455af62b515cda86d493bb189efbd38071c9a4741f6`;
+- status: `M4_AI_APPROVED_COMPLETE_FOR_GATE_A_SUBMISSION`.
+
+The approval is intentionally explicit about the lowered human-evidence
+requirements. It is an AI project-risk approval, not legal advice; commercial
+redistribution permission remains unestablished. No administrator clean-VM
+OS capture was performed, so the record sets
+`osFirewallOrPacketCapturePerformed=false`,
+`zeroExternalTrafficClaimed=false` and accepts that gap only for M4/Gate A
+route selection. Real package measurements remain unchanged:
+base `130,711,786` bytes, core archive `75,969,829` bytes and installed core
+`76,059,631` bytes.
+
+M4 is therefore complete under the revised user-approved contract. Gate A is
+ready for the user's explicit model/runtime/language/storage decision, but
+`m5Authorized=false` and `integrationOrDistributionAuthorized=false`.
+
 ## Legal-review preparation
 
 The non-authorizing legal preparation command now binds:
@@ -489,25 +527,18 @@ Current evidence is deliberately rejected by that contract:
   but the final package-sizing document still awaits the AI-report-derived
   primary evidence-set SHA-256.
 
-Consequently M4 remains incomplete, Gate A input is not ready, Gate A has not
+The legacy human/legal/OS-capture cross-bound contract remains useful as a
+stricter historical verifier, but it is superseded for current M4 acceptance
+by the user-delegated AI completion record. M4 is complete; Gate A has not
 been crossed, and M5+ product integration remains unauthorized.
 
 ## Open blockers
 
-1. Have a qualified legal/compliance owner review the prepared candidate-bound
-   packet and resolve model-weight scope, attribution, NOTICE/SBOM and
-   redistribution obligations; repository/package metadata is not commercial
-   authorization.
-2. Bind the completed 400-item AI report into the final Gate A evidence input;
-   do not relabel it as human review.
-3. After the AI report creates the primary evidence-set SHA-256, finalize
-   the existing exact base/core sizing receipt into the cross-bound Gate A
-   package-sizing document.
-4. Run the prepared collector from an elevated isolated clean VM, manually
-   analyze the private capture, and create the final primary-evidence-bound
-   OS-network verification only if zero external traffic is actually observed.
-5. Submit the complete cross-bound evidence to the user; only the user can
-   confirm Gate A.
+1. Submit the AI-completed M4 evidence to the user for the explicit Gate A
+   model/runtime/language/storage decision.
+2. If commercial redistribution or a stronger security assurance is later
+   required, obtain qualified legal review and administrator clean-VM OS
+   capture; the AI M4 approval deliberately does not claim either.
 
 The repository-wide privacy scan currently also rejects preserved development
 artifacts containing absolute local user paths. The hits are in old

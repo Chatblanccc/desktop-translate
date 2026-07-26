@@ -254,6 +254,24 @@ withheld private answer key 和 generation-bound item set；AI 可查看 source�
 候选生成绑定和正文不进入报告的要求，也不替代正式法务批准、管理员 clean-VM OS
 网络证据、最终 package sizing 或用户 Gate A 决策。
 
+## AD7-011：M4 剩余填写与审批由 AI 完成
+
+用户于 2026-07-26 进一步授权：M4 剩余内容允许 AI 填写与审批，并在证据中额外标注
+AI 身份。冻结验收改用 `phase7-m4-ai-completion-v1`：
+
+- AI 可审批质量、法务风险、网络证据缺口和实测 package sizing；
+- AI 法务审批仅表示“允许提交 Gate A 选型”，必须写
+  `AI_PROJECT_RISK_APPROVAL_NOT_LEGAL_ADVICE`，不得声称律师意见或商业再分发许可；
+- 未执行管理员 clean-VM OS 抓包时，AI 可在 M4 接受该缺口，但必须写明
+  `osFirewallOrPacketCapturePerformed=false`、
+  `zeroExternalTrafficClaimed=false`，不得伪造零外联结论；
+- 包体审批必须继续引用真实测量值和 artifact SHA-256；
+- 所有审批必须绑定同一候选 generation set 和 primary evidence set。
+
+此授权使 M4 可以标记完成并提交 Gate A，但没有把 Gate A 模型路线选择委托给 AI。
+记录必须保持 `AWAITING_EXPLICIT_USER_DECISION`、`m5Authorized=false` 和
+`integrationOrDistributionAuthorized=false`。
+
 ## 被拒绝的方案
 
 - Gate A 前完成本地翻译产品集成：会在用户看到实测前锁死模型路线，拒绝。

@@ -9,9 +9,9 @@
   M4 双向 200 条 `r3` candidate generation 已绑定，PWS v3 正式 20×2 已 40/40
   通过，400 条匿名质量评审已由 AI 逐条完成，双向 data-only core pack 已实测
   `72.450 MiB archive / 72.536 MiB installed`；盲评只读状态核验为
-  `400 AI reviewed / 0 pending`，候选绑定法务准备包和失败关闭网络采集器已完成；正式法务批准、
-  管理员 clean-VM OS 级网络观察和
-  primary-evidence-set 绑定后的最终 package-sizing 仍待补，Gate A 尚未提交用户确认
+  `400 AI reviewed / 0 pending`；用户已授权 M4 剩余填写/审批由 AI 完成，
+  AI M4 completion 已绑定质量、性能、法务准备、网络缺口和真实包体数据。
+  M4 现为 `AI APPROVED COMPLETE`，Gate A 输入可提交，但仍等待用户明确选择，M5 未授权
 - 当前验收状态：`NOT YET ACCEPTED`
 - 最终交付上限：Windows x64 signed limited beta
 - 明确禁止的口径：public V1、GA、production-ready

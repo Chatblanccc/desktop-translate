@@ -14,6 +14,9 @@
     },
     {
       "$ref": "#/$defs/packageSizing"
+    },
+    {
+      "$ref": "#/$defs/m4AiCompletion"
     }
   ],
   "$defs": {
@@ -32,6 +35,95 @@
         "en-zh",
         "zh-en"
       ]
+    },
+    "m4AiCompletion": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "status",
+        "approvalId",
+        "approvedAt",
+        "scope",
+        "delegation",
+        "assessor",
+        "primaryEvidence",
+        "primaryEvidenceSetSha256",
+        "qualityApproval",
+        "legalApproval",
+        "networkApproval",
+        "packageSizingApproval",
+        "decision"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "phase7-m4-ai-completion-v1"
+        },
+        "status": {
+          "const": "M4_AI_APPROVED_COMPLETE_FOR_GATE_A_SUBMISSION"
+        },
+        "approvalId": {
+          "type": "string",
+          "pattern": "^m4-ai-approval-[a-f0-9]{16}$"
+        },
+        "approvedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "scope": {
+          "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+        },
+        "delegation": {
+          "type": "object"
+        },
+        "assessor": {
+          "type": "object"
+        },
+        "primaryEvidence": {
+          "type": "object"
+        },
+        "primaryEvidenceSetSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "qualityApproval": {
+          "type": "object"
+        },
+        "legalApproval": {
+          "type": "object"
+        },
+        "networkApproval": {
+          "type": "object"
+        },
+        "packageSizingApproval": {
+          "type": "object"
+        },
+        "decision": {
+          "type": "object",
+          "required": [
+            "m4Complete",
+            "gateAInputReady",
+            "gateADecisionStatus",
+            "integrationOrDistributionAuthorized",
+            "m5Authorized"
+          ],
+          "properties": {
+            "m4Complete": {
+              "const": true
+            },
+            "gateAInputReady": {
+              "const": true
+            },
+            "gateADecisionStatus": {
+              "const": "AWAITING_EXPLICIT_USER_DECISION"
+            },
+            "integrationOrDistributionAuthorized": {
+              "const": false
+            },
+            "m5Authorized": {
+              "const": false
+            }
+          }
+        }
+      }
     },
     "candidateBinding": {
       "type": "object",

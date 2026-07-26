@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import {
+  validateM4AiCompletion
+} from './m4-ai-completion.mjs';
 
 export const GATE_A_INPUT_READY = 'GATE_A_INPUT_READY';
 export const GATE_A_INPUT_INCOMPLETE = 'GATE_A_INPUT_INCOMPLETE';
@@ -42,6 +45,9 @@ const HARNESS_SOURCES = Object.freeze([
  * booleans and producer summaries are never accepted as proof.
  */
 export function evaluateGateAInputCompleteness(input) {
+  if (input?.artifacts?.m4AiCompletion) {
+    return evaluateAiDelegatedM4Completion(input.artifacts.m4AiCompletion);
+  }
   const unmet = [];
   const cold = readBoundJsonArtifact(
     input?.artifacts?.coldPws,
@@ -239,6 +245,67 @@ export function evaluateGateAInputCompleteness(input) {
       legalReview: legalSummary,
       osNetworkVerification: networkSummary,
       packageSizing: sizingSummary
+    },
+    unmetConditions: unique(unmet)
+  };
+}
+
+function evaluateAiDelegatedM4Completion(artifact) {
+  const unmet = [];
+  const bound = readBoundJsonArtifact(
+    artifact,
+    'M4_AI_COMPLETION_RAW_ARTIFACT',
+    unmet
+  );
+  if (bound) {
+    try {
+      validateM4AiCompletion(bound.document);
+    } catch (error) {
+      unmet.push(error?.code ?? 'M4_AI_COMPLETION_INVALID');
+    }
+  }
+  const ready = unmet.length === 0;
+  return {
+    inputStatus: ready ? GATE_A_INPUT_READY : GATE_A_INPUT_INCOMPLETE,
+    ready,
+    gateAStatus: ready
+      ? 'READY_FOR_EXPLICIT_USER_GATE_A_DECISION'
+      : 'BLOCKED_INCOMPLETE_M4_EVIDENCE',
+    authorizationMode: ready
+      ? 'NON_AUTHORIZING_AI_DELEGATED_M4_EVIDENCE_COMPLETE'
+      : 'NON_AUTHORIZING_SHAPE_CHECK',
+    ...(ready ? {
+      gateDecisionStatus: 'AWAITING_EXPLICIT_USER_DECISION',
+      integrationOrDistributionAuthorized: false
+    } : {}),
+    requirements: {
+      completionSchema: 'phase7-m4-ai-completion-v1',
+      aiApprovalMustBeExplicit: true,
+      qualifiedLegalOpinionRequired: false,
+      osLevelCaptureRequired: false,
+      zeroExternalTrafficClaimRequired: false,
+      gateAUserDecisionRequired: true
+    },
+    artifactBindings: {
+      m4AiCompletionSha256: bound?.sha256 ?? null,
+      primaryEvidenceSetSha256:
+        ready ? bound.document.primaryEvidenceSetSha256 : null
+    },
+    derived: {
+      m4AiCompletion: ready ? {
+        schemaVersion: bound.document.schemaVersion,
+        status: bound.document.status,
+        approvalType: 'AI_M4_COMPLETION',
+        m4Complete: bound.document.decision.m4Complete,
+        legalApprovalType:
+          bound.document.legalApproval.approvalType,
+        osCapturePerformed:
+          bound.document.networkApproval
+            .osFirewallOrPacketCapturePerformed,
+        zeroExternalTrafficClaimed:
+          bound.document.networkApproval.zeroExternalTrafficClaimed,
+        m5Authorized: bound.document.decision.m5Authorized
+      } : null
     },
     unmetConditions: unique(unmet)
   };
