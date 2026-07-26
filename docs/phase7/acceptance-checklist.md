@@ -119,7 +119,7 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 
 - [x] formal PWS v3 与 blind report v2 已通过同一组两方向 candidate-generation raw hash、
   authorization、manifest、model/runtime、workload 和 candidate/run identity 交叉绑定；真实生成 artifact
-  与 formal cold/PWS `40/40` 已完成，人工评审仍为 `NOT_STARTED`。
+  与 formal cold/PWS `40/40` 已完成。
 - [x] Bergamot 候选已记录 model/runtime ID、上游 revision、许可证和再分发条件；最终法律审批仍未完成。
 - [x] 候选绑定的法务准备包已核验 12 个供应文件、两份 MPL-2.0 证据、npm tarball
   实际内容和 core-pack receipt；固定为 `NOT_APPROVED`，不得代替法务结论。
@@ -128,13 +128,15 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 - [x] cold translation p95 `≤3.0 s`，报告 N/p50/p95/max/failure。
 - [x] warm translation p95 `≤1.5 s`，报告 N/p50/p95/max/failure。
 - [x] POC runtime process PWS `≤1.1 GiB`，记录测量工具、采样与设备。
-- [ ] 每个拟支持方向完成至少 200 条 blind evaluation。
-- [x] 只读 blind `status` 已对真实 run 验证 `0 reviewed / 400 pending`，不读取私有答案键、
-  不输出正文且支持安全断点续跑。
+- [x] 用户于 2026-07-26 批准 AI 评分正式替代 400 条人工盲评；冻结门槛保持每方向
+  至少 200 条，并要求全部证据显式标记 `AI_REVIEW`，不得伪装成人工评审。
+- [x] AI 已逐条完成 `200×2` 匿名候选质量评审；正式报告为
+  `phase7-ai-blind-eval-report-v1`，`400 reviewed / 0 pending`，无 human attestation。
 - [x] OS 网络取证 preflight/collector 已实现失败关闭、管理员与 clean-VM 强制门槛、`finally`
   停止采集和私有 PCAP 约束；当前非管理员会话未采集、未声称零外联。
 - [ ] 在管理员隔离 clean VM 完成 OS 级采集、人工分析并绑定最终 primary evidence set。
-- [ ] 报告实际质量、严重错译、未译、乱码、专名/长句问题，不预填虚假 PASS。
+- [x] AI 报告实际可接受率、充分性/流畅度、严重错译、未译、乱码、专名/长句问题，
+  不预填虚假 PASS。
 - [ ] benchmark 只使用公开/合成语料，artifact privacy scan 零正文泄露。
 - [ ] Gate A 决策包包含原始结果、摘要、推荐路线和已知限制。
 
@@ -147,7 +149,7 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 | Cold p95 | `≤3.0 s` | en→zh `1.212 s`; zh→en `1.401 s` (`N=20` each) | `PASS`; candidate-bound formal r8, `40/40`, zero failed trials |
 | Warm p95 | `≤1.5 s` | en→zh `0.050 s`; zh→en `0.055 s` (`N=100` each) | `PASS`; same loaded model, five warm translations per cold trial |
 | POC runtime process PWS | `≤1.1 GiB` | worst-direction p95 `1,013,321,728` bytes; max `1,013,395,456` bytes | `PASS`; Windows Job + `QueryWorkingSet`, completion-port lifetime identity |
-| Blind quality | `≥200`/direction | `200` prepared/direction; `400` total | `NOT_STARTED`; private randomized input is ready, no human scores fabricated |
+| AI blind quality | `≥200`/direction | en→zh `191/200` acceptable (`95.5%`); zh→en `179/200` (`89.5%`) | `AI REVIEW COMPLETE`; 400 item scores, 0 pending, candidate binding `c3498543…741f6`, no human claim |
 
 ## Gate A：用户模型路线决策
 

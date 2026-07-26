@@ -7,10 +7,10 @@
   `Deny Delete` pre-mutation fail-closed 已通过；partial registry/其余 ACL/path/process fault、
   跨版本升级、正常 installed-app 退出、物理输入与 clean VM 待补 /
   M4 双向 200 条 `r3` candidate generation 已绑定，PWS v3 正式 20×2 已 40/40
-  通过，400 条匿名盲评批次已准备，双向 data-only core pack 已实测
+  通过，400 条匿名质量评审已由 AI 逐条完成，双向 data-only core pack 已实测
   `72.450 MiB archive / 72.536 MiB installed`；盲评只读状态核验为
-  `0 reviewed / 400 pending`，候选绑定法务准备包和失败关闭网络采集器已完成；人工盲评、
-  正式法务批准、管理员 clean-VM OS 级网络观察和
+  `400 AI reviewed / 0 pending`，候选绑定法务准备包和失败关闭网络采集器已完成；正式法务批准、
+  管理员 clean-VM OS 级网络观察和
   primary-evidence-set 绑定后的最终 package-sizing 仍待补，Gate A 尚未提交用户确认
 - 当前验收状态：`NOT YET ACCEPTED`
 - 最终交付上限：Windows x64 signed limited beta
@@ -84,7 +84,7 @@ Gate A/B 都不是最终发布验收。`SIGNED LIMITED BETA` 只能在 M8–M10 
 | M1 同步与基线 | 同步 live `main`、创建 `codex/phase7-first-beta`、记录 SHA/clean 状态并跑基线 | 分支与基线证据可追溯；不覆盖无关本地改动 |
 | M2 文档与身份占位 | 冻结本目录四份文档；列出产品名、appId、publisher、feed 等待确认字段 | 文档一致；身份仍是占位，不接真实证书/存储 |
 | M3 安装目录 + Ball | 开启 assisted installer 目录选择；实现 `edge/free`、拖动与 anchor 迁移 | 自动化回归及真实鼠标、触控板证据完成 |
-| M4 离线模型 POC | 在隔离 harness 中比较候选，不接完整产品和真实发布 feed | 提交许可证、体积、200/方向盲测、延迟、PWS 报告 |
+| M4 离线模型 POC | 在隔离 harness 中比较候选，不接完整产品和真实发布 feed | 提交许可证、体积、200/方向 AI 盲化质量评审、延迟、PWS 报告 |
 | **Gate A 用户模型决策** | 用户审阅 M4 实测并选择模型、语言方向与模型存储路线 | 用户明确选择；未确认禁止 M5 完整集成 |
 | M5 Local Host + Model Manager | 仅按 Gate A 路线实现 Host、模型包、下载/校验/回滚/删除 | 离线闭环、故障回退、latest-wins、隐私与退出通过 |
 | M6 教程 + 结果 + 错误 | 五步教程、Notepad 练习、本地结果状态和可恢复错误 | 本地资产、零遥测、真实教程走查通过 |
@@ -111,9 +111,15 @@ POC 使用公开、可再分发或自建合成语料，不读取用户历史。�
 | Cold translation p95 | `≤3.0 s` |
 | Warm translation p95 | `≤1.5 s` |
 | POC runtime process PWS | `≤1.1 GiB` |
-| 质量样本 | 每个拟支持方向至少 `200` 条 blind evaluation |
+| 质量样本 | 每个拟支持方向至少 `200` 条明确标记的 AI blind quality review |
 
-质量不预填虚假的 PASS 分数。报告必须展示实际正确率/人工偏好、严重错译、未译、乱码、专名和长句失败，
+冻结标准变更（用户批准，2026-07-26）：原“400 条人工盲评”由“400 条 AI 盲化质量评审”
+正式替代。AI 必须逐条查看 source、reference 和匿名候选输出，候选真实身份不得暴露给评审；
+每条记录必须写 `AI_REVIEWED`、`AI_MODEL_BLIND_REVIEW` 和 AI attestation，报告必须写
+`AI_REVIEW`，不得出现或暗示人工评审证明。原人工 harness 仅保留为历史兼容路径，不再是
+Phase 7 Gate A 的必需输入。
+
+质量不预填虚假的 PASS 分数。报告必须展示实际可接受率、充分性/流畅度评分、严重错译、未译、乱码、专名和长句失败，
 并同时提交模型来源、revision、许可证、再分发条件、runtime/CPU 要求及原始/解包体积。
 
 Gate A 由用户从真实报告中选择：

@@ -638,6 +638,8 @@ const coldDocument = {
 };
 
 const score = (direction, index) => ({
+  schemaVersion: 'phase7-ai-blind-eval-score-v1',
+  status: 'AI_REVIEWED',
   direction,
   evaluationId: `${direction}-${index}`,
   itemToken: `${direction}-item-${index}`,
@@ -647,11 +649,14 @@ const score = (direction, index) => ({
     candidateGenerationDocuments.find(
       (document) => document.identity.direction === direction
     ).identitySha256,
-  reviewerToken: 'reviewer-fixture',
-  reviewMode: 'HUMAN_ONLY_NO_AUTOMATED_SCORING',
+  assessorToken: 'ai-assessor-selftest-fixture',
+  reviewMode: 'AI_MODEL_BLIND_REVIEW',
   blindnessAttestation: 'CANDIDATE_IDENTITY_NOT_VIEWED',
-  humanReviewAttestation:
-    'I_REVIEWED_THIS_ITEM_WITHOUT_AUTOMATED_SCORING',
+  aiReviewAttestation:
+    'AI_MODEL_ASSESSED_SOURCE_REFERENCE_AND_CANDIDATE_OUTPUT',
+  acceptability: 'ACCEPTABLE',
+  adequacyScore: 4,
+  fluencyScore: 4,
   errors: {
     severeMistranslation: false,
     untranslated: false,
@@ -665,10 +670,18 @@ const rawScores = directions.flatMap((direction) => Array.from(
   (_, index) => score(direction, index)
 ));
 const blindDocument = {
-  schemaVersion: 'phase7-blind-eval-report-v2',
-  status: 'HUMAN_BLIND_EVALUATION_COMPONENT_COMPLETE',
+  schemaVersion: 'phase7-ai-blind-eval-report-v1',
+  status: 'AI_BLIND_QUALITY_EVALUATION_COMPONENT_COMPLETE',
   scope: 'POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION',
-  humanOnly: true,
+  aiOnly: true,
+  assessmentMode: 'AI_MODEL_BLIND_REVIEW',
+  assessor: {
+    assessorType: 'AI_LANGUAGE_MODEL',
+    candidateIdentityViewed: false
+  },
+  method: {
+    humanReviewClaimed: false
+  },
   blindCandidateIdentity: true,
   audit: {
     manifestSha256: hex('d'),
@@ -676,6 +689,7 @@ const blindDocument = {
     reviewBatchSha256: hex('4'),
     scoreTemplateSha256: hex('5'),
     privateAnswerKeySha256: hex('6'),
+    aiDecisionsSha256: hex('8'),
     rawScoresSha256: hex('7'),
     candidateGenerationBindingSetSha256,
     candidateOutputItemIdentitySetSha256ByDirection:
@@ -688,8 +702,8 @@ const blindDocument = {
   },
   candidateGenerationBindings,
   counts: {
-    validHumanReviewCount: 400,
-    pendingHumanReviewCount: 0
+    validAiReviewCount: 400,
+    pendingAiReviewCount: 0
   },
   rawScores,
   directions: directions.map((direction) => ({
@@ -703,7 +717,13 @@ const blindDocument = {
         ).identitySha256,
       validN: 200,
       uniqueItemN: 200,
-      pendingN: 0
+      pendingN: 0,
+      blindEvaluationEvidence: {
+        aiReviewed: true,
+        humanReviewed: false,
+        componentStatus:
+          'AI_BLIND_QUALITY_EVALUATION_COMPONENT_COMPLETE'
+      }
     }]
   }))
 };
@@ -1244,7 +1264,7 @@ assert.ok(wrongGenerationCandidateResult.unmetConditions.includes(
   'COLD_PWS_CANDIDATE_GENERATION_RAW_GENERATION_ARTIFACT_SET_MISMATCH'
 ));
 assert.ok(wrongGenerationCandidateResult.unmetConditions.includes(
-  'HUMAN_BLIND_CANDIDATE_GENERATION_RAW_GENERATION_ARTIFACT_SET_MISMATCH'
+  'AI_BLIND_CANDIDATE_GENERATION_RAW_GENERATION_ARTIFACT_SET_MISMATCH'
 ));
 
 const duplicateGeneration = structuredClone(
@@ -1362,7 +1382,21 @@ const wrongBlindIdentityResult = evaluateGateAInputCompleteness({
   }
 });
 assert.ok(wrongBlindIdentityResult.unmetConditions.includes(
-  'HUMAN_BLIND_RAW_SCORE_GENERATION_BINDING_MISMATCH:en-zh'
+  'AI_BLIND_RAW_SCORE_GENERATION_BINDING_MISMATCH:en-zh'
+));
+
+const fakeHumanAiScore = structuredClone(blindDocument);
+fakeHumanAiScore.rawScores[0].humanReviewAttestation =
+  'I_REVIEWED_THIS_ITEM_WITHOUT_AUTOMATED_SCORING';
+const fakeHumanAiScoreResult = evaluateGateAInputCompleteness({
+  ...rawEvidence,
+  artifacts: {
+    ...rawEvidence.artifacts,
+    blindEvaluation: artifact(fakeHumanAiScore)
+  }
+});
+assert.ok(fakeHumanAiScoreResult.unmetConditions.includes(
+  'AI_BLIND_RAW_SCORE_ATTESTATION_INVALID:en-zh'
 ));
 
 const wrongBlindItemSet = structuredClone(blindDocument);
@@ -1376,7 +1410,7 @@ const wrongBlindItemSetResult = evaluateGateAInputCompleteness({
   }
 });
 assert.ok(wrongBlindItemSetResult.unmetConditions.includes(
-  'HUMAN_BLIND_REVIEWED_ITEM_SET_CANDIDATE_OUTPUT_MISMATCH:en-zh'
+  'AI_BLIND_REVIEWED_ITEM_SET_CANDIDATE_OUTPUT_MISMATCH:en-zh'
 ));
 
 for (const [artifactName, expectedCode] of [
@@ -1445,6 +1479,6 @@ process.stdout.write(`${JSON.stringify({
   verifiedTransitionPositiveFixture: true,
   stableExitAccountingLagRecoveryPositiveFixture: true,
   verifiedTransitionNegativeFixtures: 14,
-  crossBindingNegativeFixtures: 16,
+  crossBindingNegativeFixtures: 17,
   syntheticBooleansIgnored: true
 }, null, 2)}\n`);

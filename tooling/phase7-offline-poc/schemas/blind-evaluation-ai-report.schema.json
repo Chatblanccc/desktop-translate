@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-ai-blind-eval-report-v1.json",
+  "title": "Phase 7 AI blind translation quality report",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "status",
+    "scope",
+    "aiOnly",
+    "assessmentMode",
+    "assessor",
+    "blindCandidateIdentity",
+    "audit",
+    "candidateGenerationBindings",
+    "counts",
+    "directions",
+    "rawScores",
+    "gateA"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "phase7-ai-blind-eval-report-v1" },
+    "status": {
+      "const": "AI_BLIND_QUALITY_EVALUATION_COMPONENT_COMPLETE"
+    },
+    "scope": {
+      "const": "POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION"
+    },
+    "aiOnly": { "const": true },
+    "assessmentMode": { "const": "AI_MODEL_BLIND_REVIEW" },
+    "blindCandidateIdentity": { "const": true },
+    "assessor": {
+      "type": "object",
+      "required": [
+        "assessorType",
+        "modelIdentifier",
+        "candidateIdentityViewed",
+        "referenceTranslationViewed"
+      ],
+      "properties": {
+        "assessorType": { "const": "AI_LANGUAGE_MODEL" },
+        "modelIdentifier": { "type": "string", "minLength": 1 },
+        "candidateIdentityViewed": { "const": false },
+        "referenceTranslationViewed": { "const": true }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "required": [
+        "manifestSha256",
+        "reviewBatchSha256",
+        "privateAnswerKeySha256",
+        "aiDecisionsSha256",
+        "rawScoresSha256",
+        "candidateGenerationBindingSetSha256",
+        "randomizedMappingVerified",
+        "candidateIdentityWithheldFromReviewBatch"
+      ],
+      "properties": {
+        "manifestSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "reviewBatchSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "privateAnswerKeySha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "aiDecisionsSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "rawScoresSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "candidateGenerationBindingSetSha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "randomizedMappingVerified": { "const": true },
+        "candidateIdentityWithheldFromReviewBatch": { "const": true }
+      }
+    },
+    "candidateGenerationBindings": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "validAiReviewCount",
+        "pendingAiReviewCount"
+      ],
+      "properties": {
+        "validAiReviewCount": { "const": 400 },
+        "pendingAiReviewCount": { "const": 0 }
+      }
+    },
+    "directions": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "rawScores": {
+      "type": "array",
+      "minItems": 400,
+      "maxItems": 400
+    },
+    "gateA": {
+      "type": "object",
+      "required": [
+        "qualityEvaluationComponentComplete",
+        "assessmentType",
+        "inputStatus",
+        "overallGateAStatus",
+        "limitation"
+      ],
+      "properties": {
+        "qualityEvaluationComponentComplete": { "const": true },
+        "assessmentType": { "const": "AI_REVIEW" },
+        "inputStatus": { "const": "GATE_A_INPUT_INCOMPLETE" },
+        "overallGateAStatus": { "type": "string", "minLength": 1 },
+        "limitation": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

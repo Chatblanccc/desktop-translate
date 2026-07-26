@@ -435,7 +435,7 @@ process.stdout.write(`${JSON.stringify({
     'firefox-bergamot-electron-loopback-compatibility-harness',
     'firefox-bergamot-fresh-process-query-working-set-runner',
     'argos-ctranslate2-supply-archive-and-direct-poc-static-harness',
-    'human-blind-evaluation-randomization-and-privacy-harness',
+    'blind-quality-evaluation-randomization-privacy-and-explicit-ai-harness',
     'candidate-generation-cross-evidence-binding',
     'qvac-bare-runtime-candidate-supply-and-boundaries'
   ],

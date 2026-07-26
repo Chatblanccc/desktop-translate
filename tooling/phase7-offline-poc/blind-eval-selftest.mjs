@@ -17,6 +17,11 @@ import {
   summarizeHumanScoresV2,
   validateInputRecords
 } from './blind-eval.mjs';
+import {
+  AI_DECISIONS_SCHEMA_VERSION,
+  AI_REPORT_SCHEMA_VERSION,
+  summarizeAiScores
+} from './ai-blind-eval.mjs';
 import { canonicalJson } from './lib.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -260,8 +265,10 @@ const v2Bindings = ['en-zh', 'zh-en'].map((direction, index) => {
   const itemIdentities = v2Artifacts.answerKey.records
     .filter((record) => record.direction === direction)
     .map((record) => ({
-      direction: record.direction,
       itemId: record.itemId,
+      direction: record.direction,
+      candidateId: record.candidates[0].candidateId,
+      generationRunId: record.candidates[0].generationRunId,
       sourceSha256: record.sourceSha256
     }))
     .sort((left, right) => left.itemId.localeCompare(right.itemId));
@@ -317,6 +324,73 @@ assert.deepEqual(
     binding.direction,
     binding.candidateOutputItemIdentitySetSha256
   ]))
+);
+
+const aiDecisions = {
+  schemaVersion: AI_DECISIONS_SCHEMA_VERSION,
+  status: 'AI_MODEL_ASSESSMENT_COMPLETE',
+  runId: v2Artifacts.manifest.runId,
+  reviewBatchSha256: sha256(v2Artifacts.batchContent),
+  rubricVersion: 'phase7-ai-translation-quality-rubric-v1',
+  assessorToken: 'ai-assessor-selftest-20260726',
+  assessor: {
+    assessorType: 'AI_LANGUAGE_MODEL',
+    provider: 'SELF_TEST',
+    surface: 'STATIC_FIXTURE',
+    modelIdentifier: 'SELF_TEST_MODEL',
+    candidateIdentityViewed: false,
+    referenceTranslationViewed: true
+  },
+  assessedAt: '2026-07-23T05:00:00.000Z',
+  allEvaluationItemsIndividuallyAssessed: true,
+  defaultDecision: {
+    acceptability: 'ACCEPTABLE',
+    adequacyScore: 4,
+    fluencyScore: 4,
+    errors: {
+      severeMistranslation: false,
+      untranslated: false,
+      garbled: false,
+      properNounError: false,
+      longSentenceError: false
+    }
+  },
+  exactReferenceDecision: {
+    acceptability: 'ACCEPTABLE',
+    adequacyScore: 5,
+    fluencyScore: 5,
+    errors: {
+      severeMistranslation: false,
+      untranslated: false,
+      garbled: false,
+      properNounError: false,
+      longSentenceError: false
+    }
+  },
+  overrides: []
+};
+const aiDecisionsContent = `${JSON.stringify(aiDecisions, null, 2)}\n`;
+const completeAi = await summarizeAiScores({
+  manifest: v2Artifacts.manifest,
+  manifestContent: `${JSON.stringify(v2Artifacts.manifest, null, 2)}\n`,
+  batchContent: v2Artifacts.batchContent,
+  scoreTemplateContent: v2Artifacts.scoreTemplateContent,
+  answerKeyContent: v2Artifacts.answerKeyContent,
+  decisions: aiDecisions,
+  decisionsContent: aiDecisionsContent,
+  candidateBindingReport,
+  reportId: `report-${'85'.repeat(8)}`,
+  summarizedAt: '2026-07-23T06:00:00.000Z'
+});
+assert.equal(completeAi.report.schemaVersion, AI_REPORT_SCHEMA_VERSION);
+assert.equal(completeAi.report.counts.validAiReviewCount, 400);
+assert.equal(completeAi.report.counts.pendingAiReviewCount, 0);
+assert.equal(completeAi.report.aiOnly, true);
+assert.equal(completeAi.report.method.humanReviewClaimed, false);
+assert.equal(
+  completeAi.report.rawScores.some((score) =>
+    Object.hasOwn(score, 'humanReviewAttestation')),
+  false
 );
 assert.ok(completeV2.report.rawScores.every(
   (score) => /^[a-f0-9]{64}$/u.test(score.generationIdentitySha256)
@@ -549,6 +623,7 @@ process.stdout.write(`${JSON.stringify({
   candidateAnonymousRandomization: 'VERIFIED_WITH_FIXED_SELF_TEST_SEED',
   duplicateCounting: 'REJECTED',
   privacyFailClosed: true,
+  aiReviewContract: '400_ITEM_EXPLICIT_AI_REPORT_VERIFIED',
   humanReviewExecuted: false,
   modelExecution: 'NOT_RUN',
   networkActivity: 'NOT_PERFORMED',

@@ -12,7 +12,7 @@
 |---|---|---:|---|---|
 | P7-R-001 | M4 实测前就完成集成，锁死错误模型/runtime | 20 高 | 隔离 POC；Gate A 提交真实数据；未获用户确认禁止 M5 | OPEN / User + Engineering |
 | P7-R-002 | 模型许可证、来源或再分发条件不允许 beta 分发 | 25 严重 | 上游 revision、license/notice、再分发审查作为 Gate A 输入 | OPEN / User + Engineering |
-| P7-R-003 | 质量样本过少或不盲测，使模型路线假绿 | 20 高 | 每方向 ≥200 blind evaluation、原始记录、失败分类与实际分数 | OPEN / Quality |
+| P7-R-003 | 质量样本过少、候选身份泄露或把 AI 结果冒充人工，使模型路线假绿 | 20 高 | 每方向 ≥200 AI blind review、逐项记录、AI 身份/attestation、失败分类与实际分数 | MITIGATED FOR SAMPLE COUNT / Quality |
 | P7-R-004 | 体积/延迟/PWS 超预算，用户仍被隐藏真实成本 | 20 高 | 150/300/400 MiB、3s/1.5s、1.1 GiB 门槛和原始 benchmark | OPEN / Engineering + Quality |
 | P7-R-005 | core pack 未实测就提前实现/承诺自定义模型路径 | 12 中 | Gate A 根据 `>300 MiB` 与用户偏好选择；此前只显示默认路径/大小/删除 | OPEN / User + Engineering |
 | P7-R-006 | 自由拖动只过合成坐标测试，真实鼠标/触控板不可用 | 16 高 | edge/free、horizontalRatio、重启/DPI/多屏及两种真实输入证据 | OPEN / Quality |
@@ -82,13 +82,13 @@ registry/marker/shortcut ACL 与 partial copy/delete 矩阵仍开放，故风险
 两者必须绑定同一两方向 authorization、generation raw hash、candidate/run、manifest、model/runtime、
 cold workload、source-set、private candidate-output 和 canonical item-identity set。真实 200×2
 generation 与 20×2 formal run 已完成；确定性 data-only core pack 两次重建得到同一 SHA-256，
-archive `75,969,829` bytes，installed `76,059,631` bytes，低于 300 MiB 目标。真实人工 review、
-legal、OS network capture 和 human-report primary hash 生成后的最终 cross-bound package sizing
+archive `75,969,829` bytes，installed `76,059,631` bytes，低于 300 MiB 目标。AI 逐项 review 已于
+2026-07-26 按用户批准的新冻结标准完成；legal、OS network capture 和 AI-report primary hash 生成后的最终 cross-bound package sizing
 尚未完成，P7-R-001/002/003/004/005 保持 OPEN。
 
 ## Gate 相关停止条件
 
-- M4 报告缺许可证、真实体积、每方向 200 盲测、延迟或 PWS 时，不得请求 Gate A 决策。
+- M4 报告缺许可证、真实体积、每方向 200 条显式 AI 盲化评审、延迟或 PWS 时，不得请求 Gate A 决策。
 - Gate A 未记录用户模型/语言/存储路线时，不得开始 M5 完整集成。
 - Gate B 未记录用户确认的产品/发布者身份、真实 Authenticode 和 OSS/COS 选择时，不得开始 M8。
 - Gate B 确认、签名成功或对象上传成功均不得直接写成 `SIGNED LIMITED BETA`。

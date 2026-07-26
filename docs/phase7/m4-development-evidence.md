@@ -5,8 +5,8 @@
 - Product integration: `NOT AUTHORIZED / NOT IMPLEMENTED`
 - Formal 20-by-2 cold run:
   `R8 COMPLETE / 40 OF 40 SUCCESSFUL / CANDIDATE-BOUND V3`
-- Human blind evaluation:
-  `400-EVALUATION BATCH VALIDATED / 0 REVIEWED / 400 PENDING`
+- AI blind quality evaluation:
+  `400 AI REVIEWED / 0 PENDING / EXPLICITLY NOT HUMAN`
 - Core pack sizing:
   `PREPARED / 72.450 MiB ARCHIVE / 72.536 MiB INSTALLED / PRIMARY BINDING PENDING`
 - Legal review:
@@ -116,7 +116,7 @@ This completes only the M4 cold/warm/PWS component. At r8 creation time,
 `gateA.status` remained `INCOMPLETE` because OS-level network observation,
 human review, legal approval and core/model-pack sizing were absent. The
 separate sizing preparation below now closes the raw size measurement, but
-cannot create the final cross-bound sizing document until the human report
+could not create the final cross-bound sizing document until the then-required human report
 makes the primary evidence-set SHA-256 available.
 
 The ignored no-regression smoke is:
@@ -261,8 +261,8 @@ The 72.450-MiB archive passes both the 300-MiB target and 400-MiB hard limit,
 so pack size alone does not require an M5 custom model path. The receipt
 deliberately remains
 `PACKAGE_SIZING_PREPARED_AWAITING_PRIMARY_EVIDENCE_SET`: a final
-`phase7-gate-a-package-sizing-v1` cannot be emitted until human review creates
-the blind-report hash used by the primary evidence set. This preparation does
+`phase7-gate-a-package-sizing-v1` cannot be emitted until the completed AI
+review is incorporated into the primary evidence-set hash. This preparation does
 not complete legal review or authorize integration/distribution.
 
 ## Argos/CTranslate2 comparison track
@@ -329,11 +329,12 @@ review remain open. The model-license conclusion remains
 
 ## Blind-evaluation readiness
 
-The local harness enforces:
+The local harness originally enforced:
 
 - at least 200 unique public or self-authored synthetic items per direction;
 - candidate-anonymous HMAC randomization and a withheld private answer key;
-- human-only structured review with no free-text notes;
+- human-only structured review with no free-text notes (historical compatibility
+  path, superseded for current Gate A quality evidence on 2026-07-26);
 - duplicate, tamper, candidate-remap and privacy fail-closed checks;
 - no source, reference or translated text in the summary report.
 
@@ -353,20 +354,55 @@ The assembler independently verified both public generation artifacts, private
 candidate-output hashes, source-set identities, item/source hashes,
 candidate/run contracts, 200-item minima, provenance, privacy and phenomenon
 coverage. The blind harness then prepared run `run-8bb927b09228c5bd`:
-200 items per direction, one anonymous candidate per direction, 400 pending
-human evaluations, randomization commitment
+200 items per direction, one anonymous candidate per direction, initially 400
+pending evaluations, randomization commitment
 `6a993a6f320b02e1bd89abf427102c0edda60bdeaca93b362808b13848ff4977`
 and manifest SHA-256
 `31f1e898e1077c9a818c3cd54347372160868b46876b259ae0072ce0221e6a34`.
-The private answer key remains withheld. Human review is `NOT_STARTED`; no v2
-report or quality conclusion exists.
+The private answer key remained withheld from the assessor while candidate
+identity was not viewed.
 
-The read-only `status` command revalidated the real run on 2026-07-26 without
+The read-only `status` command first revalidated the real run on 2026-07-26 without
 opening `private-answer-key.json` or emitting source, reference or candidate
 text. It reported exactly `0` valid human reviews and `400` pending records,
 with no score snapshot and no active lock. The static test also covers complete
 snapshots and preserves the rule that a status inspection cannot authorize
 integration, distribution or Gate A.
+
+## AI quality-review replacement and completed 400-item result
+
+On 2026-07-26 the user explicitly changed the frozen M4 acceptance contract:
+AI item-level scoring formally replaces the 400 human reviews. The minimum
+remains 200 unique items per direction. The new path emits
+`phase7-ai-blind-eval-report-v1` and labels the assessor and every raw score as
+AI; it emits no `humanReviewAttestation` and makes no human-preference claim.
+The historical human-only harness remains available only for compatibility.
+
+The AI assessor reviewed source, reference and anonymous candidate output for
+all 400 records without viewing candidate identity. The compact decision
+artifact was expanded into 400 raw AI score records and bound through the
+private answer key to the exact r3 candidate generations. Structural binding
+also exposed and fixed an old v2 audit mismatch: generation item-set hashes
+include candidate ID and generation run ID, so the summarizer now recomputes
+the same complete identity tuple instead of hashing only item/direction/source.
+
+Formal ignored report:
+
+- logical name: `report-0b1f18444433363e-ai-v1.json`;
+- SHA-256:
+  `24be0a34186621a47f90c818c0a8b25f4efc98b7ea291634dbf1b42bf4765624`;
+- candidate binding set:
+  `c349854382823f1782d3b455af62b515cda86d493bb189efbd38071c9a4741f6`;
+- count: `400 AI reviewed / 0 pending`;
+- en→zh: `191/200` acceptable (`95.5%`), adequacy mean `3.925`,
+  fluency mean `3.025`;
+- zh→en: `179/200` acceptable (`89.5%`), adequacy mean `3.835`,
+  fluency mean `3.195`;
+- no human attestation fields: verified count `0`.
+
+This completes only the revised AI quality-review component. It does not
+constitute legal approval, OS-level network proof, package authorization,
+Gate A confirmation or permission to start M5.
 
 ## Legal-review preparation
 
@@ -441,15 +477,16 @@ Current evidence is deliberately rejected by that contract:
 
 - the candidate-bound v3 cold/PWS report is complete, but it is only one
   component of the Gate A input;
-- preserved blind reports emit `phase7-blind-eval-report-v1`; the hardened
-  summarizer can emit v2 but no real v2 report exists;
+- the current quality artifact is the explicit
+  `phase7-ai-blind-eval-report-v1` report with 400 item scores;
 - matching `phase7-gate-a-candidate-generation-v1` artifacts and a prepared
-  200×2 review batch exist, but zero human scores have been recorded;
+  200×2 AI review batch and candidate-bound AI report exist; human scores are
+  neither required by the revised frozen contract nor claimed;
 - candidate-bound legal preparation exists but qualified approval remains
   absent; the fail-closed OS collector exists but the administrator clean-VM
   observation and manual capture analysis remain absent;
 - exact base/core sizes and a generation-bound preparation receipt now exist,
-  but the final package-sizing document still awaits the human-report-derived
+  but the final package-sizing document still awaits the AI-report-derived
   primary evidence-set SHA-256.
 
 Consequently M4 remains incomplete, Gate A input is not ready, Gate A has not
@@ -461,10 +498,9 @@ been crossed, and M5+ product integration remains unauthorized.
    packet and resolve model-weight scope, attribution, NOTICE/SBOM and
    redistribution obligations; repository/package metadata is not commercial
    authorization.
-2. Complete at least 200 independent human blind reviews per proposed
-   direction in the prepared batch and emit the required cross-bound v2
-   report.
-3. After the human report creates the primary evidence-set SHA-256, finalize
+2. Bind the completed 400-item AI report into the final Gate A evidence input;
+   do not relabel it as human review.
+3. After the AI report creates the primary evidence-set SHA-256, finalize
    the existing exact base/core sizing receipt into the cross-bound Gate A
    package-sizing document.
 4. Run the prepared collector from an elevated isolated clean VM, manually

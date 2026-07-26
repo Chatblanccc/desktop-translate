@@ -5,6 +5,12 @@ M0. Download, conversion, and benchmark happen **before Gate A**. Gate A then
 uses the completed measurements and license audit to choose or reject a model
 route.
 
+Quality-contract amendment (user-approved 2026-07-26): the formal 400-item
+quality evidence is now AI blind review, 200 items per direction. Required
+artifacts use `phase7-ai-blind-eval-report-v1`, `AI_MODEL_BLIND_REVIEW` and
+AI item attestations. They must never be described as human review. The older
+human-only v2 path remains historical compatibility, not a Gate A requirement.
+
 The authorization scope is exactly:
 
 `POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION`
@@ -159,7 +165,7 @@ Each direction runs in a child process with a hard route timeout. Measurement
 JSON emits IDs and aggregate metrics, not source/reference/output text,
 usernames, PIDs, or absolute paths. The process-level socket guard is not
 OS-level proof; later evidence still needs firewall or packet capture,
-bilingual human review, representative Windows hardware, and packaging/SBOM
+explicit AI blind quality review, representative Windows hardware, and packaging/SBOM
 checks.
 
 The current benchmark can only emit `PARTIAL_M4_MEASUREMENT` and
@@ -174,12 +180,12 @@ all of the following:
   failures;
 - warm p50/p95/max and failures per direction;
 - Windows **Private Working Set** evidence with tool, device, samples, and peak;
-- at least 200 human blind reviews per direction, including raw scores and
+- at least 200 AI blind quality reviews per direction, including raw scores and
   severe-error classification.
 
 Only that complete report may be submitted for the user's Gate A choice. The
-current small synthetic fixture, one cold observation, RSS/process-memory
-fields, and non-human quality checks remain insufficient. Even a future
+current small synthetic fixture, one cold observation, and RSS/process-memory
+fields remain insufficient. Even a future
 quality/performance winner remains blocked from integration and distribution
 while `WEIGHT_LICENSE_SCOPE_UNRESOLVED` is open.
 
@@ -187,7 +193,7 @@ while `WEIGHT_LICENSE_SCOPE_UNRESOLVED` is open.
 accepts only exact raw bytes paired with their SHA-256 values, then derives
 cold-trial count, successful/failed attempts, warm failures, Private Working
 Set samples, normal exit, residual cleanup, forced cleanup, and
-human-blind-review counts from known schemas. It also hashes the supplied
+AI-review or historical human-review counts from known schemas. It also hashes the supplied
 runner, native helper, Electron main/library/renderer sources, candidate-binding
 helper and the raw POC authorization record. Their individual digests and canonical six-file-set
 digest must match the identities emitted by the raw measurement. The reader
@@ -195,14 +201,15 @@ recomputes every logical sample's per-process PWS sum, peak, cadence, span,
 query skew, coverage, discarded count, pre/post Job membership, Job
 lifetime/active counts, bounded transition episodes, reserve-adjusted 1.1-GiB
 budget status, final `Known == Total` history, completion-marker binding, and
-cleanup result; producer summary fields cannot replace those records.
+cleanup result plus AI blind-review counts; producer summary fields cannot replace those records.
 Convenience flags such as `candidateIdentityComplete`,
 `artifactSizingComplete`, and `rawResultsAttached` are ignored.
 
 The cross-bound input contract uses the formal producer versions below:
 
 - formal cold/PWS must use `phase7-offline-cold-pws-v3`;
-- the human report must use `phase7-blind-eval-report-v2`;
+- the quality report must use `phase7-ai-blind-eval-report-v1` and explicitly
+  declare `AI_REVIEW`;
 - each direction must attach one
   `phase7-gate-a-candidate-generation-v1` raw artifact matching the exact
   candidate, generation run, candidate manifest, M0 authorization, model tree,
@@ -212,7 +219,7 @@ The cross-bound input contract uses the formal producer versions below:
   candidate binding set. Missing, duplicate, remapped, stale-schema or
   hash-rewritten bindings fail closed;
 - each binding also carries the source-set identity/count, private candidate
-  output hash and item-identity-set hash. Blind v2 recomputes the latter from
+  output hash and item-identity-set hash. The blind summarizers recompute the latter from
   the already-verified private answer key, so reviews of a substituted item
   set cannot satisfy the generation evidence;
 - a valid M0 authorization must cover exactly that manifest and candidate set;
@@ -231,15 +238,16 @@ Gate A choice and never authorizes M5, packaging or redistribution.
 
 The current candidate-bound v3 cold/PWS report and both 200-item candidate
 generations exist, and a deterministic data-only core pack has real sizing
-preparation. The real blind run validates as `0 reviewed / 400 pending`.
+preparation. The real AI blind report validates as `400 reviewed / 0 pending`,
+with no human-review attestation.
 A candidate-bound legal-review preparation exists but is explicitly not an
 approval. An administrator-only clean-VM capture collector exists, but the
 current non-elevated session has not produced or analyzed an OS-level capture.
-`summarize-v2` binds a future human score report to the same generation
-artifacts. The sizing preparation cannot become
+The AI report binds all scores to the same generation artifacts. The sizing
+preparation cannot become
 `phase7-gate-a-package-sizing-v1` until that report supplies the primary
 evidence-set identity. The positive completeness self-test remains entirely
-synthetic and never creates authorization, human, legal or network evidence.
+synthetic and never creates authorization, legal or network evidence.
 
 Read-only human-review status:
 
@@ -632,13 +640,13 @@ and in-process cleanup cannot prove post-exit residual-process count.
 The candidate-bound formal r8 report completed 20 trials per direction with
 40/40 success. The exact data-only pack now has a reproducible 75,969,829-byte
 archive and 76,059,631-byte installed size. Gate A remains `INCOMPLETE` because
-OS-level firewall/packet capture, 200 human blind evaluations per direction,
-legal review, and the final primary-evidence-bound package-sizing document are
+OS-level firewall/packet capture, legal review, and the final
+primary-evidence-bound package-sizing document are
 still required.
 
 Model-weight license scope, MPL distribution obligations, the runtime tarball's
-missing license file, maintenance of the archived model repository, human
-review, OS-level network evidence and final cross-bound evidence assembly
+missing license file, maintenance of the archived model repository,
+OS-level network evidence and final cross-bound evidence assembly
 remain Gate A blockers. This POC does not authorize product integration,
 packaging, redistribution, or commercial use.
 
@@ -830,11 +838,12 @@ file is the explicitly requested private
 echoes source text and is labelled for blind evaluation only. A built-in smoke
 never writes full translation text anywhere.
 
-The generated candidate file is a staging contract, not a completed human
+The generated candidate file is a staging contract, not a completed quality
 evaluation. It must still be joined with eligible source/reference/provenance
 records and the other anonymous candidates before the existing blind harness
-can randomize identity. No automated score is produced, and the requirement
-for at least 200 independent human-reviewed items per direction is unchanged.
+can randomize identity. This generation step produces no quality score; the
+current Gate A path requires at least 200 explicit AI-reviewed items per
+direction.
 
 This direct route also bypasses Argos/Stanza sentence-boundary behavior, so its
 quality is not assumed to equal the full Argos library. Model-package legal
@@ -842,13 +851,14 @@ review, complete license/NOTICE/SBOM approval, bidirectional quality, formal
 fresh-process PWS, OS-level network evidence, signing, and final pack sizing
 all remain open Gate A inputs.
 
-## Human blind-evaluation harness
+## Blind quality-evaluation harness
 
 The separate [blind-evaluation guide](blind-eval-README.md) defines the
 research-only `prepare`, interactive `review`, and audited `summarize` flow.
 It requires at least 200 unique public or self-authored synthetic items in
 each direction, randomizes candidate identity with a private HMAC answer key,
-rejects duplicate or non-human scores, and reports structured aggregates
+rejects duplicate/remapped scores, distinguishes AI from historical human
+attestations, and reports structured aggregates
 without source, reference, translated text, paths, usernames, or free-form
 notes.
 
@@ -864,11 +874,10 @@ Candidate-generation cross-binding static verification:
 node tooling/phase7-offline-poc/gate-a-candidate-bindings-selftest.mjs
 ```
 
-The self-tests do not run a model or a human review. A real v2
-blind-evaluation report remains unavailable until an eligible
-200-item-per-direction dataset, two matching
-`phase7-gate-a-candidate-generation-v1` artifacts, candidate outputs, and
-independent bilingual reviewers exist. Even a complete quality component
+The self-tests do not run a model or a human review. The current real
+`phase7-ai-blind-eval-report-v1` contains 400 explicit AI item scores bound
+to the two matching `phase7-gate-a-candidate-generation-v1` artifacts. Even
+this complete quality component
 deliberately leaves the overall Gate A input incomplete until the other M4
 evidence and the user's decision are present.
 

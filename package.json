@@ -60,6 +60,7 @@
     "phase7:offline-poc:selftest": "node ./tooling/phase7-offline-poc/selftest.mjs",
     "phase7:offline-poc:candidate-bindings:selftest": "node ./tooling/phase7-offline-poc/gate-a-candidate-bindings-selftest.mjs",
     "phase7:offline-poc:blind-eval:selftest": "node ./tooling/phase7-offline-poc/blind-eval-selftest.mjs",
+    "phase7:offline-poc:ai-blind-eval": "node ./tooling/phase7-offline-poc/ai-blind-eval.mjs",
     "phase7:offline-poc:bergamot-generation:selftest": "node ./tooling/phase7-offline-poc/bergamot-generation-selftest.mjs",
     "phase7:offline-poc:create-dataset": "node ./tooling/phase7-offline-poc/create-gate-a-dataset.mjs",
     "phase7:offline-poc:assemble-blind-input": "node ./tooling/phase7-offline-poc/assemble-blind-eval-input.mjs",

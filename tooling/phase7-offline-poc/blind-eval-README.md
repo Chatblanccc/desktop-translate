@@ -1,8 +1,30 @@
-# Phase 7 human blind evaluation harness
+# Phase 7 blind quality evaluation harness
+
+Current frozen Gate A quality path (user-approved 2026-07-26): AI scoring
+formally replaces the 400 human reviews. The AI path is explicitly labelled
+`AI_REVIEW`; it does not claim human evidence. The human workflow below is
+retained only for historical compatibility.
+
+For the current 200×2 AI workflow:
+
+```powershell
+node tooling/phase7-offline-poc/ai-blind-eval.mjs `
+  --run-id <run-id> `
+  --decisions <ignored-ai-decisions.json> `
+  --authorization <poc-authorization.json> `
+  --generation-en-zh <generation-en-zh.json> `
+  --generation-zh-en <generation-zh-en.json>
+```
+
+The decision document must attest that all items were individually assessed,
+bind the review-batch SHA-256, name the AI assessor/model, and state that
+candidate identity was not viewed. The report expands the decisions to 400
+item scores, binds them to the private answer key and exact generation
+artifacts, and emits `phase7-ai-blind-eval-report-v1`. Neither decisions nor
+reports may contain a human-review attestation.
 
 This harness prepares and audits the human-only quality evidence required by
-M4. It does not run a translation model, download data, score automatically,
-or make the Gate A decision.
+the historical M4 contract. It does not make the Gate A decision.
 
 ## Non-negotiable data boundary
 
@@ -178,8 +200,8 @@ direction:
 - the exact hashes needed to audit the raw inputs.
 
 The report never contains source, reference, translated text, filesystem
-paths, usernames, or free-form reviewer notes. The human-blind component is
-complete only when every candidate has at least 200 unique, valid human
+paths, usernames, or free-form reviewer notes. In the historical compatibility
+path, the human-blind component is complete only when every candidate has at least 200 unique, valid human
 reviews in both directions. Even then the report deliberately keeps
 `gateA.inputStatus` at `GATE_A_INPUT_INCOMPLETE`: performance, Windows Private
 Working Set, artifact sizing, license/redistribution review, the rest of M4,

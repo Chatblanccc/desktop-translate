@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://desktop-translate.invalid/schemas/phase7-ai-blind-eval-score-v1.json",
+  "title": "Phase 7 AI blind translation quality score",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "evaluationId",
+    "itemToken",
+    "direction",
+    "candidateId",
+    "generationRunId",
+    "generationIdentitySha256",
+    "assessorToken",
+    "reviewMode",
+    "blindnessAttestation",
+    "aiReviewAttestation",
+    "reviewedAt",
+    "acceptability",
+    "adequacyScore",
+    "fluencyScore",
+    "errors"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "phase7-ai-blind-eval-score-v1" },
+    "status": { "const": "AI_REVIEWED" },
+    "evaluationId": { "type": "string", "pattern": "^[a-f0-9]{32}$" },
+    "itemToken": { "type": "string", "minLength": 1 },
+    "direction": { "enum": ["en-zh", "zh-en"] },
+    "candidateId": { "type": "string", "minLength": 1 },
+    "generationRunId": { "type": "string", "minLength": 1 },
+    "generationIdentitySha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "assessorToken": {
+      "type": "string",
+      "pattern": "^ai-assessor-[a-z0-9-]{8,80}$"
+    },
+    "reviewMode": { "const": "AI_MODEL_BLIND_REVIEW" },
+    "blindnessAttestation": {
+      "const": "CANDIDATE_IDENTITY_NOT_VIEWED"
+    },
+    "aiReviewAttestation": {
+      "const": "AI_MODEL_ASSESSED_SOURCE_REFERENCE_AND_CANDIDATE_OUTPUT"
+    },
+    "reviewedAt": { "type": "string", "format": "date-time" },
+    "acceptability": { "enum": ["ACCEPTABLE", "UNACCEPTABLE"] },
+    "adequacyScore": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "fluencyScore": { "type": "integer", "minimum": 1, "maximum": 5 },
+    "errors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "severeMistranslation",
+        "untranslated",
+        "garbled",
+        "properNounError",
+        "longSentenceError"
+      ],
+      "properties": {
+        "severeMistranslation": { "type": "boolean" },
+        "untranslated": { "type": "boolean" },
+        "garbled": { "type": "boolean" },
+        "properNounError": { "type": "boolean" },
+        "longSentenceError": { "type": "boolean" }
+      }
+    }
+  }
+}

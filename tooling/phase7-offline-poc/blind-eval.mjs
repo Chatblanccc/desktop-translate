@@ -744,11 +744,21 @@ export async function summarizeHumanScoresV2({
       const binding = bindingByDirection.get(direction);
       const itemIdentities = answerKey.records
         .filter((record) => record.direction === direction)
-        .map((record) => ({
-          direction: record.direction,
-          itemId: record.itemId,
-          sourceSha256: record.sourceSha256
-        }))
+        .map((record) => {
+          if (record.candidates.length !== 1) {
+            throw new BlindEvalError(
+              'V2_REQUIRES_ONE_CANDIDATE_PER_DIRECTION',
+              { direction }
+            );
+          }
+          return {
+            itemId: record.itemId,
+            direction: record.direction,
+            candidateId: record.candidates[0].candidateId,
+            generationRunId: record.candidates[0].generationRunId,
+            sourceSha256: record.sourceSha256
+          };
+        })
         .sort((left, right) => left.itemId.localeCompare(right.itemId));
       const itemIdentitySetSha256 = sha256(canonicalJson(itemIdentities));
       if (

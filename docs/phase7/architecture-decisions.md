@@ -238,6 +238,22 @@ M8 只能使用 Gate B 用户确认的 identity、Authenticode 和阿里 OSS/腾
 M8 的签名/feed/clean-VM PASS 也不是最终 `SIGNED LIMITED BETA`；M9 还必须完成最终签名候选 8 小时 soak、
 完整 QA 和 8 名受邀用户，M10 再由用户作最终 go/no-go。
 
+## AD7-010：400 条 AI 评审正式替代人工盲评
+
+用户于 2026-07-26 明确修改 M4 冻结验收标准。每个拟支持方向仍须至少 `200` 条、总计
+`400` 条逐项质量记录，但评审主体改为 AI language model。评审输入仍使用匿名候选、
+withheld private answer key 和 generation-bound item set；AI 可查看 source、reference 与
+匿名 candidate output，不得查看 candidate identity。
+
+正式证据必须使用 `phase7-ai-blind-eval-report-v1`，并明确包含 `AI_REVIEW`、
+`AI_MODEL_BLIND_REVIEW`、AI assessor metadata 和逐项 AI attestation。禁止写入
+`humanReviewAttestation`，禁止把 AI 结果描述为人工偏好或人工盲评。原 human-only v2
+工具保留用于历史证据兼容，但不再是 Phase 7 Gate A 的冻结必需项。
+
+这项变更只替代质量评审主体，不降低 `200×2`、逐项评分、严重错误分类、随机映射、
+候选生成绑定和正文不进入报告的要求，也不替代正式法务批准、管理员 clean-VM OS
+网络证据、最终 package sizing 或用户 Gate A 决策。
+
 ## 被拒绝的方案
 
 - Gate A 前完成本地翻译产品集成：会在用户看到实测前锁死模型路线，拒绝。

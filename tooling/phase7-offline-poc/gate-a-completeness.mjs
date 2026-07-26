@@ -2075,14 +2075,22 @@ function workloadIdentityEqual(left, right) {
 }
 
 function deriveBlindEvidence(report, candidateGenerations, unmet) {
-  const prefix = 'HUMAN_BLIND';
+  const aiReview =
+    report?.schemaVersion === 'phase7-ai-blind-eval-report-v1';
+  const prefix = aiReview ? 'AI_BLIND' : 'HUMAN_BLIND';
+  const validReviewScore = aiReview ? validAiScore : validHumanScore;
   requireCondition(
-    report?.schemaVersion === 'phase7-blind-eval-report-v2',
+    aiReview
+      || report?.schemaVersion === 'phase7-blind-eval-report-v2',
     `${prefix}_SCHEMA_UNSUPPORTED`,
     unmet
   );
   requireCondition(
-    report?.status === 'HUMAN_BLIND_EVALUATION_COMPONENT_COMPLETE',
+    report?.status === (
+      aiReview
+        ? 'AI_BLIND_QUALITY_EVALUATION_COMPONENT_COMPLETE'
+        : 'HUMAN_BLIND_EVALUATION_COMPONENT_COMPLETE'
+    ),
     `${prefix}_STATUS_NOT_COMPLETE`,
     unmet
   );
@@ -2092,8 +2100,19 @@ function deriveBlindEvidence(report, candidateGenerations, unmet) {
     unmet
   );
   requireCondition(
-    report?.humanOnly === true && report?.blindCandidateIdentity === true,
-    `${prefix}_HUMAN_OR_BLIND_ATTESTATION_MISSING`,
+    (
+      aiReview
+        ? (
+          report?.aiOnly === true
+          && report?.assessmentMode === 'AI_MODEL_BLIND_REVIEW'
+          && report?.method?.humanReviewClaimed === false
+          && report?.assessor?.assessorType === 'AI_LANGUAGE_MODEL'
+          && report?.assessor?.candidateIdentityViewed === false
+        )
+        : report?.humanOnly === true
+    )
+      && report?.blindCandidateIdentity === true,
+    `${prefix}_ASSESSOR_OR_BLIND_ATTESTATION_MISSING`,
     unmet
   );
   requireCondition(
@@ -2117,13 +2136,20 @@ function deriveBlindEvidence(report, candidateGenerations, unmet) {
       unmet
     );
   }
+  if (aiReview) {
+    requireCondition(
+      validSha(report?.audit?.aiDecisionsSha256),
+      `${prefix}_AUDIT_HASH_MISSING:aiDecisionsSha256`,
+      unmet
+    );
+  }
   requireCondition(
     exactKeys(
       report?.audit?.candidateOutputItemIdentitySetSha256ByDirection,
       DIRECTIONS
     )
       && DIRECTIONS.every((direction) => validSha(
-        report.audit.candidateOutputItemIdentitySetSha256ByDirection[
+      report.audit.candidateOutputItemIdentitySetSha256ByDirection[
           direction
         ]
       )),
@@ -2171,7 +2197,7 @@ function deriveBlindEvidence(report, candidateGenerations, unmet) {
       unmet
     );
     requireCondition(
-      directionScores.every(validHumanScore),
+      directionScores.every(validReviewScore),
       `${prefix}_RAW_SCORE_ATTESTATION_INVALID:${direction}`,
       unmet
     );
@@ -2219,20 +2245,34 @@ function deriveBlindEvidence(report, candidateGenerations, unmet) {
         `${prefix}_CANDIDATE_COUNTS_NOT_DERIVED:${direction}`,
         unmet
       );
+      if (aiReview) {
+        requireCondition(
+          candidate?.blindEvaluationEvidence?.aiReviewed === true
+            && candidate?.blindEvaluationEvidence?.humanReviewed === false
+            && candidate?.blindEvaluationEvidence?.componentStatus
+              === 'AI_BLIND_QUALITY_EVALUATION_COMPONENT_COMPLETE',
+          `${prefix}_CANDIDATE_AI_ATTESTATION_INVALID:${direction}`,
+          unmet
+        );
+      }
     }
   }
   requireCondition(
-    report?.counts?.validHumanReviewCount === rawScores.length,
+    report?.counts?.[
+      aiReview ? 'validAiReviewCount' : 'validHumanReviewCount'
+    ] === rawScores.length,
     `${prefix}_TOTAL_VALID_REVIEW_COUNT_MISMATCH`,
     unmet
   );
   requireCondition(
-    report?.counts?.pendingHumanReviewCount === 0,
+    report?.counts?.[
+      aiReview ? 'pendingAiReviewCount' : 'pendingHumanReviewCount'
+    ] === 0,
     `${prefix}_PENDING_REVIEWS_PRESENT`,
     unmet
   );
   requireCondition(
-    rawScores.every(validHumanScore),
+    rawScores.every(validReviewScore),
     `${prefix}_RAW_SCORE_ATTESTATION_INVALID`,
     unmet
   );
@@ -2251,9 +2291,53 @@ function deriveBlindEvidence(report, candidateGenerations, unmet) {
     candidateGenerationBindingSetSha256:
       report?.audit?.candidateGenerationBindingSetSha256 ?? null,
     rawScoreCount: rawScores.length,
+    assessmentType: aiReview ? 'AI_REVIEW' : 'HUMAN_REVIEW',
+    validAiReviewCount:
+      report?.counts?.validAiReviewCount ?? null,
     validHumanReviewCount:
       report?.counts?.validHumanReviewCount ?? null
   };
+}
+
+function validAiScore(score) {
+  return score?.schemaVersion === 'phase7-ai-blind-eval-score-v1'
+    && score?.status === 'AI_REVIEWED'
+    && typeof score?.evaluationId === 'string'
+    && score.evaluationId.length > 0
+    && typeof score?.candidateId === 'string'
+    && score.candidateId.length > 0
+    && typeof score?.generationRunId === 'string'
+    && score.generationRunId.length > 0
+    && validSha(score?.generationIdentitySha256)
+    && typeof score?.itemToken === 'string'
+    && score.itemToken.length > 0
+    && typeof score?.assessorToken === 'string'
+    && score.assessorToken.startsWith('ai-assessor-')
+    && score?.reviewMode === 'AI_MODEL_BLIND_REVIEW'
+    && score?.blindnessAttestation === 'CANDIDATE_IDENTITY_NOT_VIEWED'
+    && score?.aiReviewAttestation
+      === 'AI_MODEL_ASSESSED_SOURCE_REFERENCE_AND_CANDIDATE_OUTPUT'
+    && !Object.hasOwn(score, 'humanReviewAttestation')
+    && Number.isInteger(score?.adequacyScore)
+    && score.adequacyScore >= 1
+    && score.adequacyScore <= 5
+    && Number.isInteger(score?.fluencyScore)
+    && score.fluencyScore >= 1
+    && score.fluencyScore <= 5
+    && ['ACCEPTABLE', 'UNACCEPTABLE'].includes(score?.acceptability)
+    && isRecord(score?.errors)
+    && [
+      'severeMistranslation',
+      'untranslated',
+      'garbled',
+      'properNounError',
+      'longSentenceError'
+    ].every((key) => typeof score.errors[key] === 'boolean')
+    && (
+      score.acceptability === 'ACCEPTABLE'
+        ? Object.values(score.errors).every((value) => value === false)
+        : Object.values(score.errors).some((value) => value === true)
+    );
 }
 
 function validHumanScore(score) {
