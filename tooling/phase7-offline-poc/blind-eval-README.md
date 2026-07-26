@@ -92,6 +92,22 @@ node tooling/phase7-offline-poc/blind-eval.mjs review `
   --run-id run-0123456789abcdef
 ```
 
+Before starting or after stopping, inspect the resumable score state without
+opening the private answer key or printing source, reference, or translation
+text:
+
+```powershell
+node tooling/phase7-offline-poc/blind-eval.mjs status `
+  --run-id run-0123456789abcdef
+```
+
+`status` is read-only. It revalidates the manifest, batch, score template and
+optional score snapshot, reports only aggregate reviewed/pending counts and
+lock presence, and fails closed on stale hashes, unsafe files, duplicated or
+remapped evaluation IDs, malformed human attestations, or an incomplete score
+record set. A present lock is reported as evidence of a lock file only; it is
+not treated as proof that a reviewer is currently active.
+
 It requires an interactive terminal and an explicit `HUMAN-BLIND`
 attestation. It never reads the private answer key. It displays the source,
 reference, random candidate alias, and output, then records:

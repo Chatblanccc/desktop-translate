@@ -121,12 +121,19 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
   authorization、manifest、model/runtime、workload 和 candidate/run identity 交叉绑定；真实生成 artifact
   与 formal cold/PWS `40/40` 已完成，人工评审仍为 `NOT_STARTED`。
 - [x] Bergamot 候选已记录 model/runtime ID、上游 revision、许可证和再分发条件；最终法律审批仍未完成。
+- [x] 候选绑定的法务准备包已核验 12 个供应文件、两份 MPL-2.0 证据、npm tarball
+  实际内容和 core-pack receipt；固定为 `NOT_APPROVED`，不得代替法务结论。
 - [x] base installer 不含模型且 `≤150 MiB`。
 - [x] core pack 目标 `≤300 MiB`，硬上限 `≤400 MiB`，同时记录 archive/解包体积。
 - [x] cold translation p95 `≤3.0 s`，报告 N/p50/p95/max/failure。
 - [x] warm translation p95 `≤1.5 s`，报告 N/p50/p95/max/failure。
 - [x] POC runtime process PWS `≤1.1 GiB`，记录测量工具、采样与设备。
 - [ ] 每个拟支持方向完成至少 200 条 blind evaluation。
+- [x] 只读 blind `status` 已对真实 run 验证 `0 reviewed / 400 pending`，不读取私有答案键、
+  不输出正文且支持安全断点续跑。
+- [x] OS 网络取证 preflight/collector 已实现失败关闭、管理员与 clean-VM 强制门槛、`finally`
+  停止采集和私有 PCAP 约束；当前非管理员会话未采集、未声称零外联。
+- [ ] 在管理员隔离 clean VM 完成 OS 级采集、人工分析并绑定最终 primary evidence set。
 - [ ] 报告实际质量、严重错译、未译、乱码、专名/长句问题，不预填虚假 PASS。
 - [ ] benchmark 只使用公开/合成语料，artifact privacy scan 零正文泄露。
 - [ ] Gate A 决策包包含原始结果、摘要、推荐路线和已知限制。

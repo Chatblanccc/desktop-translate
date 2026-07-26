@@ -8,12 +8,14 @@
   跨版本升级、正常 installed-app 退出、物理输入与 clean VM 待补 /
   M4 双向 200 条 `r3` candidate generation 已绑定，PWS v3 正式 20×2 已 40/40
   通过，400 条匿名盲评批次已准备，双向 data-only core pack 已实测
-  `72.450 MiB archive / 72.536 MiB installed`；人工盲评、法务、OS 级网络观察和
+  `72.450 MiB archive / 72.536 MiB installed`；盲评只读状态核验为
+  `0 reviewed / 400 pending`，候选绑定法务准备包和失败关闭网络采集器已完成；人工盲评、
+  正式法务批准、管理员 clean-VM OS 级网络观察和
   primary-evidence-set 绑定后的最终 package-sizing 仍待补，Gate A 尚未提交用户确认
 - 当前验收状态：`NOT YET ACCEPTED`
 - 最终交付上限：Windows x64 signed limited beta
 - 明确禁止的口径：public V1、GA、production-ready
-- 更新日期：2026-07-25
+- 更新日期：2026-07-26
 
 Phase 7 在现有划词、UIA/OCR、source-only 卡片、BYOK 在线翻译和 Phase 6 UI 基线上，
 完成发布前的首轮产品迭代：可选安装目录、悬浮球自由拖动、离线模型、本地教程和首版手动更新。

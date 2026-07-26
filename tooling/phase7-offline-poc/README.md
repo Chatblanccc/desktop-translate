@@ -231,12 +231,48 @@ Gate A choice and never authorizes M5, packaging or redistribution.
 
 The current candidate-bound v3 cold/PWS report and both 200-item candidate
 generations exist, and a deterministic data-only core pack has real sizing
-preparation. No 200-by-2 human report, legal approval or OS-level network
-capture exists. `summarize-v2` binds a future human score report to the same
-generation artifacts. The sizing preparation cannot become
+preparation. The real blind run validates as `0 reviewed / 400 pending`.
+A candidate-bound legal-review preparation exists but is explicitly not an
+approval. An administrator-only clean-VM capture collector exists, but the
+current non-elevated session has not produced or analyzed an OS-level capture.
+`summarize-v2` binds a future human score report to the same generation
+artifacts. The sizing preparation cannot become
 `phase7-gate-a-package-sizing-v1` until that report supplies the primary
 evidence-set identity. The positive completeness self-test remains entirely
 synthetic and never creates authorization, human, legal or network evidence.
+
+Read-only human-review status:
+
+```powershell
+node tooling/phase7-offline-poc/blind-eval.mjs status `
+  --run-id run-8bb927b09228c5bd
+```
+
+Prepare the exact, non-authorizing legal-review packet:
+
+```powershell
+node tooling/phase7-offline-poc/bergamot-legal-review-preparation.mjs `
+  --authorization artifacts/phase7/offline-poc/authorizations/bergamot-runtime-spike.json `
+  --generation-en-zh artifacts/phase7/offline-poc/gate-a/generation-en-zh-20260725-r3.json `
+  --generation-zh-en artifacts/phase7/offline-poc/gate-a/generation-zh-en-20260725-r3.json `
+  --package-sizing-preparation artifacts/phase7/offline-poc/gate-a/package-sizing-preparation-20260725-r3-postverify.json `
+  --output artifacts/phase7/offline-poc/gate-a/bergamot-legal-review-preparation-20260726-r1.json
+```
+
+Check OS-capture readiness without changing system state:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass `
+  -File tooling/phase7-offline-poc/phase7-os-network-capture.ps1 `
+  -Mode Preflight
+```
+
+Capture mode is restricted to an elevated isolated clean VM. It accepts only a
+repository-controlled Node/Electron workload and requires the literal
+`I-CONFIRM-ISOLATED-CLEAN-VM-NO-UNRELATED-TRAFFIC` attestation. The resulting
+ETL/PCAPNG may contain network metadata and must stay private under ignored
+artifacts. Collection alone never claims zero external traffic: independent
+manual analysis and final primary-evidence binding are still mandatory.
 
 Do not add downloaded wheels, weights, converted models, authorization records,
 or measurements to Git. Their default locations are already ignored under

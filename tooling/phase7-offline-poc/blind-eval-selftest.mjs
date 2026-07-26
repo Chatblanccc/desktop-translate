@@ -11,6 +11,7 @@ import {
   REPORT_V2_SCHEMA_VERSION,
   SCORE_SCHEMA_VERSION,
   buildEvaluationArtifacts,
+  inspectHumanReviewStatus,
   sha256,
   summarizeHumanScores,
   summarizeHumanScoresV2,
@@ -71,6 +72,37 @@ assert.equal(
 assert.equal(artifacts.manifest.input.userHistoryAccepted, false);
 assert.equal(artifacts.manifest.input.freeFormSourceAccepted, false);
 
+const notStartedStatus = await inspectHumanReviewStatus({
+  manifest: artifacts.manifest,
+  batchContent: artifacts.batchContent,
+  scoreTemplateContent: artifacts.scoreTemplateContent
+});
+assert.deepEqual(
+  {
+    status: notStartedStatus.status,
+    evaluationCount: notStartedStatus.evaluationCount,
+    validHumanReviewCount: notStartedStatus.validHumanReviewCount,
+    pendingHumanReviewCount: notStartedStatus.pendingHumanReviewCount,
+    scoreSnapshotPresent: notStartedStatus.scoreSnapshotPresent,
+    humanReviewLockPresent: notStartedStatus.humanReviewLockPresent,
+    privateAnswerKeyRead: notStartedStatus.privateAnswerKeyRead,
+    sourceTextEmitted: notStartedStatus.sourceTextEmitted,
+    integrationOrDistributionAuthorized:
+      notStartedStatus.integrationOrDistributionAuthorized
+  },
+  {
+    status: 'HUMAN_REVIEW_NOT_STARTED',
+    evaluationCount: 800,
+    validHumanReviewCount: 0,
+    pendingHumanReviewCount: 800,
+    scoreSnapshotPresent: false,
+    humanReviewLockPresent: false,
+    privateAnswerKeyRead: false,
+    sourceTextEmitted: false,
+    integrationOrDistributionAuthorized: false
+  }
+);
+
 const alphaAliases = new Set();
 const itemIdByEvaluationId = new Map();
 for (const item of artifacts.answerKey.records) {
@@ -112,6 +144,19 @@ const reviewedScores = artifacts.scoreTemplateRecords.map((record) => {
   };
 });
 const reviewedScoresContent = toJsonLines(reviewedScores);
+const completeReviewStatus = await inspectHumanReviewStatus({
+  manifest: artifacts.manifest,
+  batchContent: artifacts.batchContent,
+  scoreTemplateContent: artifacts.scoreTemplateContent,
+  scoresContent: reviewedScoresContent,
+  lockPresent: true
+});
+assert.equal(completeReviewStatus.status, 'HUMAN_REVIEW_COMPLETE');
+assert.equal(completeReviewStatus.validHumanReviewCount, 800);
+assert.equal(completeReviewStatus.pendingHumanReviewCount, 0);
+assert.equal(completeReviewStatus.scoreSnapshotPresent, true);
+assert.equal(completeReviewStatus.humanReviewLockPresent, true);
+assert.equal(completeReviewStatus.privateAnswerKeyRead, false);
 const complete = await summarizeHumanScores({
   manifest: artifacts.manifest,
   batchContent: artifacts.batchContent,

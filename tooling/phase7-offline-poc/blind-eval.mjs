@@ -1634,6 +1634,161 @@ async function summarizeV2Command(options) {
   };
 }
 
+export async function inspectHumanReviewStatus({
+  manifest,
+  batchContent,
+  scoreTemplateContent,
+  scoresContent = null,
+  lockPresent = false
+}) {
+  assertManifestShape(manifest);
+  assertContentHash(
+    batchContent,
+    manifest.files.reviewBatch.sha256,
+    'REVIEW_BATCH_HASH_MISMATCH'
+  );
+  assertContentHash(
+    scoreTemplateContent,
+    manifest.files.scoreTemplate.sha256,
+    'SCORE_TEMPLATE_HASH_MISMATCH'
+  );
+  const batchRecords = parseJsonLines(batchContent, 'review-batch');
+  const templateRecords = parseJsonLines(
+    scoreTemplateContent,
+    'score-template'
+  );
+  const { validateBatch, validateScore, validateManifest } =
+    await loadValidators();
+  if (!validateManifest(manifest)) {
+    throw new BlindEvalError('MANIFEST_SCHEMA_VALIDATION_FAILED', {
+      schemaKeyword: validateManifest.errors?.[0]?.keyword ?? 'unknown'
+    });
+  }
+  for (let index = 0; index < batchRecords.length; index += 1) {
+    if (!validateBatch(batchRecords[index])) {
+      throw new BlindEvalError('REVIEW_BATCH_SCHEMA_VALIDATION_FAILED', {
+        lineNumber: index + 1,
+        schemaKeyword: validateBatch.errors?.[0]?.keyword ?? 'unknown'
+      });
+    }
+  }
+  for (let index = 0; index < templateRecords.length; index += 1) {
+    const record = templateRecords[index];
+    if (
+      !validateScore(record)
+      || record.status !== 'PENDING_HUMAN_REVIEW'
+      || record.reviewerToken !== manifest.reviewerToken
+    ) {
+      throw new BlindEvalError('SCORE_TEMPLATE_CONTRACT_INVALID', {
+        lineNumber: index + 1
+      });
+    }
+  }
+  if (
+    manifest.files.reviewBatch.recordCount !== batchRecords.length
+    || manifest.files.scoreTemplate.recordCount !== templateRecords.length
+  ) {
+    throw new BlindEvalError('MANIFEST_RECORD_COUNT_MISMATCH');
+  }
+  const evaluationIds = [];
+  for (const item of batchRecords) {
+    for (const candidate of item.candidates) {
+      evaluationIds.push(candidate.evaluationId);
+    }
+  }
+  if (
+    new Set(evaluationIds).size !== evaluationIds.length
+    || evaluationIds.length !== templateRecords.length
+    || templateRecords.some(
+      (record, index) => record.evaluationId !== evaluationIds[index]
+    )
+  ) {
+    throw new BlindEvalError('REVIEW_MATERIAL_TEMPLATE_MISMATCH');
+  }
+  const scoreRecords = scoresContent === null
+    ? structuredClone(templateRecords)
+    : parseJsonLines(scoresContent, 'scores');
+  await validateScores({
+    scoreRecords,
+    expectedEvaluationIds: new Set(evaluationIds),
+    reviewerToken: manifest.reviewerToken
+  });
+  const validHumanReviewCount = scoreRecords.filter(
+    (score) => score.status === 'HUMAN_REVIEWED'
+  ).length;
+  const pendingHumanReviewCount =
+    scoreRecords.length - validHumanReviewCount;
+  return {
+    schemaVersion: 'phase7-blind-eval-review-status-v1',
+    status: validHumanReviewCount === 0
+      ? 'HUMAN_REVIEW_NOT_STARTED'
+      : pendingHumanReviewCount === 0
+        ? 'HUMAN_REVIEW_COMPLETE'
+        : 'HUMAN_REVIEW_IN_PROGRESS',
+    runId: manifest.runId,
+    evaluationCount: scoreRecords.length,
+    validHumanReviewCount,
+    pendingHumanReviewCount,
+    scoreSnapshotPresent: scoresContent !== null,
+    humanReviewLockPresent: lockPresent,
+    humanOnly: true,
+    privateAnswerKeyRead: false,
+    candidateIdentityViewedByHarness: false,
+    sourceTextEmitted: false,
+    referenceTextEmitted: false,
+    translationTextEmitted: false,
+    integrationOrDistributionAuthorized: false,
+    gateAInputStatus: 'GATE_A_INPUT_INCOMPLETE'
+  };
+}
+
+async function statusCommand(options) {
+  const runId = requiredOption(options, 'run-id');
+  assertRunId(runId);
+  const runDirectory = await resolveSafeRunDirectory(runId);
+  const [manifestContent, batchContent, scoreTemplateContent] =
+    await Promise.all([
+      readRunFile(runDirectory, 'manifest.json'),
+      readRunFile(runDirectory, 'review-batch.jsonl'),
+      readRunFile(runDirectory, 'score-template.jsonl')
+    ]);
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestContent);
+  } catch {
+    throw new BlindEvalError('MANIFEST_PARSE_FAILED');
+  }
+  if (manifest.runId !== runId) {
+    throw new BlindEvalError('RUN_ID_MISMATCH');
+  }
+  const scoresPath = resolve(runDirectory, 'scores.jsonl');
+  const lockPath = resolve(runDirectory, '.human-review.lock');
+  await assertDirectChildPath(runDirectory, scoresPath);
+  await assertDirectChildPath(runDirectory, lockPath);
+  const [scoresStat, lockStat] = await Promise.all([
+    lstat(scoresPath).catch(() => null),
+    lstat(lockPath).catch(() => null)
+  ]);
+  if (scoresStat && (!scoresStat.isFile() || scoresStat.isSymbolicLink())) {
+    throw new BlindEvalError('SCORES_FILE_UNSAFE');
+  }
+  if (lockStat && (!lockStat.isFile() || lockStat.isSymbolicLink())) {
+    throw new BlindEvalError('HUMAN_REVIEW_LOCK_UNSAFE');
+  }
+  const scoresContent = scoresStat
+    ? await readFile(scoresPath, 'utf8').catch(() => {
+      throw new BlindEvalError('SCORES_FILE_READ_FAILED');
+    })
+    : null;
+  return inspectHumanReviewStatus({
+    manifest,
+    batchContent,
+    scoreTemplateContent,
+    scoresContent,
+    lockPresent: Boolean(lockStat)
+  });
+}
+
 async function resolveSafeEvidencePath(inputOption) {
   if (extname(inputOption).toLowerCase() !== '.json') {
     throw new BlindEvalError('EVIDENCE_EXTENSION_INVALID');
@@ -2118,7 +2273,10 @@ function requiredOption(options, name) {
 
 function parseCliArguments(args) {
   const [command, ...rest] = args;
-  if (!['prepare', 'review', 'summarize', 'summarize-v2'].includes(command)) {
+  if (
+    !['prepare', 'review', 'status', 'summarize', 'summarize-v2']
+      .includes(command)
+  ) {
     throw new BlindEvalError('COMMAND_INVALID');
   }
   const options = new Map();
@@ -2136,7 +2294,7 @@ function parseCliArguments(args) {
   }
   const allowed = command === 'prepare'
     ? new Set(['input'])
-    : command === 'review'
+    : command === 'review' || command === 'status'
       ? new Set(['run-id'])
       : command === 'summarize'
         ? new Set(['run-id'])
@@ -2161,6 +2319,8 @@ async function main() {
     result = await prepareCommand(options);
   } else if (command === 'review') {
     result = await reviewCommand(options);
+  } else if (command === 'status') {
+    result = await statusCommand(options);
   } else if (command === 'summarize-v2') {
     result = await summarizeV2Command(options);
   } else {

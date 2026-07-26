@@ -1,14 +1,18 @@
 # Phase 7 M4 development evidence
 
-- Evidence date: 2026-07-25
+- Evidence date: 2026-07-26
 - Status: `DEVELOPMENT PARTIAL / COLD-PWS INPUT COMPLETE / GATE A INPUT INCOMPLETE`
 - Product integration: `NOT AUTHORIZED / NOT IMPLEMENTED`
 - Formal 20-by-2 cold run:
   `R8 COMPLETE / 40 OF 40 SUCCESSFUL / CANDIDATE-BOUND V3`
-- Human blind evaluation: `400-EVALUATION BATCH PREPARED / HUMAN REVIEW NOT STARTED`
+- Human blind evaluation:
+  `400-EVALUATION BATCH VALIDATED / 0 REVIEWED / 400 PENDING`
 - Core pack sizing:
   `PREPARED / 72.450 MiB ARCHIVE / 72.536 MiB INSTALLED / PRIMARY BINDING PENDING`
-- OS-level external-network observation: `NOT RUN`
+- Legal review:
+  `CANDIDATE-BOUND PREPARATION COMPLETE / QUALIFIED APPROVAL NOT RECORDED`
+- OS-level external-network observation:
+  `FAIL-CLOSED COLLECTOR READY / CURRENT SESSION NOT ADMINISTRATOR / NOT RUN`
 
 This note records reproducible development observations only. It cannot select
 a model, authorize redistribution, satisfy Gate A, or start M5.
@@ -357,6 +361,64 @@ and manifest SHA-256
 The private answer key remains withheld. Human review is `NOT_STARTED`; no v2
 report or quality conclusion exists.
 
+The read-only `status` command revalidated the real run on 2026-07-26 without
+opening `private-answer-key.json` or emitting source, reference or candidate
+text. It reported exactly `0` valid human reviews and `400` pending records,
+with no score snapshot and no active lock. The static test also covers complete
+snapshots and preserves the rule that a status inspection cannot authorize
+integration, distribution or Gate A.
+
+## Legal-review preparation
+
+The non-authorizing legal preparation command now binds:
+
+- the exact candidate binding set
+  `c349854382823f1782d3b455af62b515cda86d493bb189efbd38071c9a4741f6`;
+- both candidate repositories/revisions and generation identities;
+- all `12` verified supply files and supply tree
+  `09f82c55a118449862441af825f21966ccb4cdfe22ffb1f941a5d6a7a28d1626`;
+- both pinned MPL-2.0 repository license files;
+- the actual seven-entry npm tarball, whose `package.json` declares MPL-2.0
+  but whose tarball contains no license-like file; and
+- the generation-bound core-pack sizing preparation receipt.
+
+The ignored preparation artifact has SHA-256
+`efc594385f657346a6e7ff064e930d8dd9c38afa9ea734098220e91a7a724cd1`.
+Its status is fixed to `LEGAL_REVIEW_PREPARED_NOT_APPROVED`; commercial use,
+model-weight scope, redistribution and release compliance remain
+`NOT_ESTABLISHED`. It keeps these issues open:
+
+- `MODEL_WEIGHT_LICENSE_SCOPE_REVIEW_REQUIRED`;
+- `MPL_DISTRIBUTION_OBLIGATIONS_REVIEW_REQUIRED`;
+- `NPM_TARBALL_LICENSE_FILE_MISSING`; and
+- `ARCHIVED_MODEL_REPOSITORY_MAINTENANCE_RISK`.
+
+The self-test verifies candidate/supply/tarball drift rejection and rejects a
+premature approval claim. This packet reduces reviewer preparation work; it is
+not legal advice or legal approval.
+
+## OS-level network-capture readiness
+
+`phase7-os-network-capture.ps1` now provides a read-only preflight and an
+administrator-only collector. Capture mode requires an exact candidate binding
+SHA-256, a repository-controlled Node/Electron workload, a new ignored output
+directory, and the explicit isolated-clean-VM attestation. It snapshots all
+Windows Firewall profiles, captures packet prefixes with `pktmon`, stops the
+capture in `finally`, converts the ETL to private PCAPNG, verifies firewall
+state did not change, and writes only a collection receipt.
+
+Collection deliberately stops at
+`OS_NETWORK_CAPTURE_COLLECTED_PENDING_MANUAL_ANALYSIS`: external-connection
+count remains `null`, `osLevelVerified` remains false, and no
+`phase7-gate-a-os-network-verification-v1` is created until the private capture
+is independently analyzed and bound to the final primary evidence set.
+
+The current desktop session is not elevated. The 2026-07-26 preflight found
+`pktmon` installed and all Domain/Private/Public firewall profiles enabled, but
+returned `ADMINISTRATOR_SESSION_REQUIRED`; it changed no system state and
+performed no capture. The static test proves that the collector contains no
+premature zero-external-traffic or Gate A PASS path.
+
 ## Gate A cross-evidence binding
 
 A strict cross-binding completeness contract and schema now exist in the
@@ -383,7 +445,9 @@ Current evidence is deliberately rejected by that contract:
   summarizer can emit v2 but no real v2 report exists;
 - matching `phase7-gate-a-candidate-generation-v1` artifacts and a prepared
   200×2 review batch exist, but zero human scores have been recorded;
-- legal approval and OS-level external-network observation remain absent;
+- candidate-bound legal preparation exists but qualified approval remains
+  absent; the fail-closed OS collector exists but the administrator clean-VM
+  observation and manual capture analysis remain absent;
 - exact base/core sizes and a generation-bound preparation receipt now exist,
   but the final package-sizing document still awaits the human-report-derived
   primary evidence-set SHA-256.
@@ -393,7 +457,8 @@ been crossed, and M5+ product integration remains unauthorized.
 
 ## Open blockers
 
-1. Resolve model-weight and complete runtime license scope, attribution and
+1. Have a qualified legal/compliance owner review the prepared candidate-bound
+   packet and resolve model-weight scope, attribution, NOTICE/SBOM and
    redistribution obligations; repository/package metadata is not commercial
    authorization.
 2. Complete at least 200 independent human blind reviews per proposed
@@ -402,8 +467,9 @@ been crossed, and M5+ product integration remains unauthorized.
 3. After the human report creates the primary evidence-set SHA-256, finalize
    the existing exact base/core sizing receipt into the cross-bound Gate A
    package-sizing document.
-4. Record OS-level firewall or packet-capture evidence for that offline
-   execution.
+4. Run the prepared collector from an elevated isolated clean VM, manually
+   analyze the private capture, and create the final primary-evidence-bound
+   OS-network verification only if zero external traffic is actually observed.
 5. Submit the complete cross-bound evidence to the user; only the user can
    confirm Gate A.
 
