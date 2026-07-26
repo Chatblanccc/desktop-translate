@@ -19,6 +19,13 @@ collector controls. The result may mark M4 complete and Gate A input ready,
 but must record that no qualified legal opinion or OS capture is claimed and
 must leave Gate A, M5, integration and distribution unauthorized.
 
+Gate A was explicitly confirmed by the user on 2026-07-26. The
+`gate-a-decision.mjs` record binds the M4 completion and freezes the
+bidirectional Firefox/Bergamot candidate set,
+`browsermt-bergamot-translator-wasm`, and the current-user LocalAppData
+default storage route. It authorizes only selected-route M5 development;
+Gate B, signing, production feeds, packaging and distribution remain false.
+
 The authorization scope is exactly:
 
 `POC_RESEARCH_ONLY_NO_INTEGRATION_OR_DISTRIBUTION`

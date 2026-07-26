@@ -17,6 +17,9 @@
     },
     {
       "$ref": "#/$defs/m4AiCompletion"
+    },
+    {
+      "$ref": "#/$defs/gateADecision"
     }
   ],
   "$defs": {
@@ -122,6 +125,59 @@
               "const": false
             }
           }
+        }
+      }
+    },
+    "gateADecision": {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "status",
+        "decisionId",
+        "decidedAt",
+        "decisionAuthority",
+        "decisionBasis",
+        "m4Completion",
+        "selection",
+        "selectionSha256",
+        "acceptedLimitations",
+        "authorization"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "phase7-gate-a-decision-v1"
+        },
+        "status": {
+          "const": "GATE_A_CONFIRMED"
+        },
+        "decisionId": {
+          "type": "string",
+          "pattern": "^gate-a-decision-[a-f0-9]{16}$"
+        },
+        "decidedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "decisionAuthority": {
+          "const": "USER"
+        },
+        "decisionBasis": {
+          "const": "EXPLICIT_USER_CONFIRMATION_IN_CODEX"
+        },
+        "m4Completion": {
+          "type": "object"
+        },
+        "selection": {
+          "type": "object"
+        },
+        "selectionSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "acceptedLimitations": {
+          "type": "object"
+        },
+        "authorization": {
+          "type": "object"
         }
       }
     },

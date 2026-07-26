@@ -272,6 +272,24 @@ AI 身份。冻结验收改用 `phase7-m4-ai-completion-v1`：
 记录必须保持 `AWAITING_EXPLICIT_USER_DECISION`、`m5Authorized=false` 和
 `integrationOrDistributionAuthorized=false`。
 
+## AD7-012：Gate A 已确认所选离线路线
+
+用户于 2026-07-26 明确确认 Gate A：
+
+- candidate set：
+  `firefox-bergamot-base-memory-en-zh-bidirectional`；
+- runtime：`browsermt-bergamot-translator-wasm`，运行于独立
+  Local Translation Host；
+- 方向：`en-zh` 与 `zh-en`；
+- 存储：当前用户 LocalAppData 默认模型目录；
+- 自定义模型路径和迁移：`N/A BY USER DECISION`；
+- 接受 M4 已披露的 AI 质量、非律师意见、未执行 OS 抓包和 zh→en
+  质量相对较低等限制。
+
+Gate A 状态正式写为 `GATE_A_CONFIRMED`，只授权 M5 实现上述路线。
+Gate B 尚未到达，签名、生产 feed、打包分发和 `SIGNED LIMITED BETA`
+仍未授权。
+
 ## 被拒绝的方案
 
 - Gate A 前完成本地翻译产品集成：会在用户看到实测前锁死模型路线，拒绝。

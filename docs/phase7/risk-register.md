@@ -14,6 +14,7 @@
 | P7-R-002 | 模型许可证、来源或再分发条件不允许 beta 分发 | 25 严重 | 上游 revision、license/notice、再分发审查作为 Gate A 输入 | OPEN / User + Engineering |
 | P7-R-003 | 质量样本过少、候选身份泄露或把 AI 结果冒充人工，使模型路线假绿 | 20 高 | 每方向 ≥200 AI blind review、逐项记录、AI 身份/attestation、失败分类与实际分数 | MITIGATED FOR SAMPLE COUNT / Quality |
 | P7-R-026 | AI M4 审批被误读为律师意见、OS 零外联证据或发布许可 | 20 高 | completion 固定 `NOT LEGAL ADVICE`、`osCapturePerformed=false`、`zeroExternalTrafficClaimed=false`、`m5Authorized=false` | ACCEPTED FOR M4 ONLY / User + AI |
+| P7-R-027 | Gate A 被误读为打包、分发或 signed beta 许可 | 20 高 | decision 只授权所选路线进入 M5；Gate B/signing/feed/distribution 全部固定 false | MITIGATED / User + Engineering |
 | P7-R-004 | 体积/延迟/PWS 超预算，用户仍被隐藏真实成本 | 20 高 | 150/300/400 MiB、3s/1.5s、1.1 GiB 门槛和原始 benchmark | OPEN / Engineering + Quality |
 | P7-R-005 | core pack 未实测就提前实现/承诺自定义模型路径 | 12 中 | Gate A 根据 `>300 MiB` 与用户偏好选择；此前只显示默认路径/大小/删除 | OPEN / User + Engineering |
 | P7-R-006 | 自由拖动只过合成坐标测试，真实鼠标/触控板不可用 | 16 高 | edge/free、horizontalRatio、重启/DPI/多屏及两种真实输入证据 | OPEN / Quality |

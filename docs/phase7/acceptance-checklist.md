@@ -5,7 +5,7 @@
   identity-bound exact package gates，以及当前候选默认 CurrentUser interactive + Quiet uninstall 已通过；
   registered 升级、committed-stage pathname
   identity、物理输入与 clean VM 待补 / M4 POC 基础设施开发
-- Gate A：`NOT REACHED`
+- Gate A：`CONFIRMED / M5 AUTHORIZED`
 - Gate B：`NOT REACHED`
 - 最终发布：`NOT AUTHORIZED`
 - 交付上限：`SIGNED LIMITED BETA`，不是 public V1/GA
@@ -158,18 +158,21 @@ POC 不接完整 Electron 产品、真实发布证书或真实 OSS/COS。
 
 - [x] M4 许可证风险、体积、AI 质量、延迟、PWS 和原始证据哈希已由 AI completion
   汇总并提交给用户；AI 审批限制已显式标注。
-- [ ] 用户选择模型/runtime 与支持语言方向，或明确要求换模型/停止路线。
-- [ ] 用户确认质量/资源取舍和 beta 已知限制。
-- [ ] 用户选择模型存储路线：
-  - 固定当前用户 LocalAppData 默认路径；或
-  - 因 core pack `>300 MiB`/用户偏好，在 M5 增加自定义路径与安全迁移。
-- [ ] 决策记录含日期、选项、例外和后续边界。
+- [x] 用户选择 Firefox/Bergamot Base Memory 双向模型、
+  `browsermt-bergamot-translator-wasm` runtime 和 `en-zh`/`zh-en`。
+- [x] 用户确认并接受 AI 质量、AI M4 风险审批、未执行 OS 抓包和 zh→en
+  质量相对较低等已披露限制。
+- [x] 用户选择固定当前用户 LocalAppData 默认模型目录。
+  自定义路径与迁移标记为 `N/A BY USER DECISION`。
+- [x] 决策记录含日期、用户权限、选项、限制和后续边界；状态为
+  `GATE_A_CONFIRMED`，只授权所选路线进入 M5。
 
 只有以上项目全部有证据时才可写 `GATE A CONFIRMED` 并开始 M5。Gate A 不是发布验收。
 
 ## M5：Local Translation Host 与 Model Manager
 
-- [ ] 只实现 Gate A 选择的模型/runtime、语言方向与存储路线。
+- [ ] 只实现 Gate A 选择的模型/runtime、双向语言与默认 LocalAppData
+  存储路线；M5 已授权开始。
 - [ ] Main 从 production 固定路径启动独立 Local Translation Host。
 - [ ] Renderer、Selection Host 不读取模型/feed；Local Host 无网络/凭据/DB 入口。
 - [ ] 私有 IPC exact schema、大小上限、unknown/malformed/version 拒绝通过。

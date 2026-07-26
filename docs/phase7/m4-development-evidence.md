@@ -442,6 +442,33 @@ M4 is therefore complete under the revised user-approved contract. Gate A is
 ready for the user's explicit model/runtime/language/storage decision, but
 `m5Authorized=false` and `integrationOrDistributionAuthorized=false`.
 
+## Gate A user decision
+
+The user explicitly confirmed Gate A on 2026-07-26. The formal ignored
+`phase7-gate-a-decision-v1` record freezes:
+
+- candidate set:
+  `firefox-bergamot-base-memory-en-zh-bidirectional`;
+- runtime: `browsermt-bergamot-translator-wasm`;
+- directions: `en-zh` and `zh-en`;
+- storage: `CURRENT_USER_LOCALAPPDATA_DEFAULT`;
+- custom path/migration: `N/A_BY_USER_DECISION`.
+
+Decision artifact:
+
+- logical name: `gate-a-decision-af80e5ff2e3c006a.json`;
+- SHA-256:
+  `e3815fb881eb72928d5bd5c0cfcde3759e58eff8341baeeddd8698cf26713d20`;
+- selection SHA-256:
+  `05a5fdd18ee28d87c22ad4ade0518118eb45f64baf8ae1edabd8251f199fe4e6`;
+- authority: `USER`;
+- status: `GATE_A_CONFIRMED`;
+- `m5Authorized=true`;
+- `packagingOrDistributionAuthorized=false`.
+
+The Gate A reader validates the real M4 completion and decision artifacts as
+`USER_AUTHORIZED_SELECTED_ROUTE_M5_DEVELOPMENT`, with zero unmet conditions.
+
 ## Legal-review preparation
 
 The non-authorizing legal preparation command now binds:

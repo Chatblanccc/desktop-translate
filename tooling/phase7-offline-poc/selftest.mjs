@@ -178,7 +178,8 @@ for (const schema of [
   'candidate-manifest.schema.json',
   'poc-authorization.schema.json',
   'measurement.schema.json',
-  'm4-ai-completion.schema.json'
+  'm4-ai-completion.schema.json',
+  'gate-a-decision.schema.json'
 ]) {
   const value = JSON.parse(
     await readFile(resolve(scriptRoot, 'schemas', schema), 'utf8')
@@ -438,6 +439,7 @@ process.stdout.write(`${JSON.stringify({
     'argos-ctranslate2-supply-archive-and-direct-poc-static-harness',
     'blind-quality-evaluation-randomization-privacy-and-explicit-ai-harness',
     'user-delegated-explicit-ai-m4-completion-contract',
+    'user-authoritative-gate-a-selected-route-decision',
     'candidate-generation-cross-evidence-binding',
     'qvac-bare-runtime-candidate-supply-and-boundaries'
   ],

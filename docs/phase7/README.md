@@ -11,7 +11,9 @@
   `72.450 MiB archive / 72.536 MiB installed`；盲评只读状态核验为
   `400 AI reviewed / 0 pending`；用户已授权 M4 剩余填写/审批由 AI 完成，
   AI M4 completion 已绑定质量、性能、法务准备、网络缺口和真实包体数据。
-  M4 现为 `AI APPROVED COMPLETE`，Gate A 输入可提交，但仍等待用户明确选择，M5 未授权
+  M4 为 `AI APPROVED COMPLETE`；用户已确认 Gate A，冻结双向
+  Firefox/Bergamot + `browsermt-bergamot-translator-wasm` + 默认
+  LocalAppData 路线，M5 已授权开始
 - 当前验收状态：`NOT YET ACCEPTED`
 - 最终交付上限：Windows x64 signed limited beta
 - 明确禁止的口径：public V1、GA、production-ready

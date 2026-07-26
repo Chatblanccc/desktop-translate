@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import {
   validateM4AiCompletion
 } from './m4-ai-completion.mjs';
+import {
+  validateGateADecision
+} from './gate-a-decision.mjs';
 
 export const GATE_A_INPUT_READY = 'GATE_A_INPUT_READY';
 export const GATE_A_INPUT_INCOMPLETE = 'GATE_A_INPUT_INCOMPLETE';
@@ -45,6 +48,15 @@ const HARNESS_SOURCES = Object.freeze([
  * booleans and producer summaries are never accepted as proof.
  */
 export function evaluateGateAInputCompleteness(input) {
+  if (
+    input?.artifacts?.m4AiCompletion
+    && input?.artifacts?.gateADecision
+  ) {
+    return evaluateConfirmedGateA(
+      input.artifacts.m4AiCompletion,
+      input.artifacts.gateADecision
+    );
+  }
   if (input?.artifacts?.m4AiCompletion) {
     return evaluateAiDelegatedM4Completion(input.artifacts.m4AiCompletion);
   }
@@ -245,6 +257,77 @@ export function evaluateGateAInputCompleteness(input) {
       legalReview: legalSummary,
       osNetworkVerification: networkSummary,
       packageSizing: sizingSummary
+    },
+    unmetConditions: unique(unmet)
+  };
+}
+
+function evaluateConfirmedGateA(m4Artifact, decisionArtifact) {
+  const unmet = [];
+  const m4 = readBoundJsonArtifact(
+    m4Artifact,
+    'M4_AI_COMPLETION_RAW_ARTIFACT',
+    unmet
+  );
+  const decision = readBoundJsonArtifact(
+    decisionArtifact,
+    'GATE_A_DECISION_RAW_ARTIFACT',
+    unmet
+  );
+  if (m4) {
+    try {
+      validateM4AiCompletion(m4.document);
+    } catch (error) {
+      unmet.push(error?.code ?? 'M4_AI_COMPLETION_INVALID');
+    }
+  }
+  if (m4 && decision) {
+    try {
+      validateGateADecision(decision.document, {
+        m4Completion: m4.document,
+        m4CompletionSha256: m4.sha256
+      });
+    } catch (error) {
+      unmet.push(error?.code ?? 'GATE_A_DECISION_INVALID');
+    }
+  }
+  const confirmed = unmet.length === 0;
+  return {
+    inputStatus: confirmed
+      ? GATE_A_INPUT_READY
+      : GATE_A_INPUT_INCOMPLETE,
+    ready: confirmed,
+    gateAStatus: confirmed
+      ? 'GATE_A_CONFIRMED'
+      : 'BLOCKED_INVALID_GATE_A_DECISION',
+    authorizationMode: confirmed
+      ? 'USER_AUTHORIZED_SELECTED_ROUTE_M5_DEVELOPMENT'
+      : 'NON_AUTHORIZING_SHAPE_CHECK',
+    ...(confirmed ? {
+      gateDecisionStatus: 'GATE_A_CONFIRMED',
+      decisionAuthority: 'USER',
+      m5Authorized: true,
+      integrationOrDistributionAuthorized: false
+    } : {}),
+    requirements: {
+      completionSchema: 'phase7-m4-ai-completion-v1',
+      decisionSchema: 'phase7-gate-a-decision-v1',
+      selectedRouteOnly: true,
+      gateBStillRequired: true,
+      packagingOrDistributionAuthorized: false
+    },
+    artifactBindings: {
+      m4AiCompletionSha256: m4?.sha256 ?? null,
+      gateADecisionSha256: decision?.sha256 ?? null,
+      primaryEvidenceSetSha256:
+        confirmed ? m4.document.primaryEvidenceSetSha256 : null,
+      selectionSha256:
+        confirmed ? decision.document.selectionSha256 : null
+    },
+    derived: {
+      selection: confirmed ? decision.document.selection : null,
+      acceptedLimitations:
+        confirmed ? decision.document.acceptedLimitations : null
     },
     unmetConditions: unique(unmet)
   };
